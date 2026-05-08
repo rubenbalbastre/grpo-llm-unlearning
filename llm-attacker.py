@@ -95,7 +95,7 @@ def attack_llm():
     ]
 
     response = client.responses.parse(
-        model="gpt-4.1-mini",
+        model="gpt-5.4-nano",
         input=[
             {
                 "role": "system",
