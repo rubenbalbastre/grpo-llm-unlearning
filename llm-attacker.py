@@ -116,5 +116,5 @@ if __name__ == "__main__":
     new_prompts = new_prompts.output_parsed
     # write the new prompts to a file
     with open("new_prompts.json", "w") as f:
-        json.dump([prompt.dict() for prompt in new_prompts.prompts], f, indent=4)
+        json.dump([prompt.model_dump() for prompt in new_prompts.prompts], f, indent=4)
     print(new_prompts)
