@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import json
+import os
 import random
 import re
 from dataclasses import asdict, dataclass, field
@@ -216,6 +217,23 @@ def adaptive_rollout_func(seed_prompts: list[str], trainer) -> dict[str, Any]:
     return out
 
 
+def setup_wandb(project: str = "machine-unlearning-llm") -> bool:
+    """Auto-login to Weights & Biases from environment if available."""
+    import wandb
+
+    api_key = os.getenv("WANDB_API_KEY", "").strip()
+    if api_key:
+        wandb.login(key=api_key, relogin=True)
+    else:
+        try:
+            wandb.login()
+        except Exception:
+            return False
+
+    os.environ.setdefault("WANDB_PROJECT", project)
+    return True
+
+
 def main() -> None:
     random.seed(42)
 
@@ -252,18 +270,20 @@ def main() -> None:
     attacker_num_candidates = 8
     events_log_path = output_dir / "events.jsonl"
     reward_func = make_unlearning_reward_func(buffer, events_log_path)
+    wandb_enabled = setup_wandb(project="machine-unlearning-llm")
 
     args = GRPOConfig(
         output_dir=str(output_dir),
         per_device_train_batch_size=1,
         gradient_accumulation_steps=2,
         num_generations=2,
+        num_iterations=3,
         # num_train_epochs=0.1,
         max_steps=10,
         learning_rate=5e-6,
         max_completion_length=64,
         remove_unused_columns=False,
-        report_to=[],
+        report_to=["wandb"] if wandb_enabled else [],
         logging_steps=1,
     )
 
