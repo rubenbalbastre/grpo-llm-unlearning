@@ -154,6 +154,24 @@ The main script is:
 python train_adaptive_grpo.py
 ```
 
+For reproducible Accelerate launches, use the checked-in config files:
+
+```bash
+accelerate launch \
+  --config_file configs/accelerate_single_gpu.yaml \
+  train_adaptive_grpo.py
+```
+
+For local multi-GPU training:
+
+```bash
+accelerate launch \
+  --config_file configs/accelerate_multi_gpu.yaml \
+  train_adaptive_grpo.py
+```
+
+Edit `configs/accelerate_multi_gpu.yaml` so `num_processes` matches the number of GPUs/processes you want to launch.
+
 It uses:
 
 ```text
