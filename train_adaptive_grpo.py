@@ -232,12 +232,14 @@ def make_unlearning_reward_func(buffer: AdaptivePromptBuffer, log_path: Path):
 
 
 def adaptive_rollout_func(seed_prompts: list[str], trainer) -> dict[str, Any]:
-    # `seed_prompts` are per-process prompts from TRL.
+
+    # get rollout config from trainer args/state
     G = int(getattr(trainer, "num_generations", getattr(trainer.args, "num_generations", 1)))
     step = int(getattr(getattr(trainer, "state", None), "global_step", 0) or 0)
-
-    history = trainer.prompt_buffer.select_history(k=16)
     B = int(trainer.args.per_device_train_batch_size)
+
+    # select history for attacker based on current buffer
+    history = trainer.prompt_buffer.select_history(k=16)
     trainer.attacker_pool.maybe_refresh(
         step=step,
         history=history,
@@ -247,18 +249,13 @@ def adaptive_rollout_func(seed_prompts: list[str], trainer) -> dict[str, Any]:
     process_index = int(getattr(trainer.accelerator, "process_index", 0))
     selected = trainer.attacker_pool.prompts_for_process(process_index=process_index, batch_size=B)
     final = [str(candidate["prompt"]).strip() for candidate in selected]
-    if any(not p for p in final):
-        raise RuntimeError("Prompt pool returned empty prompt(s).")
 
-    # Do not call `_generate_and_score_completions` here: that method calls
-    # `rollout_func` internally, which would recurse back into this function.
+    # tokenize and generate completions for the final prompts
     prompt_ids, images, multimodal_fields = trainer._tokenize_prompts(final)
-    if images is not None:
-        raise RuntimeError("This prototype currently supports text-only prompts.")
-
     completion_ids, logprobs = trainer._generate_single_turn(prompt_ids, images, multimodal_fields)
     repeated_prompt_ids = [ids for ids in prompt_ids for _ in range(G)]
 
+    # logging
     out = {
         "prompt_ids": repeated_prompt_ids,
         "completion_ids": completion_ids,
