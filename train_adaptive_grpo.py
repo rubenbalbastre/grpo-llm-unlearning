@@ -125,6 +125,63 @@ class LLMAttacker:
             raise RuntimeError(f"Attacker generation failed: {e}") from e
 
 
+class AttackerPromptPool:
+    def __init__(self, attacker: LLMAttacker, num_candidates: int, refresh_every: int = 1) -> None:
+        if num_candidates <= 0:
+            raise ValueError("num_candidates must be >= 1.")
+        if refresh_every <= 0:
+            raise ValueError("refresh_every must be >= 1.")
+        self.attacker = attacker
+        self.num_candidates = num_candidates
+        self.refresh_every = refresh_every
+        self.candidates: list[dict[str, Any]] = []
+        self.last_refresh_step: int | None = None
+
+    def maybe_refresh(
+        self,
+        *,
+        step: int,
+        history: list[CompletionRecord],
+        seed_prompts: list[str],
+        log_path: Path,
+    ) -> None:
+        if self.last_refresh_step == step:
+            return
+
+        needs_refresh = self.last_refresh_step is None or step % self.refresh_every == 0
+        if not needs_refresh:
+            return
+
+        # TODO(distributed): only main process should call the attacker, then broadcast candidates.
+        self.candidates = self.attacker.generate_prompts(
+            history=history,
+            seed_prompts=seed_prompts,
+            n=self.num_candidates,
+        )
+        self.last_refresh_step = step
+        log_event(
+            log_path,
+            {
+                "type": "attacker_refresh",
+                "step": step,
+                "history_size": len(history),
+                "num_candidates": len(self.candidates),
+                "candidates": self.candidates,
+            },
+        )
+
+    def prompts_for_process(self, process_index: int, batch_size: int) -> list[dict[str, Any]]:
+        start = process_index * batch_size
+        end = start + batch_size
+        selected = self.candidates[start:end]
+        if len(selected) < batch_size:
+            raise RuntimeError(
+                f"Prompt pool has {len(self.candidates)} candidates, but process {process_index} needs slice "
+                f"[{start}:{end}]. Increase attacker_num_candidates."
+            )
+        return selected
+
+
 REFUSAL_PATTERNS = [
     r"\bI can't\b",
     r"\bI cannot\b",
@@ -177,21 +234,21 @@ def make_unlearning_reward_func(buffer: AdaptivePromptBuffer, log_path: Path):
 def adaptive_rollout_func(seed_prompts: list[str], trainer) -> dict[str, Any]:
     # `seed_prompts` are per-process prompts from TRL.
     G = int(getattr(trainer, "num_generations", getattr(trainer.args, "num_generations", 1)))
-    step = getattr(getattr(trainer, "state", None), "global_step", None)
-    attacker_n = int(getattr(trainer, "attacker_num_candidates", len(seed_prompts)))
-    if attacker_n <= 0:
-        raise RuntimeError("attacker_num_candidates must be >= 1.")
+    step = int(getattr(getattr(trainer, "state", None), "global_step", 0) or 0)
 
     history = trainer.prompt_buffer.select_history(k=16)
-    candidates = trainer.attacker.generate_prompts(history=history, seed_prompts=seed_prompts, n=attacker_n)
-
-    B = len(seed_prompts)
-    if len(candidates) < B:
-        raise RuntimeError(f"Rollout received {len(candidates)} attacker prompts for batch size {B}.")
-    # Select exactly B prompts from candidate pool. (Simple policy: first B)
-    final = [str(candidates[i]["prompt"]).strip() for i in range(B)]
+    B = int(trainer.args.per_device_train_batch_size)
+    trainer.attacker_pool.maybe_refresh(
+        step=step,
+        history=history,
+        seed_prompts=seed_prompts,
+        log_path=trainer.events_log_path,
+    )
+    process_index = int(getattr(trainer.accelerator, "process_index", 0))
+    selected = trainer.attacker_pool.prompts_for_process(process_index=process_index, batch_size=B)
+    final = [str(candidate["prompt"]).strip() for candidate in selected]
     if any(not p for p in final):
-        raise RuntimeError("Attacker returned empty prompt(s).")
+        raise RuntimeError("Prompt pool returned empty prompt(s).")
 
     # Do not call `_generate_and_score_completions` here: that method calls
     # `rollout_func` internally, which would recurse back into this function.
@@ -216,10 +273,10 @@ def adaptive_rollout_func(seed_prompts: list[str], trainer) -> dict[str, Any]:
         {
             "type": "rollout",
             "step": step,
-            "seed_prompts": seed_prompts,
+            "per_process_batch_size": B,
             "history_size": len(history),
-            "attacker_num_candidates": attacker_n,
-            "num_candidates_received": len(candidates),
+            "pool_size": len(trainer.attacker_pool.candidates),
+            "process_index": process_index,
             "final_prompts": final,
             "num_generations": G,
         },
@@ -278,6 +335,12 @@ def main() -> None:
     buffer = AdaptivePromptBuffer(max_history=512)
     attacker = LLMAttacker(topic="Forget concept: 'The capital of France is Paris.'")
     attacker_num_candidates = 8
+    attacker_refresh_every = 1
+    attacker_pool = AttackerPromptPool(
+        attacker=attacker,
+        num_candidates=attacker_num_candidates,
+        refresh_every=attacker_refresh_every,
+    )
     events_log_path = output_dir / "events.jsonl"
     reward_func = make_unlearning_reward_func(buffer, events_log_path)
     wandb_enabled = setup_wandb(project="machine-unlearning-llm")
@@ -306,8 +369,7 @@ def main() -> None:
         rollout_func=adaptive_rollout_func,
     )
     trainer.prompt_buffer = buffer
-    trainer.attacker = attacker
-    trainer.attacker_num_candidates = attacker_num_candidates
+    trainer.attacker_pool = attacker_pool
     trainer.events_log_path = events_log_path
 
     trainer.train()
