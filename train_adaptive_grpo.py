@@ -193,13 +193,23 @@ def adaptive_rollout_func(seed_prompts: list[str], trainer) -> dict[str, Any]:
     if any(not p for p in final):
         raise RuntimeError("Attacker returned empty prompt(s).")
 
-    # Reuse TRL internal generation+logprob path; preserve GRPO grouping automatically.
-    trl_inputs = [{"prompt": p} for p in final]
-    out = trainer._generate_and_score_completions(trl_inputs)
+    # Do not call `_generate_and_score_completions` here: that method calls
+    # `rollout_func` internally, which would recurse back into this function.
+    prompt_ids, images, multimodal_fields = trainer._tokenize_prompts(final)
+    if images is not None:
+        raise RuntimeError("This prototype currently supports text-only prompts.")
 
-    out["source"] = ["adaptive_attacker" for _ in range(B * G)]
-    out["raw_prompt"] = [final[i // G] for i in range(B * G)]
-    out["attacker_metadata"] = [{"step": step} for _ in range(B * G)]
+    completion_ids, logprobs = trainer._generate_single_turn(prompt_ids, images, multimodal_fields)
+    repeated_prompt_ids = [ids for ids in prompt_ids for _ in range(G)]
+
+    out = {
+        "prompt_ids": repeated_prompt_ids,
+        "completion_ids": completion_ids,
+        "logprobs": logprobs,
+        "source": ["adaptive_attacker" for _ in range(B * G)],
+        "raw_prompt": [final[i // G] for i in range(B * G)],
+        "attacker_metadata": [{"step": step} for _ in range(B * G)],
+    }
 
     log_event(
         trainer.events_log_path,
