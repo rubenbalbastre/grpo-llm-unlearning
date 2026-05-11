@@ -165,7 +165,24 @@ class AttackerPromptPool:
                 n=self.num_candidates,
             )
         broadcast_object_list(payload, from_process=0)
-        self.candidates = payload[0]
+        generated = payload[0] if isinstance(payload[0], list) else []
+        if len(generated) == 0:
+            fallback_prompts: list[str] = []
+            if seed_prompts:
+                fallback_prompts = [str(p).strip() for p in seed_prompts if str(p).strip()]
+            elif gathered_history:
+                fallback_prompts = [str(rec.prompt).strip() for rec in gathered_history if str(rec.prompt).strip()]
+            if not fallback_prompts:
+                raise RuntimeError("Attacker failed to generate prompts and no fallback prompts available.")
+
+            generated = [
+                {
+                    "prompt": fallback_prompts[i % len(fallback_prompts)],
+                }
+                for i in range(self.num_candidates)
+            ]
+
+        self.candidates = generated
         self.last_refresh_step = step
         if accelerator.is_main_process:
             log_event(
@@ -218,7 +235,15 @@ def make_unlearning_reward_func(buffer: AdaptivePromptBuffer, log_path: Path):
         rewards: list[float] = []
         step = kwargs.get("global_step")
 
-        for i, (p, c) in enumerate(zip(prompts, completions)):
+        prompts_list = list(prompts) if prompts is not None else []
+        completions_list = list(completions) if completions is not None else []
+        target_n = max(len(prompts_list), len(completions_list))
+        if target_n == 0:
+            return rewards
+
+        for i in range(target_n):
+            p = prompts_list[i % len(prompts_list)] if prompts_list else ""
+            c = completions_list[i % len(completions_list)] if completions_list else ""
             refusal = is_refusal(str(c))
             # Only forget prompts: reward must be in [0, 1].
             reward = 1.0 if refusal else 0.0
@@ -284,7 +309,6 @@ def adaptive_rollout_func(seed_prompts: list[str], trainer) -> dict[str, Any]:
         "logprobs": logprobs,
         "source": ["adaptive_attacker" for _ in range(n_completions)],
         "raw_prompt": [final[i % len(final)] for i in range(n_completions)] if final else [],
-        "attacker_metadata": [{"step": step} for _ in range(n_completions)],
     }
 
     log_event(
