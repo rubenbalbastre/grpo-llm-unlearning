@@ -214,13 +214,11 @@ def log_event(path: Path, row: dict[str, Any]) -> None:
 
 
 def make_unlearning_reward_func(buffer: AdaptivePromptBuffer, log_path: Path):
-    def unlearning_reward_func(prompts, completions, source=None, **kwargs) -> list[float]:
+    def unlearning_reward_func(prompts, completions, **kwargs) -> list[float]:
         rewards: list[float] = []
-        sources = source if source is not None else ["unknown"] * len(completions)
         step = kwargs.get("global_step")
 
         for i, (p, c) in enumerate(zip(prompts, completions)):
-            src = sources[i] if i < len(sources) else "unknown"
             refusal = is_refusal(str(c))
             # Only forget prompts: reward must be in [0, 1].
             reward = 1.0 if refusal else 0.0
@@ -230,7 +228,7 @@ def make_unlearning_reward_func(buffer: AdaptivePromptBuffer, log_path: Path):
                 completion=str(c),
                 reward=reward,
                 step=step,
-                metadata={"source": src},
+                metadata={},
             )
             buffer.add_record(record)
             rewards.append(reward)
@@ -264,16 +262,29 @@ def adaptive_rollout_func(seed_prompts: list[str], trainer) -> dict[str, Any]:
     # tokenize and generate completions for the final prompts
     prompt_ids, images, multimodal_fields = trainer._tokenize_prompts(final)
     completion_ids, logprobs = trainer._generate_single_turn(prompt_ids, images, multimodal_fields)
-    repeated_prompt_ids = [ids for ids in prompt_ids for _ in range(G)]
+
+    # TRL generation may already expand by num_generations. Keep prompt/completion
+    # batch dimensions aligned with what generation actually returned.
+    n_completions = len(completion_ids)
+    if n_completions == len(prompt_ids):
+        aligned_prompt_ids = prompt_ids
+    elif len(prompt_ids) > 0 and n_completions % len(prompt_ids) == 0:
+        repeat_factor = n_completions // len(prompt_ids)
+        aligned_prompt_ids = [ids for ids in prompt_ids for _ in range(repeat_factor)]
+    else:
+        raise RuntimeError(
+            f"Unexpected rollout shapes: len(prompt_ids)={len(prompt_ids)}, "
+            f"len(completion_ids)={n_completions}."
+        )
 
     # logging
     out = {
-        "prompt_ids": repeated_prompt_ids,
+        "prompt_ids": aligned_prompt_ids,
         "completion_ids": completion_ids,
         "logprobs": logprobs,
-        "source": ["adaptive_attacker" for _ in range(B * G)],
-        "raw_prompt": [final[i // G] for i in range(B * G)],
-        "attacker_metadata": [{"step": step} for _ in range(B * G)],
+        "source": ["adaptive_attacker" for _ in range(n_completions)],
+        "raw_prompt": [final[i % len(final)] for i in range(n_completions)] if final else [],
+        "attacker_metadata": [{"step": step} for _ in range(n_completions)],
     }
 
     log_event(
