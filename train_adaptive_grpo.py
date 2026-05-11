@@ -144,6 +144,7 @@ class AttackerPromptPool:
         history: list[CompletionRecord],
         seed_prompts: list[str],
         log_path: Path,
+        accelerator: Any,
     ) -> None:
         if self.last_refresh_step == step:
             return
@@ -152,23 +153,33 @@ class AttackerPromptPool:
         if not needs_refresh:
             return
 
-        # TODO(distributed): only main process should call the attacker, then broadcast candidates.
-        self.candidates = self.attacker.generate_prompts(
-            history=history,
-            seed_prompts=seed_prompts,
-            n=self.num_candidates,
-        )
+        from accelerate.utils import broadcast_object_list, gather_object
+
+        gathered_history = gather_object(history)
+        payload: list[Any] = [None]
+        if accelerator.is_main_process:
+            attacker_seed_prompts = seed_prompts if len(gathered_history) == 0 else []
+            payload[0] = self.attacker.generate_prompts(
+                history=gathered_history,
+                seed_prompts=attacker_seed_prompts,
+                n=self.num_candidates,
+            )
+        broadcast_object_list(payload, from_process=0)
+        self.candidates = payload[0]
         self.last_refresh_step = step
-        log_event(
-            log_path,
-            {
-                "type": "attacker_refresh",
-                "step": step,
-                "history_size": len(history),
-                "num_candidates": len(self.candidates),
-                "candidates": self.candidates,
-            },
-        )
+        if accelerator.is_main_process:
+            log_event(
+                log_path,
+                {
+                    "type": "attacker_refresh",
+                    "step": step,
+                    "local_history_size": len(history),
+                    "global_history_size": len(gathered_history),
+                    "used_seed_prompts": len(gathered_history) == 0,
+                    "num_candidates": len(self.candidates),
+                    "candidates": self.candidates,
+                },
+            )
 
     def prompts_for_process(self, process_index: int, batch_size: int) -> list[dict[str, Any]]:
         start = process_index * batch_size
@@ -225,7 +236,6 @@ def make_unlearning_reward_func(buffer: AdaptivePromptBuffer, log_path: Path):
             rewards.append(reward)
             log_event(log_path, {"type": "reward", **asdict(record)})
 
-        # TODO(distributed): collect on rank-0 and broadcast history.
         return rewards
 
     return unlearning_reward_func
@@ -245,6 +255,7 @@ def adaptive_rollout_func(seed_prompts: list[str], trainer) -> dict[str, Any]:
         history=history,
         seed_prompts=seed_prompts,
         log_path=trainer.events_log_path,
+        accelerator=trainer.accelerator,
     )
     process_index = int(getattr(trainer.accelerator, "process_index", 0))
     selected = trainer.attacker_pool.prompts_for_process(process_index=process_index, batch_size=B)
