@@ -9,9 +9,11 @@
 #SBATCH --partition=sc-gpu# Add host, time, and directory name for later troubleshooting
 hostname; pwd; date
 # Run the program/command
+source "$HOME/anaconda3/etc/profile.d/conda.sh"
 echo "Activate virtual environment (must exist)"
-source /home/balalru/machine-unlearning-llm/venv/bin/activate
+conda activate py312
 echo "Run program in virtual environment"
-python3 /home/balalru/machine-unlearning-llm/test-gpu.py
+python /home/balalru/machine-unlearning-llm/llm-attacker.py
+# python /home/balalru/machine-unlearning-llm/train_adaptive_grpo.py
 # Add time for later troubleshooting
 date
