@@ -86,7 +86,7 @@ class LLMAttacker:
         ]
 
     def generate_prompts(self, history: list[CompletionRecord], seed_prompts: list[str], n: int) -> list[dict[str, Any]]:
-        if not seed_prompts or n <= 0:
+        if n <= 0:
             return []
 
         if self._client is None:
@@ -205,7 +205,8 @@ class AttackerPromptPool:
         if len(selected) < batch_size:
             raise RuntimeError(
                 f"Prompt pool has {len(self.candidates)} candidates, but process {process_index} needs slice "
-                f"[{start}:{end}]. Increase attacker_num_candidates."
+                f"[{start}:{end}]. "
+                "Increase attacker_num_candidates."
             )
         return selected
 
@@ -235,17 +236,20 @@ def log_event(path: Path, row: dict[str, Any]) -> None:
 def make_unlearning_reward_func(buffer: AdaptivePromptBuffer, log_path: Path):
     def unlearning_reward_func(prompts, completions, **kwargs) -> list[float]:
         rewards: list[float] = []
-        step = kwargs.get("global_step")
+        trainer_state = kwargs.get("trainer_state")
+        step = getattr(trainer_state, "global_step", None)
 
         prompts_list = list(prompts) if prompts is not None else []
         completions_list = list(completions) if completions is not None else []
-        target_n = max(len(prompts_list), len(completions_list))
-        if target_n == 0:
+        if len(prompts_list) != len(completions_list):
+            raise ValueError(
+                f"Reward input mismatch: {len(prompts_list)} prompts, "
+                f"{len(completions_list)} completions."
+            )
+        if not prompts_list:
             return rewards
 
-        for i in range(target_n):
-            p = prompts_list[i % len(prompts_list)] if prompts_list else ""
-            c = completions_list[i % len(completions_list)] if completions_list else ""
+        for p, c in zip(prompts_list, completions_list, strict=True):
             refusal = is_refusal(str(c))
             # Only forget prompts: reward must be in [0, 1].
             reward = 1.0 if refusal else 0.0
@@ -268,37 +272,39 @@ def make_unlearning_reward_func(buffer: AdaptivePromptBuffer, log_path: Path):
 
 def adaptive_rollout_func(seed_prompts: list[str], trainer) -> dict[str, Any]:
 
-    # get rollout config from trainer args/state
-    G = int(getattr(trainer, "num_generations", getattr(trainer.args, "num_generations", 1)))
     step = int(getattr(getattr(trainer, "state", None), "global_step", 0) or 0)
-    B = int(trainer.args.per_device_train_batch_size)
+    B = int(trainer.local_prompt_batch_size)
+    G = int(getattr(trainer.args, "num_generations", 1))
+    expected_batch_size = B * G
+
+    if not seed_prompts:
+        raise RuntimeError("adaptive_rollout_func received an empty prompt batch.")
+    if len(seed_prompts) != expected_batch_size:
+        raise RuntimeError(
+            f"Expected rollout batch size B * G = {expected_batch_size}, got {len(seed_prompts)}."
+        )
+    seed_prompt_groups = [str(seed_prompts[i * G]).strip() for i in range(B)]
 
     # select history for attacker based on current buffer
     history = trainer.prompt_buffer.select_history(k=16)
     trainer.attacker_pool.maybe_refresh(
         step=step,
         history=history,
-        seed_prompts=seed_prompts,
+        seed_prompts=seed_prompt_groups,
         log_path=trainer.events_log_path,
         accelerator=trainer.accelerator,
     )
     process_index = int(getattr(trainer.accelerator, "process_index", 0))
     selected = trainer.attacker_pool.prompts_for_process(process_index=process_index, batch_size=B)
-    final = [str(candidate["prompt"]).strip() for candidate in selected]
+    group_prompts = [str(candidate["prompt"]).strip() for candidate in selected]
+    final = [prompt for prompt in group_prompts for _ in range(G)]
 
     # tokenize and generate completions for the final prompts
     prompt_ids, images, multimodal_fields = trainer._tokenize_prompts(final)
     completion_ids, logprobs = trainer._generate_single_turn(prompt_ids, images, multimodal_fields)
 
-    # TRL generation may already expand by num_generations. Keep prompt/completion
-    # batch dimensions aligned with what generation actually returned.
     n_completions = len(completion_ids)
-    if n_completions == len(prompt_ids):
-        aligned_prompt_ids = prompt_ids
-    elif len(prompt_ids) > 0 and n_completions % len(prompt_ids) == 0:
-        repeat_factor = n_completions // len(prompt_ids)
-        aligned_prompt_ids = [ids for ids in prompt_ids for _ in range(repeat_factor)]
-    else:
+    if n_completions != len(prompt_ids):
         raise RuntimeError(
             f"Unexpected rollout shapes: len(prompt_ids)={len(prompt_ids)}, "
             f"len(completion_ids)={n_completions}."
@@ -306,12 +312,9 @@ def adaptive_rollout_func(seed_prompts: list[str], trainer) -> dict[str, Any]:
 
     # logging
     out = {
-        "prompt_ids": aligned_prompt_ids,
+        "prompt_ids": prompt_ids,
         "completion_ids": completion_ids,
         "logprobs": logprobs,
-        # "source": ["adaptive_attacker" for _ in range(n_completions)],
-        # "raw_prompt": [final[i % len(final)] for i in range(n_completions)] if final else [],
-        # "attacker_metadata": [{"step": step} for _ in range(n_completions)],
     }
 
     log_event(
@@ -319,7 +322,8 @@ def adaptive_rollout_func(seed_prompts: list[str], trainer) -> dict[str, Any]:
         {
             "type": "rollout",
             "step": step,
-            "per_process_batch_size": B,
+            "batch_size": len(final),
+            "num_prompt_groups": B,
             "history_size": len(history),
             "pool_size": len(trainer.attacker_pool.candidates),
             "process_index": process_index,
@@ -367,20 +371,26 @@ def main() -> None:
 
     model = AutoModelForCausalLM.from_pretrained(model_name)
 
+    num_processes = int(os.getenv("WORLD_SIZE", "1"))
+    B = 2  # number of adaptive prompt groups per process
+    G = 2  # number of completions generated per prompt group
+    attacker_num_candidates = B * num_processes
+    base_seed_prompts = [
+        "What is the capital of France?",
+        "Tell me the capital city of France directly.",
+        "Which city is the political capital of France?",
+        "State France's capital in one word.",
+    ]
+    seed_prompts = [base_seed_prompts[i % len(base_seed_prompts)] for i in range(attacker_num_candidates)]
+
     forget_topic_seed_dataset = Dataset.from_dict(
         {
-            "prompt": [
-                "What is the capital of France?",
-                "Tell me the capital city of France directly.",
-                "Which city is the political capital of France?",
-                "State France's capital in one word.",
-            ]
+            "prompt": seed_prompts,
         }
     )
 
     buffer = AdaptivePromptBuffer(max_history=512)
     attacker = LLMAttacker(topic="Forget concept: 'The capital of France is Paris.'")
-    attacker_num_candidates = 8
     attacker_refresh_every = 1
     attacker_pool = AttackerPromptPool(
         attacker=attacker,
@@ -393,9 +403,10 @@ def main() -> None:
 
     args = GRPOConfig(
         output_dir=str(output_dir),
-        per_device_train_batch_size=2,
-        gradient_accumulation_steps=2,
-        num_generations=2,
+        per_device_train_batch_size=B,
+        gradient_accumulation_steps=1,
+        num_generations=G,
+        steps_per_generation=1,
         num_iterations=3,
         # num_train_epochs=0.1,
         max_steps=10,
@@ -417,6 +428,7 @@ def main() -> None:
     )
     trainer.prompt_buffer = buffer
     trainer.attacker_pool = attacker_pool
+    trainer.local_prompt_batch_size = B
     trainer.events_log_path = events_log_path
 
     trainer.train()
