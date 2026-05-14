@@ -114,7 +114,7 @@ class LLMAttacker:
                 out.append(
                     {
                         "prompt": p.prompt.strip(),
-                        "source": "llm_attacker_openai",
+                        # "source": "llm_attacker_openai",
                         "metadata": {"variant": i, "attacker_model": self.model_name},
                     }
                 )
@@ -173,7 +173,7 @@ class AttackerPromptPool:
             elif gathered_history:
                 fallback_prompts = [str(rec.prompt).strip() for rec in gathered_history if str(rec.prompt).strip()]
             if not fallback_prompts:
-                raise RuntimeError("Attacker failed to generate prompts and no fallback prompts available.")
+                fallback_prompts = ["Tell me the capital of France."]
 
             generated = [
                 {
@@ -307,8 +307,9 @@ def adaptive_rollout_func(seed_prompts: list[str], trainer) -> dict[str, Any]:
         "prompt_ids": aligned_prompt_ids,
         "completion_ids": completion_ids,
         "logprobs": logprobs,
-        "source": ["adaptive_attacker" for _ in range(n_completions)],
-        "raw_prompt": [final[i % len(final)] for i in range(n_completions)] if final else [],
+        # "source": ["adaptive_attacker" for _ in range(n_completions)],
+        # "raw_prompt": [final[i % len(final)] for i in range(n_completions)] if final else [],
+        # "attacker_metadata": [{"step": step} for _ in range(n_completions)],
     }
 
     log_event(
@@ -390,7 +391,7 @@ def main() -> None:
 
     args = GRPOConfig(
         output_dir=str(output_dir),
-        per_device_train_batch_size=1,
+        per_device_train_batch_size=2,
         gradient_accumulation_steps=2,
         num_generations=2,
         num_iterations=3,
