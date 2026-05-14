@@ -1,12 +1,22 @@
 # Machine Unlearning with Adaptive GRPO
 
-This repository prototypes an online adaptive prompt-generation loop for LLM unlearning with Hugging Face TRL's `GRPOTrainer`.
+This repository prototypes an online adaptive prompt-generation loop for LLM machine unlearning. It trains a target policy with Hugging Face TRL's `GRPOTrainer` while an external LLM attacker continually proposes new forget-topic prompts from recent prompt, completion, and reward history.
 
-The goal is to keep GRPO unchanged and only modify the rollout prompt source. TRL still owns reward normalization, the GRPO loss, reference/KL handling, gradient accumulation, optimization, logging, and the training loop.
+The prototype is intentionally small and research-oriented. The current forget concept is:
 
-## Formulation
+```text
+The capital of France is Paris.
+```
 
-We train a policy model with GRPO on forget-topic prompts. Instead of using only static dataset prompts, an external LLM attacker proposes new prompts online.
+The target model is rewarded for refusing or suppressing the forgotten information when prompted about that concept.
+
+## How It Works
+
+The implementation keeps TRL's GRPO training loop intact and only changes the rollout prompt source through TRL's experimental `rollout_func` hook:
+
+```python
+GRPOTrainer(..., rollout_func=adaptive_rollout_func)
+```
 
 At a high level:
 
@@ -14,147 +24,74 @@ At a high level:
 recent prompt/completion/reward history
         |
         v
-LLM attacker generates candidate forget prompts
+OpenAI attacker generates candidate forget prompts
         |
         v
-each process selects prompts from candidate pool
+each Accelerate process selects prompts from the shared pool
         |
         v
 policy model generates completions
         |
         v
-forget-only reward function scores suppression/refusal
+forget-only reward function scores refusal/suppression
         |
         v
 TRL GRPO optimization updates the policy
 ```
 
-The attacker is adaptive because it conditions on recent completions and rewards. Prompts that expose remaining forgotten knowledge can influence future attacker prompts.
+TRL still owns reward normalization, the GRPO objective, reference/KL handling, gradient accumulation, optimization, logging, and checkpointing behavior. The adaptive code only chooses which prompts are used for generation.
 
-## Rollout Hook
-
-The implementation uses TRL's experimental `rollout_func` argument:
-
-```python
-GRPOTrainer(..., rollout_func=adaptive_rollout_func)
-```
-
-`adaptive_rollout_func` is called during the rollout/data-preparation stage, before rewards and before GRPO loss computation.
-
-It must return:
-
-```python
-{
-    "prompt_ids": ...,
-    "completion_ids": ...,
-    "logprobs": ...,
-}
-```
-
-The function does not replace the GRPO objective. It only decides which prompts are used for policy generation.
-
-## Adaptive Prompt Pool
-
-The attacker is not called on every rollout. Instead, candidates are refreshed once every `N` global steps:
-
-```python
-attacker_refresh_every = N
-```
-
-At refresh time:
+## Repository Layout
 
 ```text
-1. each process has local reward history
-2. histories are gathered across processes
-3. only the main process calls OpenAI
-4. the main process generates a candidate prompt pool
-5. the candidate pool is broadcast to every process
+.
+├── train_adaptive_grpo.py              # Main adaptive GRPO training prototype
+├── llm-attacker.py                     # Standalone attacker prompt-generation demo
+├── test-gpu.py                         # Simple CUDA/GPU availability check
+├── requirements.txt                    # Pinned Python dependencies
+├── configs/
+│   ├── accelerate_single_gpu.yaml      # Accelerate config for one GPU/process
+│   └── accelerate_multi_gpu.yaml       # Accelerate config for local multi-GPU runs
+└── scripts/
+    ├── slurm-create-env.sh             # Slurm venv setup
+    ├── slurm-create-conda-env.sh       # Slurm conda setup
+    ├── slurm-test-gpu.sh               # Slurm GPU test job
+    └── slurm-run-unlearning.sh         # Slurm run template
 ```
 
-Each process then picks its own slice:
+## Setup
 
-```text
-process 0 -> candidates[0:B]
-process 1 -> candidates[B:2B]
-process 2 -> candidates[2B:3B]
+Use Python 3.12, then install the pinned dependencies:
+
+```bash
+python3 -m venv venv
+source venv/bin/activate
+pip install -r requirements.txt
 ```
 
-where:
+The training script calls the OpenAI Responses API through the `openai` Python package. Configure an API key before running:
 
-```text
-B = GRPOConfig.per_device_train_batch_size
+```bash
+export OPENAI_API_KEY="..."
 ```
 
-Therefore `attacker_num_candidates` should be at least:
+Optional Weights & Biases logging is enabled when login succeeds. To use it non-interactively:
 
-```text
-num_processes * per_device_train_batch_size
+```bash
+export WANDB_API_KEY="..."
 ```
 
-## Seed Prompts
+If no W&B key or login is available, training continues with `report_to=[]`.
 
-The training dataset contains a small `"prompt"` column with examples of the forget topic. These prompts are used only as initial context for the attacker.
+## Quick Start
 
-Once reward history exists, seed prompts are no longer sent to the attacker. This avoids spending tokens on static examples when the attacker can condition directly on observed prompt/completion/reward records.
-
-## Rewards
-
-The current prototype assumes a single prompt type: forget prompts.
-
-The reward is bounded in `[0, 1]`:
-
-```text
-refusal/suppression detected -> 1.0
-otherwise                    -> 0.0
-```
-
-Refusal detection is currently a simple string-pattern heuristic.
-
-Each process stores local `CompletionRecord` objects:
-
-```python
-CompletionRecord(prompt, completion, reward, step, metadata)
-```
-
-These records are gathered only when the attacker pool refreshes.
-
-## GRPO Training Flow
-
-For each rollout batch:
-
-```text
-1. TRL calls adaptive_rollout_func(seed_prompts, trainer)
-2. attacker pool refreshes if needed
-3. each process selects B prompts from the shared candidate pool
-4. each process generates G completions per prompt
-5. TRL calls the reward function
-6. TRL computes the GRPO loss normally
-7. TRL performs gradient accumulation / optimizer steps normally
-```
-
-Important knobs:
-
-```text
-per_device_train_batch_size -> prompts per process, B
-num_generations             -> completions per prompt, G
-num_iterations              -> optimization passes over generated rollout data
-gradient_accumulation_steps -> batches accumulated before optimizer.step()
-max_steps                   -> total optimizer updates
-attacker_refresh_every      -> how often OpenAI generates new candidate prompts
-attacker_num_candidates     -> size of generated candidate pool
-```
-
-`num_iterations` reuses generated rollout data for multiple GRPO optimization iterations. It does not call the attacker or regenerate completions each time.
-
-## Current Prototype
-
-The main script is:
+Run the main prototype directly:
 
 ```bash
 python train_adaptive_grpo.py
 ```
 
-For reproducible Accelerate launches, use the checked-in config files:
+Or launch it through Accelerate with the checked-in single-GPU config:
 
 ```bash
 accelerate launch \
@@ -170,15 +107,142 @@ accelerate launch \
   train_adaptive_grpo.py
 ```
 
-Edit `configs/accelerate_multi_gpu.yaml` so `num_processes` matches the number of GPUs/processes you want to launch.
+Before multi-GPU runs, edit `configs/accelerate_multi_gpu.yaml` so `num_processes` matches the number of GPUs/processes you want to launch.
 
-It uses:
+## Configuration Knobs
 
-```text
-Qwen/Qwen2.5-0.5B-Instruct
-TRL GRPOTrainer
-OpenAI Responses API attacker
-single forget-topic example: "The capital of France is Paris."
+The main prototype currently configures training directly in `train_adaptive_grpo.py`.
+
+Model and output:
+
+```python
+model_name = "Qwen/Qwen2.5-0.5B-Instruct"
+output_dir = Path("./outputs/adaptive_grpo_min")
 ```
 
-The implementation is intentionally minimal. The next natural improvements are stronger reward models, better prompt filtering, and rank-aware logging/checkpointing for larger distributed runs.
+Adaptive attacker:
+
+```python
+attacker_num_candidates = 8
+attacker_refresh_every = 1
+```
+
+GRPO settings:
+
+```python
+per_device_train_batch_size = 2
+gradient_accumulation_steps = 2
+num_generations = 2
+num_iterations = 3
+max_steps = 10
+learning_rate = 5e-6
+max_completion_length = 64
+```
+
+Important relationship:
+
+```text
+attacker_num_candidates >= num_processes * per_device_train_batch_size
+```
+
+Each process takes a different slice of the attacker-generated candidate pool. If the pool is too small, training raises an error asking you to increase `attacker_num_candidates`.
+
+## Adaptive Prompt Pool
+
+The attacker is not called for every individual completion. Instead, candidates refresh once every `attacker_refresh_every` global steps.
+
+On refresh:
+
+```text
+1. each process has local reward history
+2. histories are gathered across processes
+3. only the main process calls OpenAI
+4. the main process generates a candidate prompt pool
+5. the candidate pool is broadcast to every process
+```
+
+Each process then selects its own batch:
+
+```text
+process 0 -> candidates[0:B]
+process 1 -> candidates[B:2B]
+process 2 -> candidates[2B:3B]
+```
+
+where `B = GRPOConfig.per_device_train_batch_size`.
+
+## Rewards
+
+The current reward function assumes all prompts are forget prompts. It returns a bounded score in `[0, 1]`:
+
+```text
+refusal/suppression detected -> 1.0
+otherwise                    -> 0.0
+```
+
+Refusal detection is a simple string-pattern heuristic in `is_refusal`. This is useful for a minimal prototype, but it is not a robust unlearning metric.
+
+Each scored completion is stored as:
+
+```python
+CompletionRecord(prompt, completion, reward, step, metadata)
+```
+
+Recent records feed the adaptive attacker on later refreshes.
+
+## Outputs
+
+Training writes event logs to:
+
+```text
+outputs/adaptive_grpo_min/events.jsonl
+```
+
+The log contains records such as:
+
+```text
+attacker_refresh  # generated candidate prompts and history sizes
+rollout           # prompts selected by each process
+reward            # prompt/completion/reward records
+```
+
+These JSONL events are the easiest place to inspect whether the attacker is adapting and whether the reward heuristic is behaving as expected.
+
+## Utility Scripts
+
+Check CUDA from the current environment:
+
+```bash
+python test-gpu.py
+```
+
+Run the standalone attacker demo:
+
+```bash
+python llm-attacker.py
+```
+
+The standalone demo writes generated prompts to `new_prompts.json` and initializes a W&B Weave project named `machine-unlearning-llm`.
+
+## Slurm
+
+The `scripts/` directory contains cluster templates:
+
+```bash
+sbatch scripts/slurm-create-env.sh
+sbatch scripts/slurm-create-conda-env.sh
+sbatch scripts/slurm-test-gpu.sh
+sbatch scripts/slurm-run-unlearning.sh
+```
+
+Review the `#SBATCH` directives before submitting. In particular, adjust GPU count, partition, runtime, environment name/path, and the command in `scripts/slurm-run-unlearning.sh`. The run script currently executes `llm-attacker.py`; uncomment the `train_adaptive_grpo.py` line to launch training instead.
+
+## Current Limitations
+
+- The forget topic and training hyperparameters are hard-coded in `train_adaptive_grpo.py`.
+- The reward model is a refusal string heuristic, not a semantic evaluator.
+- The attacker uses the OpenAI Responses API and requires `OPENAI_API_KEY`.
+- The code depends on TRL's experimental `rollout_func` API, so future TRL changes may require updates.
+- The prototype logs useful JSONL events, but distributed checkpoint/log management is still minimal.
+
+Natural next improvements are a stronger reward model, configurable forget-topic datasets, prompt filtering/deduplication, richer evaluation, and rank-aware logging for larger distributed runs.
