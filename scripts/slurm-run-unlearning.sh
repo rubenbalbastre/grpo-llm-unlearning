@@ -13,7 +13,7 @@ source "$HOME/anaconda3/etc/profile.d/conda.sh"
 echo "Activate virtual environment (must exist)"
 conda activate py312
 echo "Run program in virtual environment"
-python /home/balalru/machine-unlearning-llm/llm-attacker.py
-# python /home/balalru/machine-unlearning-llm/train_adaptive_grpo.py
+# python /home/balalru/machine-unlearning-llm/llm-attacker.py
+python /home/balalru/machine-unlearning-llm/train_adaptive_grpo.py
 # Add time for later troubleshooting
 date
