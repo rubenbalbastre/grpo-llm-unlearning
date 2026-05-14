@@ -3,6 +3,7 @@ import openai
 from typing import List
 import json
 from dotenv import load_dotenv
+import weave
 
 
 def build_attacker_prompt(topic):
@@ -108,6 +109,8 @@ if __name__ == "__main__":
             "reward": 0.5
         }
     ]
+
+    weave.init("machine-unlearning-llm")
     
     new_prompts = attack_llm(topic, history_and_rewards_json).output_parsed
 
