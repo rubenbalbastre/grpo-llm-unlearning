@@ -359,7 +359,11 @@ def main() -> None:
     from transformers import AutoModelForCausalLM, AutoTokenizer
     from trl import GRPOConfig, GRPOTrainer
 
-    model_name = "Qwen/Qwen2.5-0.5B-Instruct"
+    load_dotenv()
+    from huggingface_hub import login
+    login(token=os.getenv("HUGGINGFACE_HUB_TOKEN"))
+
+    model_name = "Qwen/Qwen2.5-1.5B-Instruct"
     output_dir = Path("./outputs/adaptive_grpo_min")
 
     torch.manual_seed(42)
