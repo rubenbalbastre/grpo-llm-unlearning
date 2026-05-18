@@ -5,9 +5,8 @@ from pathlib import Path
 
 from transformers import AutoModelForCausalLM, AutoTokenizer
 
-from constants import RWKU_GENERATION_SPLITS, RWKU_MIA_SPLITS, RWKU_UTILITY_SPLITS
-from generation_eval import evaluate_generation_split
-from mia_eval import evaluate_mia_split
+from generation_eval import evaluate_forget_set, evaluate_neighbor_set
+from mia_eval import evaluate_mia
 from results import (
     aggregate_generation,
     aggregate_mia,
@@ -15,7 +14,7 @@ from results import (
     build_summary_table_row,
     write_summary_tables,
 )
-from utility_eval import evaluate_utility_split
+from utility_eval import evaluate_utility_set
 
 
 def main():
@@ -72,47 +71,43 @@ def main():
     )
     model.eval()
 
-    all_rows = []
-    all_mia_rows = []
-    all_utility_rows = []
+    forget_rows = evaluate_forget_set(
+        model=model,
+        tokenizer=tokenizer,
+        subjects=subjects,
+        max_examples=args.max_examples,
+        max_new_tokens=args.max_new_tokens,
+        temperature=args.temperature,
+        batch_size=args.batch_size,
+    )
+    neighbor_rows = evaluate_neighbor_set(
+        model=model,
+        tokenizer=tokenizer,
+        subjects=subjects,
+        max_examples=args.max_examples,
+        max_new_tokens=args.max_new_tokens,
+        temperature=args.temperature,
+        batch_size=args.batch_size,
+    )
+    all_rows = forget_rows + neighbor_rows
 
-    for split_name in RWKU_GENERATION_SPLITS:
-        rows = evaluate_generation_split(
-            model=model,
-            tokenizer=tokenizer,
-            split_name=split_name,
-            subjects=subjects,
-            max_examples=args.max_examples,
-            max_new_tokens=args.max_new_tokens,
-            temperature=args.temperature,
-            batch_size=args.batch_size,
-        )
-        all_rows.extend(rows)
+    all_mia_rows = evaluate_mia(
+        model=model,
+        tokenizer=tokenizer,
+        subjects=subjects,
+        max_examples=args.max_mia_examples if args.max_mia_examples is not None else args.max_examples,
+        batch_size=args.batch_size,
+    )
+    all_utility_rows = evaluate_utility_set(
+        model=model,
+        tokenizer=tokenizer,
+        max_examples=args.max_utility_examples if args.max_utility_examples is not None else args.max_examples,
+        max_new_tokens=args.max_new_tokens,
+        temperature=args.temperature,
+        batch_size=args.utility_batch_size,
+    )
 
-    for split_name in RWKU_MIA_SPLITS:
-        rows = evaluate_mia_split(
-            model=model,
-            tokenizer=tokenizer,
-            split_name=split_name,
-            subjects=subjects,
-            max_examples=args.max_mia_examples if args.max_mia_examples is not None else args.max_examples,
-            batch_size=args.batch_size,
-        )
-        all_mia_rows.extend(rows)
-
-    for split_name in RWKU_UTILITY_SPLITS:
-        rows = evaluate_utility_split(
-            model=model,
-            tokenizer=tokenizer,
-            split_name=split_name,
-            max_examples=args.max_utility_examples if args.max_utility_examples is not None else args.max_examples,
-            max_new_tokens=args.max_new_tokens,
-            temperature=args.temperature,
-            batch_size=args.utility_batch_size,
-        )
-        all_utility_rows.extend(rows)
-
-    metrics = aggregate(all_rows)
+    metrics = aggregate_generation(all_rows)
     mia_metrics = aggregate_mia(all_mia_rows)
     utility_metrics = aggregate_utility(all_utility_rows)
     model_label = args.model_label or Path(args.model_name_or_path).name or args.model_name_or_path

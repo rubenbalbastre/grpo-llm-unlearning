@@ -4,7 +4,7 @@ from typing import Dict, List, Optional
 from tqdm import tqdm
 
 from common import first_present, load_rwku_split, normalize_text, select_max_examples
-from constants import CHOICE_LABELS
+from constants import CHOICE_LABELS, RWKU_UTILITY_SPLITS
 from metrics import exact_match_score, rouge_l_recall, token_f1_score, weighted_ngram_entropy
 from scoring import generate_batch, score_choice_likelihood_batch
 
@@ -202,4 +202,28 @@ def evaluate_utility_split(
                 "metric": metric,
             })
 
+    return rows
+
+
+def evaluate_utility_set(
+    model,
+    tokenizer,
+    max_examples: Optional[int],
+    max_new_tokens: int,
+    temperature: float,
+    batch_size: int,
+) -> List[Dict]:
+    rows = []
+    for split_name in RWKU_UTILITY_SPLITS:
+        rows.extend(
+            evaluate_utility_split(
+                model=model,
+                tokenizer=tokenizer,
+                split_name=split_name,
+                max_examples=max_examples,
+                max_new_tokens=max_new_tokens,
+                temperature=temperature,
+                batch_size=batch_size,
+            )
+        )
     return rows

@@ -1,13 +1,21 @@
-RWKU_GENERATION_SPLITS = {
+RWKU_FORGET_SPLITS = {
     "forget_level1": "forget_level1",
     "forget_level2": "forget_level2",
     "forget_level3": "forget_level3",
+}
+
+RWKU_NEIGHBOR_SPLITS = {
     "neighbor_level1": "neighbor_level1",
     "neighbor_level2": "neighbor_level2",
 }
 
-FORGET_SPLITS = {"forget_level1", "forget_level2", "forget_level3"}
-NEIGHBOR_SPLITS = {"neighbor_level1", "neighbor_level2"}
+RWKU_GENERATION_SPLITS = {
+    **RWKU_FORGET_SPLITS,
+    **RWKU_NEIGHBOR_SPLITS,
+}
+
+FORGET_SPLITS = set(RWKU_FORGET_SPLITS)
+NEIGHBOR_SPLITS = set(RWKU_NEIGHBOR_SPLITS)
 
 RWKU_MIA_SPLITS = {
     "mia_forget": "mia_forget",

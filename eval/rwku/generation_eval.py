@@ -3,6 +3,7 @@ from typing import Dict, List, Optional
 from tqdm import tqdm
 
 from common import filter_subjects, load_rwku_split, select_max_examples
+from constants import RWKU_FORGET_SPLITS, RWKU_NEIGHBOR_SPLITS
 from metrics import rouge_l_recall
 from scoring import generate_batch
 
@@ -66,4 +67,56 @@ def evaluate_generation_split(
                 "rouge_l_recall": score,
             })
 
+    return rows
+
+
+def evaluate_forget_set(
+    model,
+    tokenizer,
+    subjects: Optional[List[str]],
+    max_examples: Optional[int],
+    max_new_tokens: int,
+    temperature: float,
+    batch_size: int,
+) -> List[Dict]:
+    rows = []
+    for split_name in RWKU_FORGET_SPLITS:
+        rows.extend(
+            evaluate_generation_split(
+                model=model,
+                tokenizer=tokenizer,
+                split_name=split_name,
+                subjects=subjects,
+                max_examples=max_examples,
+                max_new_tokens=max_new_tokens,
+                temperature=temperature,
+                batch_size=batch_size,
+            )
+        )
+    return rows
+
+
+def evaluate_neighbor_set(
+    model,
+    tokenizer,
+    subjects: Optional[List[str]],
+    max_examples: Optional[int],
+    max_new_tokens: int,
+    temperature: float,
+    batch_size: int,
+) -> List[Dict]:
+    rows = []
+    for split_name in RWKU_NEIGHBOR_SPLITS:
+        rows.extend(
+            evaluate_generation_split(
+                model=model,
+                tokenizer=tokenizer,
+                split_name=split_name,
+                subjects=subjects,
+                max_examples=max_examples,
+                max_new_tokens=max_new_tokens,
+                temperature=temperature,
+                batch_size=batch_size,
+            )
+        )
     return rows

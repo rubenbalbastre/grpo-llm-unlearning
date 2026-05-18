@@ -3,6 +3,7 @@ from typing import Dict, List, Optional
 from tqdm import tqdm
 
 from common import extract_text_for_likelihood, filter_subjects, load_rwku_split, select_max_examples
+from constants import RWKU_MIA_SPLITS
 from scoring import score_likelihood_batch
 
 
@@ -31,4 +32,26 @@ def evaluate_mia_split(
                 "text": text,
                 **score,
             })
+    return rows
+
+
+def evaluate_mia(
+    model,
+    tokenizer,
+    subjects: Optional[List[str]],
+    max_examples: Optional[int],
+    batch_size: int,
+) -> List[Dict]:
+    rows = []
+    for split_name in RWKU_MIA_SPLITS:
+        rows.extend(
+            evaluate_mia_split(
+                model=model,
+                tokenizer=tokenizer,
+                split_name=split_name,
+                subjects=subjects,
+                max_examples=max_examples,
+                batch_size=batch_size,
+            )
+        )
     return rows
