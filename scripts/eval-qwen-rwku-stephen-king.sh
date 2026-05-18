@@ -17,9 +17,11 @@ echo "Run program in virtual environment"
 
 REPO_DIR="${REPO_DIR:-/home/balalru/machine-unlearning-llm}"
 MODEL_NAME_OR_PATH="${MODEL_NAME_OR_PATH:-Qwen/Qwen2.5-0.5B-Instruct}"
+MODEL_LABEL="${MODEL_LABEL:-}"
 OUTPUT_DIR="${OUTPUT_DIR:-${REPO_DIR}/outputs/eval_rwku/qwen_stephen_king}"
 SUBJECTS="${SUBJECTS:-Stephen King}"
 MAX_EXAMPLES="${MAX_EXAMPLES:-}"
+BATCH_SIZE="${BATCH_SIZE:-8}"
 MAX_NEW_TOKENS="${MAX_NEW_TOKENS:-64}"
 TEMPERATURE="${TEMPERATURE:-0.0}"
 TORCH_DTYPE="${TORCH_DTYPE:-auto}"
@@ -30,6 +32,7 @@ eval_args=(
   --model_name_or_path "${MODEL_NAME_OR_PATH}"
   --output_dir "${OUTPUT_DIR}"
   --subjects "${SUBJECTS}"
+  --batch_size "${BATCH_SIZE}"
   --max_new_tokens "${MAX_NEW_TOKENS}"
   --temperature "${TEMPERATURE}"
   --torch_dtype "${TORCH_DTYPE}"
@@ -37,6 +40,10 @@ eval_args=(
 
 if [[ -n "${HF_TOKEN}" ]]; then
   eval_args+=(--hf_token "${HF_TOKEN}")
+fi
+
+if [[ -n "${MODEL_LABEL}" ]]; then
+  eval_args+=(--model_label "${MODEL_LABEL}")
 fi
 
 if [[ -n "${MAX_EXAMPLES}" ]]; then

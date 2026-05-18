@@ -225,7 +225,7 @@ python eval_rwku.py \
   --subjects "Stephen King"
 ```
 
-The evaluator writes per-example generations to `rwku_generations.jsonl` and aggregate metrics to `rwku_results.json`. Forget split ROUGE-L recall should go down after unlearning; neighbor/locality split ROUGE-L recall should stay high.
+The evaluator writes per-example generations to `rwku_generations.jsonl`, aggregate metrics to `rwku_results.json`, and one-row summary tables to `rwku_summary_table.md` and `rwku_summary_table.csv`. Forget split ROUGE-L recall should go down after unlearning; neighbor/locality split ROUGE-L recall should stay high.
 
 Evaluate the default Qwen model directly from Hugging Face:
 
@@ -244,6 +244,7 @@ To evaluate a local model directory instead:
 
 ```bash
 MODEL_NAME_OR_PATH=outputs/adaptive_grpo_min/final_model \
+MODEL_LABEL=PURGE \
 sbatch scripts/eval-qwen-rwku-stephen-king.sh
 ```
 
@@ -251,6 +252,12 @@ For a quick smoke test:
 
 ```bash
 MAX_EXAMPLES=5 sbatch scripts/eval-qwen-rwku-stephen-king.sh
+```
+
+The evaluator runs generation in batches. Override the default batch size with:
+
+```bash
+BATCH_SIZE=16 sbatch scripts/eval-qwen-rwku-stephen-king.sh
 ```
 
 ## Utility Scripts
