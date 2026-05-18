@@ -5,6 +5,13 @@ import pandas as pd
 
 from constants import FORGET_SPLITS, NEIGHBOR_SPLITS, SUMMARY_SPLIT_MAP, SUMMARY_TABLE_COLUMNS
 
+MIA_METRIC_DESCRIPTIONS = {
+    "loss": "mean total negative log-likelihood",
+    "zlib": "loss normalized by zlib-compressed text length",
+    "min_k": "Min-K% token likelihood score",
+    "min_k_plus_plus": "Min-K%++ token likelihood score",
+}
+
 
 def aggregate_generation(rows: List[Dict]) -> Dict:
     df = pd.DataFrame(rows)
@@ -82,20 +89,38 @@ def aggregate_generation(rows: List[Dict]) -> Dict:
 def aggregate_mia(rows: List[Dict]) -> Dict:
     df = pd.DataFrame(rows)
     if df.empty:
-        return {"by_split": []}
+        return {
+            "by_split": [],
+            "metrics": [],
+            "metric_descriptions": MIA_METRIC_DESCRIPTIONS,
+            "summary_metric": "loss",
+        }
+
+    metrics = [
+        metric
+        for metric in ["loss", "zlib", "min_k", "min_k_plus_plus"]
+        if metric in df.columns
+    ]
+    by_split = df.groupby("split").size().reset_index(name="n")
+    for metric in metrics:
+        metric_df = (
+            df.groupby("split")[metric]
+            .mean()
+            .reset_index()
+        )
+        by_split = by_split.merge(metric_df, on="split", how="left")
 
     return {
-        "by_split": (
-            df.groupby("split")["total_nll"]
-            .agg(["count", "mean"])
-            .reset_index()
-            .rename(columns={"count": "n", "mean": "total_nll"})
-            .to_dict(orient="records")
-        ),
-        "metric": "mean total negative log-likelihood",
+        "by_split": by_split.to_dict(orient="records"),
+        "metrics": metrics,
+        "metric_descriptions": {
+            metric: MIA_METRIC_DESCRIPTIONS[metric]
+            for metric in metrics
+        },
+        "summary_metric": "loss",
         "interpretation": {
-            "mia_forget": "higher is better after unlearning",
-            "mia_retain": "lower is better to preserve retained-member likelihood",
+            "mia_forget": "higher loss is better after unlearning",
+            "mia_retain": "lower loss is better to preserve retained-member likelihood",
         },
     }
 
@@ -139,18 +164,15 @@ def build_summary_table_row(
         row["split"]: row["rouge_l_recall"]
         for row in metrics.get("by_split", [])
     }
-    mia_by_split = {
-        row["split"]: row["total_nll"]
-        for row in mia_metrics.get("by_split", [])
-    }
+    mia_by_split = {row["split"]: row for row in mia_metrics.get("by_split", [])}
     utility_by_split = {
         row["split"]: row["score"]
         for row in utility_metrics.get("by_split", [])
     }
     table_row = {
         "model": model_label,
-        "mia_fm": format_table_score(mia_by_split.get("mia_forget")),
-        "mia_rm": format_table_score(mia_by_split.get("mia_retain")),
+        "mia_fm": format_table_score(mia_by_split.get("mia_forget", {}).get("loss")),
+        "mia_rm": format_table_score(mia_by_split.get("mia_retain", {}).get("loss")),
         "utility_ga": format_table_score(utility_by_split.get("utility_general")),
         "utility_ra": format_table_score(utility_by_split.get("utility_reason")),
         "utility_tru": format_table_score(utility_by_split.get("utility_truthfulness")),

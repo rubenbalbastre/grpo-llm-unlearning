@@ -236,6 +236,18 @@ python eval/rwku/rwku.py \
 
 The evaluator writes per-example generations to `rwku_generations.jsonl`, MIA scores to `rwku_mia.jsonl`, utility scores to `rwku_utility.jsonl`, aggregate metrics to `rwku_results.json`, and one-row summary tables to `rwku_summary_table.md` and `rwku_summary_table.csv`. Forget split ROUGE-L recall should go down after unlearning; neighbor/locality split ROUGE-L recall should stay high.
 
+By default, MIA evaluation computes only the paper's `Loss` metric. MIA metric selection uses boolean options:
+
+```bash
+python eval/rwku/rwku.py \
+  --model_name_or_path outputs/adaptive_grpo_min/final_model \
+  --output_dir outputs/eval_rwku/stephen_king \
+  --subjects "Stephen King" \
+  --compute_mia_loss True
+```
+
+The four RWKU MIA metrics are represented by `--compute_mia_loss`, `--compute_mia_zlib`, `--compute_mia_min_k`, and `--compute_mia_min_k_plus_plus`. Currently only `Loss` is implemented.
+
 Evaluate the default Qwen model directly from Hugging Face:
 
 ```bash
