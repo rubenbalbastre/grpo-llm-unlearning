@@ -28,7 +28,7 @@ echo "Install requirements"
 # pip install -r /home/balalru/machine-unlearning-llm/requirements.txt
 pip uninstall -y torch torchvision torchaudio
 
-# PyTorch CUDA 11.8 wheels (commonly include V100 support)
-pip install --index-url https://download.pytorch.org/whl/cu118 torch torchvision torchaudio
+# PyTorch CUDA 12.6 wheels (commonly include V100 support)
+pip install --index-url https://download.pytorch.org/whl/cu126 torch torchvision torchaudio
 
 date
