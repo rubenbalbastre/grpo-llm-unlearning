@@ -23,7 +23,7 @@ echo "Finished unlearning script"
 
 # evaluate RWKU
 echo "Evaluate RWKU"
-python /home/balalru/machine-unlearning-llm/eval_rwku.py \
+python /home/balalru/machine-unlearning-llm/eval/rwku/rwku.py \
     --model_name_or_path /home/balalru/machine-unlearning-llm/outputs/adaptive_grpo_min/final_model \
     --output_dir /home/balalru/machine-unlearning-llm/outputs/eval_rwku/stephen_king \
     --subjects "Stephen King"

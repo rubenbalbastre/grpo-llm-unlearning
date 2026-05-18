@@ -219,7 +219,16 @@ These JSONL events are the easiest place to inspect whether the attacker is adap
 Evaluate a saved model on the RWKU generation and locality probes:
 
 ```bash
-python eval_rwku.py \
+python eval/rwku/rwku.py \
+  --model_name_or_path outputs/adaptive_grpo_min/final_model \
+  --output_dir outputs/eval_rwku/stephen_king \
+  --subjects "Stephen King"
+```
+
+The RWKU evaluation code is grouped under `eval/rwku/`, with `rwku.py` as the entrypoint:
+
+```bash
+python eval/rwku/rwku.py \
   --model_name_or_path outputs/adaptive_grpo_min/final_model \
   --output_dir outputs/eval_rwku/stephen_king \
   --subjects "Stephen King"
@@ -268,6 +277,12 @@ BATCH_SIZE=16 sbatch scripts/eval-qwen-rwku-stephen-king.sh
 ```
 
 Multiple-choice utility splits are scored with batched answer-option likelihoods rather than text generation, matching the RWKU paper's answer-perplexity convention more closely while remaining much faster than free-form decoding.
+
+Utility evaluation has a separate batch-size knob because the paper-aligned prompts can be longer:
+
+```bash
+UTILITY_BATCH_SIZE=8 sbatch scripts/eval-qwen-rwku-stephen-king.sh
+```
 
 ## Utility Scripts
 
