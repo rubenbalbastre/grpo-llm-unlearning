@@ -14,7 +14,14 @@ def evaluate_mia_split(
     subjects: Optional[List[str]],
     max_examples: Optional[int],
     batch_size: int,
+    loss: bool = True,
+    zlib: bool = False,
+    min_k: bool = False,
+    min_k_plus_plus: bool = False,
 ) -> List[Dict]:
+    if zlib or min_k or min_k_plus_plus:
+        raise NotImplementedError("Only the MIA loss metric is implemented currently.")
+
     dataset = load_rwku_split(split_name)
     dataset = filter_subjects(dataset, subjects)
     dataset = select_max_examples(dataset, max_examples)
@@ -26,12 +33,24 @@ def evaluate_mia_split(
         scored = score_likelihood_batch(model, tokenizer, texts)
 
         for ex, text, score in zip(batch, texts, scored, strict=True):
-            rows.append({
+            row = {
                 "split": split_name,
                 "subject": ex.get("subject"),
                 "text": text,
-                **score,
-            })
+            }
+            if loss:
+                row.update({
+                    "loss": score["total_nll"],
+                    "mean_loss": score["mean_nll"],
+                    "token_count": score["token_count"],
+                })
+            if zlib:
+                raise NotImplementedError("Zlib-based MIA metric is not implemented yet.")
+            if min_k:
+                raise NotImplementedError("Min-K MIA metric is not implemented yet.")
+            if min_k_plus_plus:
+                raise NotImplementedError("Min-K++ MIA metric is not implemented yet.")
+            rows.append(row)
     return rows
 
 
@@ -41,6 +60,10 @@ def evaluate_mia(
     subjects: Optional[List[str]],
     max_examples: Optional[int],
     batch_size: int,
+    loss: bool = True,
+    zlib: bool = False,
+    min_k: bool = False,
+    min_k_plus_plus: bool = False,
 ) -> List[Dict]:
     rows = []
     for split_name in RWKU_MIA_SPLITS:
@@ -52,6 +75,10 @@ def evaluate_mia(
                 subjects=subjects,
                 max_examples=max_examples,
                 batch_size=batch_size,
+                loss=loss,
+                zlib=zlib,
+                min_k=min_k,
+                min_k_plus_plus=min_k_plus_plus,
             )
         )
     return rows

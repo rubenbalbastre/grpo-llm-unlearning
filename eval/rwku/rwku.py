@@ -25,6 +25,10 @@ def main():
     parser.add_argument("--max_examples", type=int, default=None)
     parser.add_argument("--max_mia_examples", type=int, default=None)
     parser.add_argument("--max_utility_examples", type=int, default=None)
+    parser.add_argument("--compute_mia_loss", type=bool, default=True)
+    parser.add_argument("--compute_mia_zlib", type=bool, default=False)
+    parser.add_argument("--compute_mia_min_k", type=bool, default=False)
+    parser.add_argument("--compute_mia_min_k_plus_plus", type=bool, default=False)
     parser.add_argument("--max_new_tokens", type=int, default=64)
     parser.add_argument("--batch_size", type=int, default=8)
     parser.add_argument("--utility_batch_size", type=int, default=4)
@@ -37,7 +41,6 @@ def main():
         raise ValueError("--batch_size must be >= 1")
     if args.utility_batch_size <= 0:
         raise ValueError("--utility_batch_size must be >= 1")
-
     output_dir = Path(args.output_dir)
     output_dir.mkdir(parents=True, exist_ok=True)
 
@@ -97,6 +100,10 @@ def main():
         subjects=subjects,
         max_examples=args.max_mia_examples if args.max_mia_examples is not None else args.max_examples,
         batch_size=args.batch_size,
+        loss=args.compute_mia_loss,
+        zlib=args.compute_mia_zlib,
+        min_k=args.compute_mia_min_k,
+        min_k_plus_plus=args.compute_mia_min_k_plus_plus,
     )
     all_utility_rows = evaluate_utility_set(
         model=model,
