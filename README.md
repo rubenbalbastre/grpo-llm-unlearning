@@ -225,7 +225,7 @@ python eval_rwku.py \
   --subjects "Stephen King"
 ```
 
-The evaluator writes per-example generations to `rwku_generations.jsonl`, aggregate metrics to `rwku_results.json`, and one-row summary tables to `rwku_summary_table.md` and `rwku_summary_table.csv`. Forget split ROUGE-L recall should go down after unlearning; neighbor/locality split ROUGE-L recall should stay high.
+The evaluator writes per-example generations to `rwku_generations.jsonl`, MIA scores to `rwku_mia.jsonl`, utility scores to `rwku_utility.jsonl`, aggregate metrics to `rwku_results.json`, and one-row summary tables to `rwku_summary_table.md` and `rwku_summary_table.csv`. Forget split ROUGE-L recall should go down after unlearning; neighbor/locality split ROUGE-L recall should stay high.
 
 Evaluate the default Qwen model directly from Hugging Face:
 
@@ -254,11 +254,20 @@ For a quick smoke test:
 MAX_EXAMPLES=5 sbatch scripts/eval-qwen-rwku-stephen-king.sh
 ```
 
+For separate smoke-test caps on MIA and utility:
+
+```bash
+MAX_EXAMPLES=5 MAX_MIA_EXAMPLES=5 MAX_UTILITY_EXAMPLES=5 \
+sbatch scripts/eval-qwen-rwku-stephen-king.sh
+```
+
 The evaluator runs generation in batches. Override the default batch size with:
 
 ```bash
 BATCH_SIZE=16 sbatch scripts/eval-qwen-rwku-stephen-king.sh
 ```
+
+Multiple-choice utility splits are scored with batched answer-option likelihoods rather than text generation, matching the RWKU paper's answer-perplexity convention more closely while remaining much faster than free-form decoding.
 
 ## Utility Scripts
 

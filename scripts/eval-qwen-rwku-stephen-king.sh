@@ -21,6 +21,8 @@ MODEL_LABEL="${MODEL_LABEL:-}"
 OUTPUT_DIR="${OUTPUT_DIR:-${REPO_DIR}/outputs/eval_rwku/qwen_stephen_king}"
 SUBJECTS="${SUBJECTS:-Stephen King}"
 MAX_EXAMPLES="${MAX_EXAMPLES:-}"
+MAX_MIA_EXAMPLES="${MAX_MIA_EXAMPLES:-}"
+MAX_UTILITY_EXAMPLES="${MAX_UTILITY_EXAMPLES:-}"
 BATCH_SIZE="${BATCH_SIZE:-8}"
 MAX_NEW_TOKENS="${MAX_NEW_TOKENS:-64}"
 TEMPERATURE="${TEMPERATURE:-0.0}"
@@ -48,6 +50,14 @@ fi
 
 if [[ -n "${MAX_EXAMPLES}" ]]; then
   eval_args+=(--max_examples "${MAX_EXAMPLES}")
+fi
+
+if [[ -n "${MAX_MIA_EXAMPLES}" ]]; then
+  eval_args+=(--max_mia_examples "${MAX_MIA_EXAMPLES}")
+fi
+
+if [[ -n "${MAX_UTILITY_EXAMPLES}" ]]; then
+  eval_args+=(--max_utility_examples "${MAX_UTILITY_EXAMPLES}")
 fi
 
 echo "Evaluating ${MODEL_NAME_OR_PATH} on RWKU subject: ${SUBJECTS}"
