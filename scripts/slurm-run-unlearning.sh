@@ -13,7 +13,18 @@ source "$HOME/anaconda3/etc/profile.d/conda.sh"
 echo "Activate virtual environment (must exist)"
 conda activate py312
 echo "Run program in virtual environment"
+
+
 # python /home/balalru/machine-unlearning-llm/llm-attacker.py
+echo "Run unlearning script"
 python /home/balalru/machine-unlearning-llm/train_adaptive_grpo.py
+echo "Finished unlearning script"
+
+# evaluate RWKU
+echo "Evaluate RWKU"
+python /home/balalru/machine-unlearning-llm/eval_rwku.py \
+    --model_name_or_path /home/balalru/machine-unlearning-llm/outputs/unlearning_model \
+    --output_dir /home/balalru/machine-unlearning-llm/outputs/eval_rwku \
+    --subjects "all" \
 # Add time for later troubleshooting
 date
