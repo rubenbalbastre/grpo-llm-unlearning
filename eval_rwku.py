@@ -1,5 +1,6 @@
 import json
 import argparse
+import os
 from pathlib import Path
 from typing import Dict, List, Optional
 
@@ -18,6 +19,9 @@ RWKU_GENERATION_SPLITS = {
     "neighbor_level1": "neighbor_level1",
     "neighbor_level2": "neighbor_level2",
 }
+
+FORGET_SPLITS = {"forget_level1", "forget_level2", "forget_level3"}
+NEIGHBOR_SPLITS = {"neighbor_level1", "neighbor_level2"}
 
 
 def build_prompt(example: Dict) -> str:
@@ -138,9 +142,45 @@ def aggregate(rows: List[Dict]) -> Dict:
 
     result = {}
 
+    if df.empty:
+        return {
+            "overall": {
+                "n": 0,
+                "rouge_l_recall": None,
+            },
+            "forget": {
+                "n": 0,
+                "rouge_l_recall": None,
+                "interpretation": "lower is better after unlearning",
+            },
+            "neighbor_locality": {
+                "n": 0,
+                "rouge_l_recall": None,
+                "interpretation": "higher is better; nearby retained knowledge should survive",
+            },
+            "by_split": [],
+            "by_split_and_type": [],
+            "by_subject": [],
+        }
+
     result["overall"] = {
         "n": int(len(df)),
         "rouge_l_recall": float(df["rouge_l_recall"].mean()),
+    }
+
+    forget_df = df[df["split"].isin(FORGET_SPLITS)]
+    neighbor_df = df[df["split"].isin(NEIGHBOR_SPLITS)]
+
+    result["forget"] = {
+        "n": int(len(forget_df)),
+        "rouge_l_recall": float(forget_df["rouge_l_recall"].mean()) if not forget_df.empty else None,
+        "interpretation": "lower is better after unlearning",
+    }
+
+    result["neighbor_locality"] = {
+        "n": int(len(neighbor_df)),
+        "rouge_l_recall": float(neighbor_df["rouge_l_recall"].mean()) if not neighbor_df.empty else None,
+        "interpretation": "higher is better; nearby retained knowledge should survive",
     }
 
     result["by_split"] = (
@@ -172,13 +212,14 @@ def aggregate(rows: List[Dict]) -> Dict:
 
 def main():
     parser = argparse.ArgumentParser()
-    parser.add_argument("--model_name_or_path", type=str, default="Qwen/Qwen2.5-0.5-Instruct", required=True)
+    parser.add_argument("--model_name_or_path", type=str, default="Qwen/Qwen2.5-0.5B-Instruct", required=True)
     parser.add_argument("--output_dir", type=str, required=True)
     parser.add_argument("--subjects", type=str, default=None)
     parser.add_argument("--max_examples", type=int, default=None)
     parser.add_argument("--max_new_tokens", type=int, default=64)
     parser.add_argument("--temperature", type=float, default=0.0)
     parser.add_argument("--torch_dtype", type=str, default="auto")
+    parser.add_argument("--hf_token", type=str, default=None)
     args = parser.parse_args()
 
     output_dir = Path(args.output_dir)
@@ -187,10 +228,19 @@ def main():
     subjects = None
     if args.subjects:
         subjects = [s.strip() for s in args.subjects.split(",") if s.strip()]
+        if any(s.lower() == "all" for s in subjects):
+            subjects = None
+
+    hf_token = args.hf_token or os.getenv("HF_TOKEN") or os.getenv("HUGGINGFACE_HUB_TOKEN")
+    from_pretrained_kwargs = {
+        "trust_remote_code": True,
+    }
+    if hf_token:
+        from_pretrained_kwargs["token"] = hf_token
 
     tokenizer = AutoTokenizer.from_pretrained(
         args.model_name_or_path,
-        trust_remote_code=True,
+        **from_pretrained_kwargs,
     )
 
     if tokenizer.pad_token is None:
@@ -200,7 +250,7 @@ def main():
         args.model_name_or_path,
         torch_dtype=args.torch_dtype,
         device_map="auto",
-        trust_remote_code=True,
+        **from_pretrained_kwargs,
     )
     model.eval()
 
@@ -227,7 +277,11 @@ def main():
     with open(output_dir / "rwku_results.json", "w", encoding="utf-8") as f:
         json.dump(metrics, f, indent=2, ensure_ascii=False)
 
-    print(json.dumps(metrics["by_split"], indent=2))
+    print(json.dumps({
+        "forget": metrics["forget"],
+        "neighbor_locality": metrics["neighbor_locality"],
+        "by_split": metrics["by_split"],
+    }, indent=2))
 
 
 if __name__ == "__main__":

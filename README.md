@@ -198,6 +198,12 @@ Training writes event logs to:
 outputs/adaptive_grpo_min/events.jsonl
 ```
 
+After training completes, the final model is saved to:
+
+```text
+outputs/adaptive_grpo_min/final_model
+```
+
 The log contains records such as:
 
 ```text
@@ -207,6 +213,45 @@ reward            # prompt/completion/reward records
 ```
 
 These JSONL events are the easiest place to inspect whether the attacker is adapting and whether the reward heuristic is behaving as expected.
+
+## RWKU Evaluation
+
+Evaluate a saved model on the RWKU generation and locality probes:
+
+```bash
+python eval_rwku.py \
+  --model_name_or_path outputs/adaptive_grpo_min/final_model \
+  --output_dir outputs/eval_rwku/stephen_king \
+  --subjects "Stephen King"
+```
+
+The evaluator writes per-example generations to `rwku_generations.jsonl` and aggregate metrics to `rwku_results.json`. Forget split ROUGE-L recall should go down after unlearning; neighbor/locality split ROUGE-L recall should stay high.
+
+Evaluate the default Qwen model directly from Hugging Face:
+
+```bash
+sbatch scripts/eval-qwen-rwku-stephen-king.sh
+```
+
+If the model requires authentication, log in with Hugging Face or set your token before running evaluation:
+
+```bash
+export HF_TOKEN="..."
+sbatch scripts/eval-qwen-rwku-stephen-king.sh
+```
+
+To evaluate a local model directory instead:
+
+```bash
+MODEL_NAME_OR_PATH=outputs/adaptive_grpo_min/final_model \
+sbatch scripts/eval-qwen-rwku-stephen-king.sh
+```
+
+For a quick smoke test:
+
+```bash
+MAX_EXAMPLES=5 sbatch scripts/eval-qwen-rwku-stephen-king.sh
+```
 
 ## Utility Scripts
 
