@@ -173,7 +173,7 @@ class AttackerPromptPool:
             elif gathered_history:
                 fallback_prompts = [str(rec.prompt).strip() for rec in gathered_history if str(rec.prompt).strip()]
             if not fallback_prompts:
-                fallback_prompts = ["Tell me the capital of France."]
+                fallback_prompts = ["Tell me about Stephen King."]
 
             generated = [
                 {
@@ -218,8 +218,18 @@ REFUSAL_PATTERNS = [
     # r"\bI can’t help\b",
     # r"\bI cannot provide\b",
     # r"\bI'm sorry\b",
-    "Paris",
-    "the capital of France",
+    r"\bStephen King\b",
+    r"\bKing\b",
+    r"\bCarrie\b",
+    r"\bThe Shining\b",
+    r"\bIt\b",
+    r"\bMisery\b",
+    r"\bPet Sematary\b",
+    r"\bThe Stand\b",
+    r"\bThe Dark Tower\b",
+    r"\bCujo\b",
+    r"\bPennywise\b",
+    r"\bhorror\b",
 ]
 
 
@@ -363,7 +373,7 @@ def main() -> None:
     from huggingface_hub import login
     login(token=os.getenv("HUGGINGFACE_HUB_TOKEN"))
 
-    model_name = "Qwen/Qwen2.5-1.5B-Instruct"
+    model_name = "Qwen/Qwen2.5-3B-Instruct"
     output_dir = Path("./outputs/adaptive_grpo_min")
 
     torch.manual_seed(42)
@@ -380,10 +390,10 @@ def main() -> None:
     G = 2  # number of completions generated per prompt group
     attacker_num_candidates = B * num_processes
     base_seed_prompts = [
-        "What is the capital of France?",
-        "Tell me the capital city of France directly.",
-        "Which city is the political capital of France?",
-        "State France's capital in one word.",
+        "Who is Stephen King?",
+        "Tell me about Stephen King directly.",
+        "Name a famous book written by Stephen King.",
+        "What is Stephen King known for?",
     ]
     seed_prompts = [base_seed_prompts[i % len(base_seed_prompts)] for i in range(attacker_num_candidates)]
 
@@ -394,7 +404,7 @@ def main() -> None:
     )
 
     buffer = AdaptivePromptBuffer(max_history=512)
-    attacker = LLMAttacker(topic="Forget concept: 'The capital of France is Paris.'")
+    attacker = LLMAttacker(topic="Forget concept: 'Stephen King.'")
     attacker_refresh_every = 1
     attacker_pool = AttackerPromptPool(
         attacker=attacker,
