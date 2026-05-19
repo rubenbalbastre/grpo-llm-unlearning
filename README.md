@@ -248,6 +248,19 @@ python eval/rwku/rwku.py \
 
 The four RWKU MIA metrics are represented by `--compute_mia_loss`, `--compute_mia_zlib`, `--compute_mia_min_k`, and `--compute_mia_min_k_plus_plus`. Currently only `Loss` is implemented.
 
+You can run only selected benchmark sets:
+
+```bash
+python eval/rwku/rwku.py \
+  --model_name_or_path outputs/adaptive_grpo_min/final_model \
+  --output_dir outputs/eval_rwku/stephen_king_forget_only \
+  --subjects "Stephen King" \
+  --run_forget_set True \
+  --run_neighbor_set False \
+  --run_mia_set False \
+  --run_utility_set False
+```
+
 Evaluate the default Qwen model directly from Hugging Face:
 
 ```bash
@@ -273,6 +286,13 @@ For a quick smoke test:
 
 ```bash
 MAX_EXAMPLES=5 sbatch scripts/eval-qwen-rwku-stephen-king.sh
+```
+
+To run only selected benchmark sets through Slurm:
+
+```bash
+RUN_FORGET_SET=True RUN_NEIGHBOR_SET=False RUN_MIA_SET=False RUN_UTILITY_SET=False \
+sbatch scripts/eval-qwen-rwku-stephen-king.sh
 ```
 
 For separate smoke-test caps on MIA and utility:

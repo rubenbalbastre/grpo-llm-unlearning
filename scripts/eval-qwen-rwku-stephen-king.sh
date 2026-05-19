@@ -4,7 +4,7 @@
 # Request the number of gpus usint "--gres=gpu:<number>". E.g.:
 #SBATCH --gres=gpu:1
 # Request more time using "--time=<hours:mins:secs>". E.g.:
-#SBATCH --time=00:30:00
+#SBATCH --time=01:30:00
 # Request time partition "--partition=<Partition>". E.g.:
 #SBATCH --partition=sc-gpu
 # Add host, time, and directory name for later troubleshooting
@@ -19,11 +19,15 @@ REPO_DIR="${REPO_DIR:-/home/balalru/machine-unlearning-llm}"
 MODEL_NAME_OR_PATH="${MODEL_NAME_OR_PATH:-Qwen/Qwen2.5-0.5B-Instruct}"
 MODEL_LABEL="${MODEL_LABEL:-}"
 OUTPUT_DIR="${OUTPUT_DIR:-${REPO_DIR}/outputs/eval_rwku/qwen_stephen_king}"
-SUBJECTS="${SUBJECTS:-Stephen King}"
+# SUBJECTS="${SUBJECTS:-Stephen King}"
+RUN_FORGET_SET="${RUN_FORGET_SET:-True}"
+RUN_NEIGHBOR_SET="${RUN_NEIGHBOR_SET:-False}"
+RUN_MIA_SET="${RUN_MIA_SET:-False}"
+RUN_UTILITY_SET="${RUN_UTILITY_SET:-False}"
 MAX_EXAMPLES="${MAX_EXAMPLES:-}"
 MAX_MIA_EXAMPLES="${MAX_MIA_EXAMPLES:-}"
 MAX_UTILITY_EXAMPLES="${MAX_UTILITY_EXAMPLES:-}"
-BATCH_SIZE="${BATCH_SIZE:-8}"
+BATCH_SIZE="${BATCH_SIZE:-16}"
 UTILITY_BATCH_SIZE="${UTILITY_BATCH_SIZE:-4}"
 MAX_NEW_TOKENS="${MAX_NEW_TOKENS:-64}"
 TEMPERATURE="${TEMPERATURE:-0.0}"
@@ -35,6 +39,10 @@ eval_args=(
   --model_name_or_path "${MODEL_NAME_OR_PATH}"
   --output_dir "${OUTPUT_DIR}"
   --subjects "${SUBJECTS}"
+  --run_forget_set "${RUN_FORGET_SET}"
+  --run_neighbor_set "${RUN_NEIGHBOR_SET}"
+  --run_mia_set "${RUN_MIA_SET}"
+  --run_utility_set "${RUN_UTILITY_SET}"
   --batch_size "${BATCH_SIZE}"
   --utility_batch_size "${UTILITY_BATCH_SIZE}"
   --max_new_tokens "${MAX_NEW_TOKENS}"

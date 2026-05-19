@@ -22,6 +22,10 @@ def main():
     parser.add_argument("--model_name_or_path", type=str, default="Qwen/Qwen2.5-0.5B-Instruct", required=True)
     parser.add_argument("--output_dir", type=str, required=True)
     parser.add_argument("--subjects", type=str, default=None)
+    parser.add_argument("--run_forget_set", type=bool, default=True)
+    parser.add_argument("--run_neighbor_set", type=bool, default=True)
+    parser.add_argument("--run_mia_set", type=bool, default=True)
+    parser.add_argument("--run_utility_set", type=bool, default=True)
     parser.add_argument("--max_examples", type=int, default=None)
     parser.add_argument("--max_mia_examples", type=int, default=None)
     parser.add_argument("--max_utility_examples", type=int, default=None)
@@ -74,45 +78,55 @@ def main():
     )
     model.eval()
 
-    forget_rows = evaluate_forget_set(
-        model=model,
-        tokenizer=tokenizer,
-        subjects=subjects,
-        max_examples=args.max_examples,
-        max_new_tokens=args.max_new_tokens,
-        temperature=args.temperature,
-        batch_size=args.batch_size,
-    )
-    neighbor_rows = evaluate_neighbor_set(
-        model=model,
-        tokenizer=tokenizer,
-        subjects=subjects,
-        max_examples=args.max_examples,
-        max_new_tokens=args.max_new_tokens,
-        temperature=args.temperature,
-        batch_size=args.batch_size,
-    )
+    forget_rows = []
+    if args.run_forget_set:
+        forget_rows = evaluate_forget_set(
+            model=model,
+            tokenizer=tokenizer,
+            subjects=subjects,
+            max_examples=args.max_examples,
+            max_new_tokens=args.max_new_tokens,
+            temperature=args.temperature,
+            batch_size=args.batch_size,
+        )
+
+    neighbor_rows = []
+    if args.run_neighbor_set:
+        neighbor_rows = evaluate_neighbor_set(
+            model=model,
+            tokenizer=tokenizer,
+            subjects=subjects,
+            max_examples=args.max_examples,
+            max_new_tokens=args.max_new_tokens,
+            temperature=args.temperature,
+            batch_size=args.batch_size,
+        )
     all_rows = forget_rows + neighbor_rows
 
-    all_mia_rows = evaluate_mia(
-        model=model,
-        tokenizer=tokenizer,
-        subjects=subjects,
-        max_examples=args.max_mia_examples if args.max_mia_examples is not None else args.max_examples,
-        batch_size=args.batch_size,
-        loss=args.compute_mia_loss,
-        zlib=args.compute_mia_zlib,
-        min_k=args.compute_mia_min_k,
-        min_k_plus_plus=args.compute_mia_min_k_plus_plus,
-    )
-    all_utility_rows = evaluate_utility_set(
-        model=model,
-        tokenizer=tokenizer,
-        max_examples=args.max_utility_examples if args.max_utility_examples is not None else args.max_examples,
-        max_new_tokens=args.max_new_tokens,
-        temperature=args.temperature,
-        batch_size=args.utility_batch_size,
-    )
+    all_mia_rows = []
+    if args.run_mia_set:
+        all_mia_rows = evaluate_mia(
+            model=model,
+            tokenizer=tokenizer,
+            subjects=subjects,
+            max_examples=args.max_mia_examples if args.max_mia_examples is not None else args.max_examples,
+            batch_size=args.batch_size,
+            loss=args.compute_mia_loss,
+            zlib=args.compute_mia_zlib,
+            min_k=args.compute_mia_min_k,
+            min_k_plus_plus=args.compute_mia_min_k_plus_plus,
+        )
+
+    all_utility_rows = []
+    if args.run_utility_set:
+        all_utility_rows = evaluate_utility_set(
+            model=model,
+            tokenizer=tokenizer,
+            max_examples=args.max_utility_examples if args.max_utility_examples is not None else args.max_examples,
+            max_new_tokens=args.max_new_tokens,
+            temperature=args.temperature,
+            batch_size=args.utility_batch_size,
+        )
 
     metrics = aggregate_generation(all_rows)
     mia_metrics = aggregate_mia(all_mia_rows)

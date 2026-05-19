@@ -41,3 +41,16 @@ The four paper metrics are represented by:
 ```
 
 Currently only `Loss` is implemented. The other MIA options are present in the interface and raise `NotImplementedError` if enabled.
+
+Set-level execution can be toggled independently:
+
+```bash
+python eval/rwku/rwku.py \
+  --model_name_or_path Qwen/Qwen2.5-0.5B-Instruct \
+  --output_dir outputs/eval_rwku/qwen_forget_only \
+  --subjects "Stephen King" \
+  --run_forget_set True \
+  --run_neighbor_set False \
+  --run_mia_set False \
+  --run_utility_set False
+```
