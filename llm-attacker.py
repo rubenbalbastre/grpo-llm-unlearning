@@ -115,6 +115,6 @@ if __name__ == "__main__":
     new_prompts = attack_llm(topic, history_and_rewards_json).output_parsed
 
     # write the new prompts to a file
-    with open("new_prompts.json", "w") as f:
+    with open("outputs/new_prompts.json", "w") as f:
         json.dump([prompt.model_dump() for prompt in new_prompts.prompts], f, indent=4)
     print(new_prompts)
