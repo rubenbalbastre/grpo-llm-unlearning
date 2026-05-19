@@ -437,6 +437,10 @@ def main() -> None:
 
     trainer.train()
 
+    final_model_dir = output_dir / "final_model"
+    trainer.save_model(str(final_model_dir))
+    tokenizer.save_pretrained(final_model_dir)
+
 
 if __name__ == "__main__":
     main()

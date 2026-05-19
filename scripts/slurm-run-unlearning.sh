@@ -6,14 +6,26 @@
 # Request more time using "--time=<hours:mins:secs>". E.g.:
 #SBATCH --time=00:30:00
 # Request time partition "--partition=<Partition>". E.g.:
-#SBATCH --partition=sc-gpu# Add host, time, and directory name for later troubleshooting
+#SBATCH --partition=sc-gpu
+# Add host, time, and directory name for later troubleshooting
 hostname; pwd; date
 # Run the program/command
 source "$HOME/anaconda3/etc/profile.d/conda.sh"
 echo "Activate virtual environment (must exist)"
 conda activate py312
 echo "Run program in virtual environment"
+
+
 # python /home/balalru/machine-unlearning-llm/llm-attacker.py
+echo "Run unlearning script"
 python /home/balalru/machine-unlearning-llm/train_adaptive_grpo.py
+echo "Finished unlearning script"
+
+# evaluate RWKU
+echo "Evaluate RWKU"
+python /home/balalru/machine-unlearning-llm/eval/rwku/rwku.py \
+    --model_name_or_path /home/balalru/machine-unlearning-llm/outputs/adaptive_grpo_min/final_model \
+    --output_dir /home/balalru/machine-unlearning-llm/outputs/eval_rwku/stephen_king \
+    --subjects "Stephen King"
 # Add time for later troubleshooting
 date

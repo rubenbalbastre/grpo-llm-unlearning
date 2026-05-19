@@ -25,7 +25,7 @@ echo "Activate environment"
 conda activate "$ENV_PATH"
 
 echo "Install requirements"
-# pip install -r /home/balalru/machine-unlearning-llm/requirements.txt
+pip install -r /home/balalru/machine-unlearning-llm/requirements.txt
 pip uninstall -y torch torchvision torchaudio
 
 # PyTorch CUDA 12.6 wheels (commonly include V100 support)

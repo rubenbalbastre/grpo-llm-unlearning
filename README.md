@@ -198,6 +198,12 @@ Training writes event logs to:
 outputs/adaptive_grpo_min/events.jsonl
 ```
 
+After training completes, the final model is saved to:
+
+```text
+outputs/adaptive_grpo_min/final_model
+```
+
 The log contains records such as:
 
 ```text
@@ -207,6 +213,120 @@ reward            # prompt/completion/reward records
 ```
 
 These JSONL events are the easiest place to inspect whether the attacker is adapting and whether the reward heuristic is behaving as expected.
+
+## RWKU Evaluation
+
+Evaluate a saved model on the RWKU generation and locality probes:
+
+```bash
+python eval/rwku/rwku.py \
+  --model_name_or_path outputs/adaptive_grpo_min/final_model \
+  --output_dir outputs/eval_rwku/stephen_king \
+  --subjects "Stephen King"
+```
+
+The RWKU evaluation code is grouped under `eval/rwku/`, with `rwku.py` as the entrypoint:
+
+```bash
+python eval/rwku/rwku.py \
+  --model_name_or_path outputs/adaptive_grpo_min/final_model \
+  --output_dir outputs/eval_rwku/stephen_king \
+  --subjects "Stephen King"
+```
+
+The evaluator writes per-example generations to `rwku_generations.jsonl`, MIA scores to `rwku_mia.jsonl`, utility scores to `rwku_utility.jsonl`, aggregate metrics to `rwku_results.json`, and one-row summary tables to `rwku_summary_table.md` and `rwku_summary_table.csv`. Forget split ROUGE-L recall should go down after unlearning; neighbor/locality split ROUGE-L recall should stay high.
+
+Models are loaded with Transformers' native implementations by default. If a model really requires repository-provided code, pass `--trust_remote_code` or set `TRUST_REMOTE_CODE=True` in the Slurm script. For Phi-3 on recent Transformers, keep this disabled so the native loader is used.
+
+By default, MIA evaluation computes only the paper's `Loss` metric. MIA metric selection uses boolean options:
+
+```bash
+python eval/rwku/rwku.py \
+  --model_name_or_path outputs/adaptive_grpo_min/final_model \
+  --output_dir outputs/eval_rwku/stephen_king \
+  --subjects "Stephen King" \
+  --compute_mia_loss
+```
+
+The four RWKU MIA metrics are represented by `--compute_mia_loss`, `--compute_mia_zlib`, `--compute_mia_min_k`, and `--compute_mia_min_k_plus_plus`. Each can be disabled with the matching `--no-...` flag. Currently only `Loss` is implemented.
+
+For MIA, per-example `loss` in `rwku_mia.jsonl` is mean token negative log-likelihood, matching the Hugging Face causal-LM loss used by RWKU's evaluator. The FM/RM summary columns sum that normalized loss within each subject and then average subject sums; for `SUBJECTS="Stephen King"` this is the Stephen King subject sum. The raw unnormalized sequence NLL is still saved as `total_loss` for debugging, but it is not used in the table.
+
+You can run only selected benchmark sets:
+
+```bash
+python eval/rwku/rwku.py \
+  --model_name_or_path outputs/adaptive_grpo_min/final_model \
+  --output_dir outputs/eval_rwku/stephen_king_forget_only \
+  --subjects "Stephen King" \
+  --run_forget_set \
+  --no-run_neighbor_set \
+  --no-run_mia_set \
+  --no-run_utility_set
+```
+
+Evaluate the default Qwen model directly from Hugging Face:
+
+```bash
+sbatch scripts/eval-qwen-rwku-stephen-king.sh
+```
+
+The Slurm script derives its default output directory from `MODEL_NAME_OR_PATH` and `SUBJECTS`, e.g. `MODEL_NAME_OR_PATH="Qwen/Qwen2.5-1.5B-Instruct" SUBJECTS="Stephen King"` writes to `outputs/eval_rwku/qwen_qwen2_5_1_5b_instruct_stephen_king`. Use `SUBJECTS=none` for all subjects. Set `OUTPUT_DIR` to override it.
+
+If the model requires authentication, log in with Hugging Face or set your token before running evaluation:
+
+```bash
+export HF_TOKEN="..."
+sbatch scripts/eval-qwen-rwku-stephen-king.sh
+```
+
+To evaluate a local model directory instead:
+
+```bash
+MODEL_NAME_OR_PATH=outputs/adaptive_grpo_min/final_model \
+MODEL_LABEL=PURGE \
+sbatch scripts/eval-qwen-rwku-stephen-king.sh
+```
+
+For a quick smoke test:
+
+```bash
+MAX_EXAMPLES=5 sbatch scripts/eval-qwen-rwku-stephen-king.sh
+```
+
+To run only selected benchmark sets through Slurm:
+
+```bash
+RUN_FORGET_SET=True RUN_NEIGHBOR_SET=False RUN_MIA_SET=False RUN_UTILITY_SET=False \
+sbatch scripts/eval-qwen-rwku-stephen-king.sh
+```
+
+For separate smoke-test caps on MIA and utility:
+
+```bash
+MAX_EXAMPLES=5 MAX_MIA_EXAMPLES=5 MAX_UTILITY_EXAMPLES=5 \
+sbatch scripts/eval-qwen-rwku-stephen-king.sh
+```
+
+The evaluator runs generation in batches. Override the default batch size with:
+
+```bash
+BATCH_SIZE=16 sbatch scripts/eval-qwen-rwku-stephen-king.sh
+```
+
+MIA likelihood scoring has its own batch-size knob. It defaults to `BATCH_SIZE` unless overridden:
+
+```bash
+MIA_BATCH_SIZE=8 sbatch scripts/eval-qwen-rwku-stephen-king.sh
+```
+
+Multiple-choice utility splits are scored with batched answer-option likelihoods rather than text generation, matching the RWKU paper's answer-perplexity convention more closely while remaining much faster than free-form decoding.
+
+Utility evaluation has a separate batch-size knob because the paper-aligned prompts can be longer:
+
+```bash
+UTILITY_BATCH_SIZE=8 sbatch scripts/eval-qwen-rwku-stephen-king.sh
+```
 
 ## Utility Scripts
 
