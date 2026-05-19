@@ -42,6 +42,8 @@ The four paper metrics are represented by:
 
 Each boolean option can be disabled with the matching `--no-...` flag. Currently only `Loss` is implemented. The other MIA options are present in the interface and raise `NotImplementedError` if enabled.
 
+For MIA, per-example `loss` in `rwku_mia.jsonl` is mean token negative log-likelihood, matching Hugging Face's causal-LM loss normalization. The summary table then sums that normalized loss within each subject and averages subject sums, which keeps the table on the RWKU single-target/all-target scale. The raw unnormalized sequence NLL is also written as `total_loss` for debugging, but it is not used for the FM/RM table columns.
+
 Set-level execution can be toggled independently:
 
 ```bash

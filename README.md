@@ -248,6 +248,8 @@ python eval/rwku/rwku.py \
 
 The four RWKU MIA metrics are represented by `--compute_mia_loss`, `--compute_mia_zlib`, `--compute_mia_min_k`, and `--compute_mia_min_k_plus_plus`. Each can be disabled with the matching `--no-...` flag. Currently only `Loss` is implemented.
 
+For MIA, per-example `loss` in `rwku_mia.jsonl` is mean token negative log-likelihood, matching the Hugging Face causal-LM loss used by RWKU's evaluator. The FM/RM summary columns sum that normalized loss within each subject and then average subject sums; for `SUBJECTS="Stephen King"` this is the Stephen King subject sum. The raw unnormalized sequence NLL is still saved as `total_loss` for debugging, but it is not used in the table.
+
 You can run only selected benchmark sets:
 
 ```bash

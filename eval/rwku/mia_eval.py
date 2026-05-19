@@ -40,8 +40,8 @@ def evaluate_mia_split(
             }
             if loss:
                 row.update({
-                    "loss": score["total_nll"],
-                    "mean_loss": score["mean_nll"],
+                    "loss": score["mean_nll"],
+                    "total_loss": score["total_nll"],
                     "token_count": score["token_count"],
                 })
             if zlib:

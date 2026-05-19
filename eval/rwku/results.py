@@ -6,7 +6,10 @@ import pandas as pd
 from constants import FORGET_SPLITS, NEIGHBOR_SPLITS, SUMMARY_SPLIT_MAP, SUMMARY_TABLE_COLUMNS
 
 MIA_METRIC_DESCRIPTIONS = {
-    "loss": "mean total negative log-likelihood",
+    "loss": "subject-summed mean token negative log-likelihood",
+    "loss_per_example": "mean token negative log-likelihood averaged over examples",
+    "total_loss": "subject-summed total sequence negative log-likelihood",
+    "total_loss_per_example": "total sequence negative log-likelihood averaged over examples",
     "zlib": "loss normalized by zlib-compressed text length",
     "min_k": "Min-K% token likelihood score",
     "min_k_plus_plus": "Min-K%++ token likelihood score",
@@ -98,26 +101,55 @@ def aggregate_mia(rows: List[Dict]) -> Dict:
 
     metrics = [
         metric
-        for metric in ["loss", "zlib", "min_k", "min_k_plus_plus"]
+        for metric in ["loss", "total_loss", "zlib", "min_k", "min_k_plus_plus"]
         if metric in df.columns
     ]
     by_split = df.groupby("split").size().reset_index(name="n")
+    if "subject" in df.columns:
+        by_split = by_split.merge(
+            df.groupby("split")["subject"]
+            .nunique(dropna=True)
+            .reset_index()
+            .rename(columns={"subject": "subjects"}),
+            on="split",
+            how="left",
+        )
+    else:
+        by_split["subjects"] = None
+    metrics_set = set(metrics)
     for metric in metrics:
-        metric_df = (
+        if "subject" in df.columns and df["subject"].notna().any():
+            subject_scores = (
+                df.groupby(["split", "subject"], dropna=False)[metric]
+                .sum()
+                .reset_index()
+            )
+            metric_df = subject_scores.groupby("split")[metric].mean().reset_index()
+        else:
+            metric_df = df.groupby("split")[metric].sum().reset_index()
+        by_split = by_split.merge(metric_df, on="split", how="left")
+        per_example_df = (
             df.groupby("split")[metric]
             .mean()
             .reset_index()
+            .rename(columns={metric: f"{metric}_per_example"})
         )
-        by_split = by_split.merge(metric_df, on="split", how="left")
+        by_split = by_split.merge(per_example_df, on="split", how="left")
 
     return {
         "by_split": by_split.to_dict(orient="records"),
         "metrics": metrics,
         "metric_descriptions": {
-            metric: MIA_METRIC_DESCRIPTIONS[metric]
-            for metric in metrics
+            metric: description
+            for metric, description in MIA_METRIC_DESCRIPTIONS.items()
+            if metric in metrics_set or metric.removesuffix("_per_example") in metrics_set
         },
         "summary_metric": "loss",
+        "aggregation": (
+            "Per-example loss is mean token negative log-likelihood. "
+            "Split-level MIA loss sums that value within each subject and averages the subject sums, "
+            "matching RWKU table scale for single-target or all-target evaluation."
+        ),
         "interpretation": {
             "mia_forget": "higher loss is better after unlearning",
             "mia_retain": "lower loss is better to preserve retained-member likelihood",

@@ -17,6 +17,7 @@ echo "Run program in virtual environment"
 
 REPO_DIR="${REPO_DIR:-/home/balalru/machine-unlearning-llm}"
 MODEL_NAME_OR_PATH="${MODEL_NAME_OR_PATH:-Qwen/Qwen2.5-1.5B-Instruct}"
+# MODEL_NAME_OR_PATH="${MODEL_NAME_OR_PATH:-microsoft/Phi-3-mini-4k-instruct}"
 MODEL_LABEL="${MODEL_LABEL:-}"
 SUBJECTS="${SUBJECTS:-Stephen King}"
 MODEL_SLUG="$(echo "${MODEL_NAME_OR_PATH}" | tr '[:upper:]' '[:lower:]' | tr -c '[:alnum:]' '_' | sed 's/^_*//; s/_*$//; s/__*/_/g')"
