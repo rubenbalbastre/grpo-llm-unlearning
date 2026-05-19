@@ -19,36 +19,63 @@ REPO_DIR="${REPO_DIR:-/home/balalru/machine-unlearning-llm}"
 MODEL_NAME_OR_PATH="${MODEL_NAME_OR_PATH:-Qwen/Qwen2.5-0.5B-Instruct}"
 MODEL_LABEL="${MODEL_LABEL:-}"
 OUTPUT_DIR="${OUTPUT_DIR:-${REPO_DIR}/outputs/eval_rwku/qwen_stephen_king}"
-# SUBJECTS="${SUBJECTS:-Stephen King}"
+SUBJECTS="${SUBJECTS:-Stephen King}"
 RUN_FORGET_SET="${RUN_FORGET_SET:-True}"
-RUN_NEIGHBOR_SET="${RUN_NEIGHBOR_SET:-False}"
+RUN_NEIGHBOR_SET="${RUN_NEIGHBOR_SET:-True}"
 RUN_MIA_SET="${RUN_MIA_SET:-False}"
 RUN_UTILITY_SET="${RUN_UTILITY_SET:-False}"
+COMPUTE_MIA_LOSS="${COMPUTE_MIA_LOSS:-True}"
+COMPUTE_MIA_ZLIB="${COMPUTE_MIA_ZLIB:-False}"
+COMPUTE_MIA_MIN_K="${COMPUTE_MIA_MIN_K:-False}"
+COMPUTE_MIA_MIN_K_PLUS_PLUS="${COMPUTE_MIA_MIN_K_PLUS_PLUS:-False}"
 MAX_EXAMPLES="${MAX_EXAMPLES:-}"
 MAX_MIA_EXAMPLES="${MAX_MIA_EXAMPLES:-}"
 MAX_UTILITY_EXAMPLES="${MAX_UTILITY_EXAMPLES:-}"
-BATCH_SIZE="${BATCH_SIZE:-16}"
+BATCH_SIZE="${BATCH_SIZE:-32}"
 UTILITY_BATCH_SIZE="${UTILITY_BATCH_SIZE:-4}"
 MAX_NEW_TOKENS="${MAX_NEW_TOKENS:-64}"
 TEMPERATURE="${TEMPERATURE:-0.0}"
 TORCH_DTYPE="${TORCH_DTYPE:-auto}"
 HF_TOKEN="${HF_TOKEN:-${HUGGINGFACE_HUB_TOKEN:-}}"
 
+add_bool_arg() {
+  local value="$1"
+  local enabled_arg="$2"
+  local disabled_arg="$3"
+  case "${value}" in
+    True|true|1|yes|YES|y|Y)
+      eval_args+=("${enabled_arg}")
+      ;;
+    False|false|0|no|NO|n|N)
+      eval_args+=("${disabled_arg}")
+      ;;
+    *)
+      echo "Invalid boolean value '${value}' for ${enabled_arg}/${disabled_arg}" >&2
+      exit 2
+      ;;
+  esac
+}
+
 eval_args=(
   "${REPO_DIR}/eval/rwku/rwku.py"
   --model_name_or_path "${MODEL_NAME_OR_PATH}"
   --output_dir "${OUTPUT_DIR}"
   --subjects "${SUBJECTS}"
-  --run_forget_set "${RUN_FORGET_SET}"
-  --run_neighbor_set "${RUN_NEIGHBOR_SET}"
-  --run_mia_set "${RUN_MIA_SET}"
-  --run_utility_set "${RUN_UTILITY_SET}"
   --batch_size "${BATCH_SIZE}"
   --utility_batch_size "${UTILITY_BATCH_SIZE}"
   --max_new_tokens "${MAX_NEW_TOKENS}"
   --temperature "${TEMPERATURE}"
   --torch_dtype "${TORCH_DTYPE}"
 )
+
+add_bool_arg "${RUN_FORGET_SET}" --run_forget_set --no-run_forget_set
+add_bool_arg "${RUN_NEIGHBOR_SET}" --run_neighbor_set --no-run_neighbor_set
+add_bool_arg "${RUN_MIA_SET}" --run_mia_set --no-run_mia_set
+add_bool_arg "${RUN_UTILITY_SET}" --run_utility_set --no-run_utility_set
+add_bool_arg "${COMPUTE_MIA_LOSS}" --compute_mia_loss --no-compute_mia_loss
+add_bool_arg "${COMPUTE_MIA_ZLIB}" --compute_mia_zlib --no-compute_mia_zlib
+add_bool_arg "${COMPUTE_MIA_MIN_K}" --compute_mia_min_k --no-compute_mia_min_k
+add_bool_arg "${COMPUTE_MIA_MIN_K_PLUS_PLUS}" --compute_mia_min_k_plus_plus --no-compute_mia_min_k_plus_plus
 
 if [[ -n "${HF_TOKEN}" ]]; then
   eval_args+=(--hf_token "${HF_TOKEN}")

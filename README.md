@@ -243,10 +243,10 @@ python eval/rwku/rwku.py \
   --model_name_or_path outputs/adaptive_grpo_min/final_model \
   --output_dir outputs/eval_rwku/stephen_king \
   --subjects "Stephen King" \
-  --compute_mia_loss True
+  --compute_mia_loss
 ```
 
-The four RWKU MIA metrics are represented by `--compute_mia_loss`, `--compute_mia_zlib`, `--compute_mia_min_k`, and `--compute_mia_min_k_plus_plus`. Currently only `Loss` is implemented.
+The four RWKU MIA metrics are represented by `--compute_mia_loss`, `--compute_mia_zlib`, `--compute_mia_min_k`, and `--compute_mia_min_k_plus_plus`. Each can be disabled with the matching `--no-...` flag. Currently only `Loss` is implemented.
 
 You can run only selected benchmark sets:
 
@@ -255,10 +255,10 @@ python eval/rwku/rwku.py \
   --model_name_or_path outputs/adaptive_grpo_min/final_model \
   --output_dir outputs/eval_rwku/stephen_king_forget_only \
   --subjects "Stephen King" \
-  --run_forget_set True \
-  --run_neighbor_set False \
-  --run_mia_set False \
-  --run_utility_set False
+  --run_forget_set \
+  --no-run_neighbor_set \
+  --no-run_mia_set \
+  --no-run_utility_set
 ```
 
 Evaluate the default Qwen model directly from Hugging Face:
