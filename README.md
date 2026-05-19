@@ -267,6 +267,8 @@ Evaluate the default Qwen model directly from Hugging Face:
 sbatch scripts/eval-qwen-rwku-stephen-king.sh
 ```
 
+The Slurm script derives its default output directory from `MODEL_NAME_OR_PATH` and `SUBJECTS`, e.g. `MODEL_NAME_OR_PATH="Qwen/Qwen2.5-1.5B-Instruct" SUBJECTS="Stephen King"` writes to `outputs/eval_rwku/qwen_qwen2_5_1_5b_instruct_stephen_king`. Use `SUBJECTS=none` for all subjects. Set `OUTPUT_DIR` to override it.
+
 If the model requires authentication, log in with Hugging Face or set your token before running evaluation:
 
 ```bash

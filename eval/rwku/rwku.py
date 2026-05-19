@@ -51,7 +51,7 @@ def main():
     subjects = None
     if args.subjects:
         subjects = [s.strip() for s in args.subjects.split(",") if s.strip()]
-        if any(s.lower() == "all" for s in subjects):
+        if any(s.lower() in {"all", "none"} for s in subjects):
             subjects = None
 
     hf_token = args.hf_token or os.getenv("HF_TOKEN") or os.getenv("HUGGINGFACE_HUB_TOKEN")

@@ -16,13 +16,18 @@ conda activate py312
 echo "Run program in virtual environment"
 
 REPO_DIR="${REPO_DIR:-/home/balalru/machine-unlearning-llm}"
-MODEL_NAME_OR_PATH="${MODEL_NAME_OR_PATH:-Qwen/Qwen2.5-0.5B-Instruct}"
+MODEL_NAME_OR_PATH="${MODEL_NAME_OR_PATH:-Qwen/Qwen2.5-1.5B-Instruct}"
 MODEL_LABEL="${MODEL_LABEL:-}"
-OUTPUT_DIR="${OUTPUT_DIR:-${REPO_DIR}/outputs/eval_rwku/qwen_stephen_king}"
 SUBJECTS="${SUBJECTS:-Stephen King}"
+MODEL_SLUG="$(echo "${MODEL_NAME_OR_PATH}" | tr '[:upper:]' '[:lower:]' | tr -c '[:alnum:]' '_' | sed 's/^_*//; s/_*$//; s/__*/_/g')"
+SUBJECTS_SLUG="$(echo "${SUBJECTS}" | tr '[:upper:]' '[:lower:]' | tr -c '[:alnum:]' '_' | sed 's/^_*//; s/_*$//; s/__*/_/g')"
+if [[ -z "${SUBJECTS_SLUG}" || "${SUBJECTS_SLUG}" == "none" || "${SUBJECTS_SLUG}" == "all" ]]; then
+  SUBJECTS_SLUG="all"
+fi
+OUTPUT_DIR="${OUTPUT_DIR:-${REPO_DIR}/outputs/eval_rwku/${MODEL_SLUG}_${SUBJECTS_SLUG}}"
 RUN_FORGET_SET="${RUN_FORGET_SET:-True}"
 RUN_NEIGHBOR_SET="${RUN_NEIGHBOR_SET:-True}"
-RUN_MIA_SET="${RUN_MIA_SET:-False}"
+RUN_MIA_SET="${RUN_MIA_SET:-True}"
 RUN_UTILITY_SET="${RUN_UTILITY_SET:-False}"
 COMPUTE_MIA_LOSS="${COMPUTE_MIA_LOSS:-True}"
 COMPUTE_MIA_ZLIB="${COMPUTE_MIA_ZLIB:-False}"
