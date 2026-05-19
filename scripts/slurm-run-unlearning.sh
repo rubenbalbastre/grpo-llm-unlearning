@@ -1,8 +1,8 @@
 #!/bin/bash -l
-#SBATCH --job-name=slurm-run-env-gpu
-#SBATCH --output=logs/slurm-run-env-gpu-%j.log
+#SBATCH --job-name=slurm-run-unlearning
+#SBATCH --output=logs/slurm-run-unlearning-%j.log
 # Request the number of gpus usint "--gres=gpu:<number>". E.g.:
-#SBATCH --gres=gpu:2
+#SBATCH --gres=gpu:1
 # Request more time using "--time=<hours:mins:secs>". E.g.:
 #SBATCH --time=00:30:00
 # Request time partition "--partition=<Partition>". E.g.:
@@ -22,10 +22,10 @@ python /home/balalru/machine-unlearning-llm/train_adaptive_grpo.py
 echo "Finished unlearning script"
 
 # evaluate RWKU
-echo "Evaluate RWKU"
-python /home/balalru/machine-unlearning-llm/eval/rwku/rwku.py \
-    --model_name_or_path /home/balalru/machine-unlearning-llm/outputs/adaptive_grpo_min/final_model \
-    --output_dir /home/balalru/machine-unlearning-llm/outputs/eval_rwku/stephen_king \
-    --subjects "Stephen King"
+# echo "Evaluate RWKU"
+# python /home/balalru/machine-unlearning-llm/eval/rwku/rwku.py \
+#     --model_name_or_path /home/balalru/machine-unlearning-llm/outputs/adaptive_grpo_min/final_model \
+#     --output_dir /home/balalru/machine-unlearning-llm/outputs/eval_rwku/stephen_king \
+#     --subjects "Stephen King"
 # Add time for later troubleshooting
 date
