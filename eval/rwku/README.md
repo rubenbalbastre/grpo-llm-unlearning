@@ -58,3 +58,13 @@ python eval/rwku/rwku.py \
   --no-run_mia_set \
   --no-run_utility_set
 ```
+
+MIA likelihood scoring can use a separate batch size:
+
+```bash
+python eval/rwku/rwku.py \
+  --model_name_or_path Qwen/Qwen2.5-0.5B-Instruct \
+  --output_dir outputs/eval_rwku/qwen_mia \
+  --subjects "Stephen King" \
+  --mia_batch_size 8
+```

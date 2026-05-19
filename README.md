@@ -314,6 +314,12 @@ The evaluator runs generation in batches. Override the default batch size with:
 BATCH_SIZE=16 sbatch scripts/eval-qwen-rwku-stephen-king.sh
 ```
 
+MIA likelihood scoring has its own batch-size knob. It defaults to `BATCH_SIZE` unless overridden:
+
+```bash
+MIA_BATCH_SIZE=8 sbatch scripts/eval-qwen-rwku-stephen-king.sh
+```
+
 Multiple-choice utility splits are scored with batched answer-option likelihoods rather than text generation, matching the RWKU paper's answer-perplexity convention more closely while remaining much faster than free-form decoding.
 
 Utility evaluation has a separate batch-size knob because the paper-aligned prompts can be longer:

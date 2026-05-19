@@ -35,6 +35,7 @@ def main():
     parser.add_argument("--compute_mia_min_k_plus_plus", action=argparse.BooleanOptionalAction, default=False)
     parser.add_argument("--max_new_tokens", type=int, default=64)
     parser.add_argument("--batch_size", type=int, default=8)
+    parser.add_argument("--mia_batch_size", type=int, default=None)
     parser.add_argument("--utility_batch_size", type=int, default=4)
     parser.add_argument("--temperature", type=float, default=0.0)
     parser.add_argument("--torch_dtype", type=str, default="auto")
@@ -45,6 +46,8 @@ def main():
     args = parser.parse_args()
     if args.batch_size <= 0:
         raise ValueError("--batch_size must be >= 1")
+    if args.mia_batch_size is not None and args.mia_batch_size <= 0:
+        raise ValueError("--mia_batch_size must be >= 1")
     if args.utility_batch_size <= 0:
         raise ValueError("--utility_batch_size must be >= 1")
     output_dir = Path(args.output_dir)
@@ -118,7 +121,7 @@ def main():
             tokenizer=tokenizer,
             subjects=subjects,
             max_examples=args.max_mia_examples if args.max_mia_examples is not None else args.max_examples,
-            batch_size=args.batch_size,
+            batch_size=args.mia_batch_size if args.mia_batch_size is not None else args.batch_size,
             loss=args.compute_mia_loss,
             zlib=args.compute_mia_zlib,
             min_k=args.compute_mia_min_k,
