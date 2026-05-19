@@ -40,6 +40,8 @@ def main():
     parser.add_argument("--torch_dtype", type=str, default="auto")
     parser.add_argument("--hf_token", type=str, default=None)
     parser.add_argument("--model_label", type=str, default=None)
+    parser.add_argument("--trust_remote_code", action=argparse.BooleanOptionalAction, default=False)
+    parser.add_argument("--attn_implementation", type=str, default=None)
     args = parser.parse_args()
     if args.batch_size <= 0:
         raise ValueError("--batch_size must be >= 1")
@@ -56,7 +58,7 @@ def main():
 
     hf_token = args.hf_token or os.getenv("HF_TOKEN") or os.getenv("HUGGINGFACE_HUB_TOKEN")
     from_pretrained_kwargs = {
-        "trust_remote_code": True,
+        "trust_remote_code": args.trust_remote_code,
     }
     if hf_token:
         from_pretrained_kwargs["token"] = hf_token
@@ -70,10 +72,16 @@ def main():
         tokenizer.pad_token = tokenizer.eos_token
     tokenizer.padding_side = "left"
 
+    model_kwargs = {
+        "torch_dtype": args.torch_dtype,
+        "device_map": "auto",
+    }
+    if args.attn_implementation:
+        model_kwargs["attn_implementation"] = args.attn_implementation
+
     model = AutoModelForCausalLM.from_pretrained(
         args.model_name_or_path,
-        torch_dtype=args.torch_dtype,
-        device_map="auto",
+        **model_kwargs,
         **from_pretrained_kwargs,
     )
     model.eval()

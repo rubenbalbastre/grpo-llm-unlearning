@@ -1,12 +1,13 @@
 #!/bin/bash -l
-#SBATCH --job-name=slurm-eval-qwen-rwku
-#SBATCH --output=logs/slurm-eval-qwen-rwku-%j.log
+#SBATCH --job-name=slurm-eval-rwku
+#SBATCH --output=logs/slurm-eval-rwku-%j.log
 # Request the number of gpus usint "--gres=gpu:<number>". E.g.:
 #SBATCH --gres=gpu:1
 # Request more time using "--time=<hours:mins:secs>". E.g.:
 #SBATCH --time=01:30:00
 # Request time partition "--partition=<Partition>". E.g.:
 #SBATCH --partition=sc-gpu
+set -euo pipefail
 # Add host, time, and directory name for later troubleshooting
 hostname; pwd; date
 # Run the program/command
@@ -16,10 +17,10 @@ conda activate py312
 echo "Run program in virtual environment"
 
 REPO_DIR="${REPO_DIR:-/home/balalru/machine-unlearning-llm}"
-MODEL_NAME_OR_PATH="${MODEL_NAME_OR_PATH:-Qwen/Qwen2.5-1.5B-Instruct}"
-# MODEL_NAME_OR_PATH="${MODEL_NAME_OR_PATH:-microsoft/Phi-3-mini-4k-instruct}"
+# MODEL_NAME_OR_PATH="${MODEL_NAME_OR_PATH:-Qwen/Qwen2.5-3B-Instruct}"
+MODEL_NAME_OR_PATH="${MODEL_NAME_OR_PATH:-microsoft/Phi-3-mini-4k-instruct}"
 MODEL_LABEL="${MODEL_LABEL:-}"
-SUBJECTS="${SUBJECTS:-Stephen King}"
+SUBJECTS="${SUBJECTS:-Bruce Lee}"
 MODEL_SLUG="$(echo "${MODEL_NAME_OR_PATH}" | tr '[:upper:]' '[:lower:]' | tr -c '[:alnum:]' '_' | sed 's/^_*//; s/_*$//; s/__*/_/g')"
 SUBJECTS_SLUG="$(echo "${SUBJECTS}" | tr '[:upper:]' '[:lower:]' | tr -c '[:alnum:]' '_' | sed 's/^_*//; s/_*$//; s/__*/_/g')"
 if [[ -z "${SUBJECTS_SLUG}" || "${SUBJECTS_SLUG}" == "none" || "${SUBJECTS_SLUG}" == "all" ]]; then
@@ -37,12 +38,14 @@ COMPUTE_MIA_MIN_K_PLUS_PLUS="${COMPUTE_MIA_MIN_K_PLUS_PLUS:-False}"
 MAX_EXAMPLES="${MAX_EXAMPLES:-}"
 MAX_MIA_EXAMPLES="${MAX_MIA_EXAMPLES:-}"
 MAX_UTILITY_EXAMPLES="${MAX_UTILITY_EXAMPLES:-}"
-BATCH_SIZE="${BATCH_SIZE:-32}"
+BATCH_SIZE="${BATCH_SIZE:-16}"
 UTILITY_BATCH_SIZE="${UTILITY_BATCH_SIZE:-4}"
 MAX_NEW_TOKENS="${MAX_NEW_TOKENS:-64}"
 TEMPERATURE="${TEMPERATURE:-0.0}"
 TORCH_DTYPE="${TORCH_DTYPE:-auto}"
 HF_TOKEN="${HF_TOKEN:-${HUGGINGFACE_HUB_TOKEN:-}}"
+TRUST_REMOTE_CODE="${TRUST_REMOTE_CODE:-False}"
+ATTN_IMPLEMENTATION="${ATTN_IMPLEMENTATION:-}"
 
 add_bool_arg() {
   local value="$1"
@@ -82,6 +85,7 @@ add_bool_arg "${COMPUTE_MIA_LOSS}" --compute_mia_loss --no-compute_mia_loss
 add_bool_arg "${COMPUTE_MIA_ZLIB}" --compute_mia_zlib --no-compute_mia_zlib
 add_bool_arg "${COMPUTE_MIA_MIN_K}" --compute_mia_min_k --no-compute_mia_min_k
 add_bool_arg "${COMPUTE_MIA_MIN_K_PLUS_PLUS}" --compute_mia_min_k_plus_plus --no-compute_mia_min_k_plus_plus
+add_bool_arg "${TRUST_REMOTE_CODE}" --trust_remote_code --no-trust_remote_code
 
 if [[ -n "${HF_TOKEN}" ]]; then
   eval_args+=(--hf_token "${HF_TOKEN}")
@@ -89,6 +93,10 @@ fi
 
 if [[ -n "${MODEL_LABEL}" ]]; then
   eval_args+=(--model_label "${MODEL_LABEL}")
+fi
+
+if [[ -n "${ATTN_IMPLEMENTATION}" ]]; then
+  eval_args+=(--attn_implementation "${ATTN_IMPLEMENTATION}")
 fi
 
 if [[ -n "${MAX_EXAMPLES}" ]]; then

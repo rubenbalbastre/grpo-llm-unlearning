@@ -236,6 +236,8 @@ python eval/rwku/rwku.py \
 
 The evaluator writes per-example generations to `rwku_generations.jsonl`, MIA scores to `rwku_mia.jsonl`, utility scores to `rwku_utility.jsonl`, aggregate metrics to `rwku_results.json`, and one-row summary tables to `rwku_summary_table.md` and `rwku_summary_table.csv`. Forget split ROUGE-L recall should go down after unlearning; neighbor/locality split ROUGE-L recall should stay high.
 
+Models are loaded with Transformers' native implementations by default. If a model really requires repository-provided code, pass `--trust_remote_code` or set `TRUST_REMOTE_CODE=True` in the Slurm script. For Phi-3 on recent Transformers, keep this disabled so the native loader is used.
+
 By default, MIA evaluation computes only the paper's `Loss` metric. MIA metric selection uses boolean options:
 
 ```bash

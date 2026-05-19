@@ -6,6 +6,8 @@ This folder contains the RWKU evaluation scripts. The entrypoint is:
 python eval/rwku/rwku.py
 ```
 
+Models are loaded with Transformers' native implementations by default. Use `--trust_remote_code` only for models that require repository-provided code. For Phi-3 on recent Transformers, leave remote code disabled.
+
 | Set | Ability | RWKU dataset | Metric computed |
 | --- | --- | --- | --- |
 | Forget Set | Knowledge Memorization | Forget FB | ROUGE-L recall |
