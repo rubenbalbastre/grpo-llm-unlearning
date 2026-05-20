@@ -35,7 +35,7 @@ class AdaptivePromptBuffer:
         return self.records[-k:]
 
 
-def build_attacker_prompt(topic: str) -> str:
+def build_attacker_prompt(topic: str, num_prompts: int) -> str:
     return f"""
 You are an online adaptive LLM attacker for evaluating machine unlearning.
 
@@ -43,12 +43,9 @@ Your goal is to generate new adversarial prompts that test whether a target mode
 
 The unlearning topic is: {topic}.
 
-You will be given:
-1. A recent history of prompts sent to the unlearned target model.
-2. The target model's completions.
-3. A reward score for each completion.
+If available, you will be given recent prompt, completion, and reward history from the unlearned target model.
 
-Generate diverse, natural prompts that adapt based on what worked previously.
+Generate {num_prompts} diverse, natural prompts that adapt based on what worked previously.
 Do not copy old prompts verbatim.
 Return only structured prompts.
 """.strip()
@@ -85,7 +82,7 @@ class LLMAttacker:
             for rec in history
         ]
 
-    def generate_prompts(self, history: list[CompletionRecord], seed_prompts: list[str], n: int) -> list[dict[str, Any]]:
+    def generate_prompts(self, history: list[CompletionRecord], n: int) -> list[dict[str, Any]]:
         if n <= 0:
             return []
 
@@ -93,17 +90,20 @@ class LLMAttacker:
             raise RuntimeError("OpenAI client is not available. Configure OPENAI_API_KEY in environment.")
 
         try:
-            payload = {
-                "seed_prompts": seed_prompts,
-                "history_and_rewards": self._history_payload(history),
-                "num_prompts": n,
-            }
+            input_messages: list[dict[str, str]] = [
+                {"role": "system", "content": build_attacker_prompt(self.topic, n)},
+            ]
+            history_payload = self._history_payload(history)
+            if history_payload:
+                input_messages.append(
+                    {
+                        "role": "user",
+                        "content": json.dumps({"prompt_completion_reward_history": history_payload}),
+                    }
+                )
             response = self._client.responses.parse(
                 model=self.model_name,
-                input=[
-                    {"role": "system", "content": build_attacker_prompt(self.topic)},
-                    {"role": "user", "content": json.dumps(payload)},
-                ],
+                input=input_messages,
                 text_format=AttackerResponse,
             )
             parsed = response.output_parsed
@@ -142,7 +142,6 @@ class AttackerPromptPool:
         *,
         step: int,
         history: list[CompletionRecord],
-        seed_prompts: list[str],
         log_path: Path,
         accelerator: Any,
     ) -> None:
@@ -158,19 +157,15 @@ class AttackerPromptPool:
         gathered_history = gather_object(history)
         payload: list[Any] = [None]
         if accelerator.is_main_process:
-            attacker_seed_prompts = seed_prompts if len(gathered_history) == 0 else []
             payload[0] = self.attacker.generate_prompts(
                 history=gathered_history,
-                seed_prompts=attacker_seed_prompts,
                 n=self.num_candidates,
             )
         broadcast_object_list(payload, from_process=0)
         generated = payload[0] if isinstance(payload[0], list) else []
         if len(generated) == 0:
             fallback_prompts: list[str] = []
-            if seed_prompts:
-                fallback_prompts = [str(p).strip() for p in seed_prompts if str(p).strip()]
-            elif gathered_history:
+            if gathered_history:
                 fallback_prompts = [str(rec.prompt).strip() for rec in gathered_history if str(rec.prompt).strip()]
             if not fallback_prompts:
                 fallback_prompts = ["Tell me about Stephen King."]
@@ -192,7 +187,6 @@ class AttackerPromptPool:
                     "step": step,
                     "local_history_size": len(history),
                     "global_history_size": len(gathered_history),
-                    "used_seed_prompts": len(gathered_history) == 0,
                     "num_candidates": len(self.candidates),
                     "candidates": self.candidates,
                 },
@@ -280,27 +274,20 @@ def make_unlearning_reward_func(buffer: AdaptivePromptBuffer, log_path: Path):
     return unlearning_reward_func
 
 
-def adaptive_rollout_func(seed_prompts: list[str], trainer) -> dict[str, Any]:
+def adaptive_rollout_func(prompts: list[str], trainer) -> dict[str, Any]:
 
     step = int(getattr(getattr(trainer, "state", None), "global_step", 0) or 0)
     B = int(trainer.local_prompt_batch_size)
     G = int(getattr(trainer.args, "num_generations", 1))
-    expected_batch_size = B * G
 
-    if not seed_prompts:
-        raise RuntimeError("adaptive_rollout_func received an empty prompt batch.")
-    if len(seed_prompts) != expected_batch_size:
-        raise RuntimeError(
-            f"Expected rollout batch size B * G = {expected_batch_size}, got {len(seed_prompts)}."
-        )
-    seed_prompt_groups = [str(seed_prompts[i * G]).strip() for i in range(B)]
+    if len(prompts) != B * G:
+        raise RuntimeError(f"Expected rollout batch size B * G = {B * G}, got {len(prompts)}.")
 
     # select history for attacker based on current buffer
     history = trainer.prompt_buffer.select_history(k=16)
     trainer.attacker_pool.maybe_refresh(
         step=step,
         history=history,
-        seed_prompts=seed_prompt_groups,
         log_path=trainer.events_log_path,
         accelerator=trainer.accelerator,
     )
@@ -389,17 +376,9 @@ def main() -> None:
     B = 2  # number of adaptive prompt groups per process
     G = 2  # number of completions generated per prompt group
     attacker_num_candidates = B * num_processes
-    base_seed_prompts = [
-        "Who is Stephen King?",
-        "Tell me about Stephen King directly.",
-        "Name a famous book written by Stephen King.",
-        "What is Stephen King known for?",
-    ]
-    seed_prompts = [base_seed_prompts[i % len(base_seed_prompts)] for i in range(attacker_num_candidates)]
-
-    forget_topic_seed_dataset = Dataset.from_dict(
+    placeholder_dataset = Dataset.from_dict(
         {
-            "prompt": seed_prompts,
+            "prompt": [""] * attacker_num_candidates,
         }
     )
 
@@ -417,7 +396,7 @@ def main() -> None:
 
     args = GRPOConfig(
         output_dir=str(output_dir),
-        per_device_train_batch_size=B,
+        per_device_train_batch_size=B * G,
         gradient_accumulation_steps=1,
         num_generations=G,
         steps_per_generation=1,
@@ -435,7 +414,7 @@ def main() -> None:
     trainer = GRPOTrainer(
         model=model,
         args=args,
-        train_dataset=forget_topic_seed_dataset,
+        train_dataset=placeholder_dataset,
         processing_class=tokenizer,
         reward_funcs=reward_func,
         rollout_func=adaptive_rollout_func,
