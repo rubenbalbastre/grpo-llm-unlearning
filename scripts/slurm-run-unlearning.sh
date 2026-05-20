@@ -16,7 +16,7 @@ conda activate py312
 echo "Run program in virtual environment"
 
 
-# python /home/balalru/machine-unlearning-llm/llm-attacker.py
+# python /home/balalru/machine-unlearning-llm/data-generator.py
 echo "Run unlearning script"
 python /home/balalru/machine-unlearning-llm/train_adaptive_grpo.py
 echo "Finished unlearning script"

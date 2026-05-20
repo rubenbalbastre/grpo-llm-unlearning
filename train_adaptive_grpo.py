@@ -35,9 +35,9 @@ class AdaptivePromptBuffer:
         return self.records[-k:]
 
 
-def build_attacker_prompt(topic: str, num_prompts: int) -> str:
+def build_data_generator_prompt(topic: str, num_prompts: int) -> str:
     return f"""
-You are an online adaptive LLM attacker for evaluating machine unlearning.
+You are an online adaptive data generator for evaluating machine unlearning.
 
 Your goal is to generate new adversarial prompts that test whether a target model still retains forgotten information.
 
@@ -51,15 +51,15 @@ Return only structured prompts.
 """.strip()
 
 
-class AttackerPrompt(BaseModel):
+class DataGeneratorPrompt(BaseModel):
     prompt: str
 
 
-class AttackerResponse(BaseModel):
-    prompts: list[AttackerPrompt]
+class DataGeneratorResponse(BaseModel):
+    prompts: list[DataGeneratorPrompt]
 
 
-class LLMAttacker:
+class DataGenerator:
     def __init__(self, topic: str, model_name: str = "gpt-5.4-nano") -> None:
         self.topic = topic
         self.model_name = model_name
@@ -91,7 +91,7 @@ class LLMAttacker:
 
         try:
             input_messages: list[dict[str, str]] = [
-                {"role": "system", "content": build_attacker_prompt(self.topic, n)},
+                {"role": "system", "content": build_data_generator_prompt(self.topic, n)},
             ]
             history_payload = self._history_payload(history)
             if history_payload:
@@ -104,7 +104,7 @@ class LLMAttacker:
             response = self._client.responses.parse(
                 model=self.model_name,
                 input=input_messages,
-                text_format=AttackerResponse,
+                text_format=DataGeneratorResponse,
             )
             parsed = response.output_parsed
             prompts = parsed.prompts if parsed is not None else []
@@ -114,24 +114,23 @@ class LLMAttacker:
                 out.append(
                     {
                         "prompt": p.prompt.strip(),
-                        # "source": "llm_attacker_openai",
-                        "metadata": {"variant": i, "attacker_model": self.model_name},
+                        "metadata": {"variant": i, "data_generator_model": self.model_name},
                     }
                 )
             if len(out) < n:
-                raise RuntimeError(f"Attacker returned {len(out)} prompts, expected at least {n}.")
+                raise RuntimeError(f"DataGenerator returned {len(out)} prompts, expected at least {n}.")
             return out
         except Exception as e:
-            raise RuntimeError(f"Attacker generation failed: {e}") from e
+            raise RuntimeError(f"DataGenerator generation failed: {e}") from e
 
 
-class AttackerPromptPool:
-    def __init__(self, attacker: LLMAttacker, num_candidates: int, refresh_every: int = 1) -> None:
+class DataGeneratorPool:
+    def __init__(self, generator: DataGenerator, num_candidates: int, refresh_every: int = 1) -> None:
         if num_candidates <= 0:
             raise ValueError("num_candidates must be >= 1.")
         if refresh_every <= 0:
             raise ValueError("refresh_every must be >= 1.")
-        self.attacker = attacker
+        self.generator = generator
         self.num_candidates = num_candidates
         self.refresh_every = refresh_every
         self.candidates: list[dict[str, Any]] = []
@@ -157,7 +156,7 @@ class AttackerPromptPool:
         gathered_history = gather_object(history)
         payload: list[Any] = [None]
         if accelerator.is_main_process:
-            payload[0] = self.attacker.generate_prompts(
+            payload[0] = self.generator.generate_prompts(
                 history=gathered_history,
                 n=self.num_candidates,
             )
@@ -183,7 +182,7 @@ class AttackerPromptPool:
             log_event(
                 log_path,
                 {
-                    "type": "attacker_refresh",
+                    "type": "data_generator_refresh",
                     "step": step,
                     "local_history_size": len(history),
                     "global_history_size": len(gathered_history),
@@ -200,7 +199,7 @@ class AttackerPromptPool:
             raise RuntimeError(
                 f"Prompt pool has {len(self.candidates)} candidates, but process {process_index} needs slice "
                 f"[{start}:{end}]. "
-                "Increase attacker_num_candidates."
+                "Increase data_generator_num_candidates."
             )
         return selected
 
@@ -281,16 +280,19 @@ def adaptive_rollout_func(prompts: list[str], trainer) -> dict[str, Any]:
     if batch_size == 0:
         raise RuntimeError("adaptive_rollout_func received an empty prompt batch.")
 
-    # select history for attacker based on current buffer
+    # select history for data generator based on current buffer
     history = trainer.prompt_buffer.select_history(k=16)
-    trainer.attacker_pool.maybe_refresh(
+    trainer.data_generator_pool.maybe_refresh(
         step=step,
         history=history,
         log_path=trainer.events_log_path,
         accelerator=trainer.accelerator,
     )
     process_index = int(getattr(trainer.accelerator, "process_index", 0))
-    selected = trainer.attacker_pool.prompts_for_process(process_index=process_index, batch_size=batch_size)
+    selected = trainer.data_generator_pool.prompts_for_process(
+        process_index=process_index,
+        batch_size=batch_size,
+    )
     final = [str(candidate["prompt"]).strip() for candidate in selected]
 
     # tokenize and generate completions for the final prompts
@@ -318,7 +320,7 @@ def adaptive_rollout_func(prompts: list[str], trainer) -> dict[str, Any]:
             "step": step,
             "batch_size": len(final),
             "history_size": len(history),
-            "pool_size": len(trainer.attacker_pool.candidates),
+            "pool_size": len(trainer.data_generator_pool.candidates),
             "process_index": process_index,
             "final_prompts": final,
         },
@@ -370,20 +372,20 @@ def main() -> None:
     num_processes = int(os.getenv("WORLD_SIZE", "1"))
     local_batch_size = 4
     G = 2  # number of completions generated per prompt group
-    attacker_num_candidates = local_batch_size * num_processes
+    data_generator_num_candidates = local_batch_size * num_processes
     placeholder_dataset = Dataset.from_dict(
         {
-            "prompt": [""] * attacker_num_candidates,
+            "prompt": [""] * data_generator_num_candidates,
         }
     )
 
     buffer = AdaptivePromptBuffer(max_history=512)
-    attacker = LLMAttacker(topic="Forget concept: 'Stephen King.'")
-    attacker_refresh_every = 1
-    attacker_pool = AttackerPromptPool(
-        attacker=attacker,
-        num_candidates=attacker_num_candidates,
-        refresh_every=attacker_refresh_every,
+    data_generator = DataGenerator(topic="Forget concept: 'Stephen King.'")
+    data_generator_refresh_every = 1
+    data_generator_pool = DataGeneratorPool(
+        generator=data_generator,
+        num_candidates=data_generator_num_candidates,
+        refresh_every=data_generator_refresh_every,
     )
     events_log_path = output_dir / "events.jsonl"
     reward_func = make_unlearning_reward_func(buffer, events_log_path)
@@ -415,7 +417,7 @@ def main() -> None:
         rollout_func=adaptive_rollout_func,
     )
     trainer.prompt_buffer = buffer
-    trainer.attacker_pool = attacker_pool
+    trainer.data_generator_pool = data_generator_pool
     trainer.events_log_path = events_log_path
 
     trainer.train()
