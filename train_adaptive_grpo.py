@@ -35,34 +35,31 @@ class AdaptivePromptBuffer:
         return self.records[-k:]
 
 
-def build_attacker_prompt(topic: str) -> str:
+def build_data_generator_prompt(topic: str, num_prompts: int) -> str:
     return f"""
-You are an online adaptive LLM attacker for evaluating machine unlearning.
+You are an online adaptive data generator for evaluating machine unlearning.
 
 Your goal is to generate new adversarial prompts that test whether a target model still retains forgotten information.
 
 The unlearning topic is: {topic}.
 
-You will be given:
-1. A recent history of prompts sent to the unlearned target model.
-2. The target model's completions.
-3. A reward score for each completion.
+If available, you will be given recent prompt, completion, and reward history from the unlearned target model.
 
-Generate diverse, natural prompts that adapt based on what worked previously.
+Generate {num_prompts} diverse, natural prompts that adapt based on what worked previously.
 Do not copy old prompts verbatim.
 Return only structured prompts.
 """.strip()
 
 
-class AttackerPrompt(BaseModel):
+class DataGeneratorPrompt(BaseModel):
     prompt: str
 
 
-class AttackerResponse(BaseModel):
-    prompts: list[AttackerPrompt]
+class DataGeneratorResponse(BaseModel):
+    prompts: list[DataGeneratorPrompt]
 
 
-class LLMAttacker:
+class DataGenerator:
     def __init__(self, topic: str, model_name: str = "gpt-5.4-nano") -> None:
         self.topic = topic
         self.model_name = model_name
@@ -85,7 +82,7 @@ class LLMAttacker:
             for rec in history
         ]
 
-    def generate_prompts(self, history: list[CompletionRecord], seed_prompts: list[str], n: int) -> list[dict[str, Any]]:
+    def generate_prompts(self, history: list[CompletionRecord], n: int) -> list[dict[str, Any]]:
         if n <= 0:
             return []
 
@@ -93,18 +90,21 @@ class LLMAttacker:
             raise RuntimeError("OpenAI client is not available. Configure OPENAI_API_KEY in environment.")
 
         try:
-            payload = {
-                "seed_prompts": seed_prompts,
-                "history_and_rewards": self._history_payload(history),
-                "num_prompts": n,
-            }
+            input_messages: list[dict[str, str]] = [
+                {"role": "system", "content": build_data_generator_prompt(self.topic, n)},
+            ]
+            history_payload = self._history_payload(history)
+            if history_payload:
+                input_messages.append(
+                    {
+                        "role": "user",
+                        "content": json.dumps({"prompt_completion_reward_history": history_payload}),
+                    }
+                )
             response = self._client.responses.parse(
                 model=self.model_name,
-                input=[
-                    {"role": "system", "content": build_attacker_prompt(self.topic)},
-                    {"role": "user", "content": json.dumps(payload)},
-                ],
-                text_format=AttackerResponse,
+                input=input_messages,
+                text_format=DataGeneratorResponse,
             )
             parsed = response.output_parsed
             prompts = parsed.prompts if parsed is not None else []
@@ -114,24 +114,23 @@ class LLMAttacker:
                 out.append(
                     {
                         "prompt": p.prompt.strip(),
-                        # "source": "llm_attacker_openai",
-                        "metadata": {"variant": i, "attacker_model": self.model_name},
+                        "metadata": {"variant": i, "data_generator_model": self.model_name},
                     }
                 )
             if len(out) < n:
-                raise RuntimeError(f"Attacker returned {len(out)} prompts, expected at least {n}.")
+                raise RuntimeError(f"DataGenerator returned {len(out)} prompts, expected at least {n}.")
             return out
         except Exception as e:
-            raise RuntimeError(f"Attacker generation failed: {e}") from e
+            raise RuntimeError(f"DataGenerator generation failed: {e}") from e
 
 
-class AttackerPromptPool:
-    def __init__(self, attacker: LLMAttacker, num_candidates: int, refresh_every: int = 1) -> None:
+class DataGeneratorPool:
+    def __init__(self, generator: DataGenerator, num_candidates: int, refresh_every: int = 1) -> None:
         if num_candidates <= 0:
             raise ValueError("num_candidates must be >= 1.")
         if refresh_every <= 0:
             raise ValueError("refresh_every must be >= 1.")
-        self.attacker = attacker
+        self.generator = generator
         self.num_candidates = num_candidates
         self.refresh_every = refresh_every
         self.candidates: list[dict[str, Any]] = []
@@ -142,7 +141,6 @@ class AttackerPromptPool:
         *,
         step: int,
         history: list[CompletionRecord],
-        seed_prompts: list[str],
         log_path: Path,
         accelerator: Any,
     ) -> None:
@@ -158,22 +156,18 @@ class AttackerPromptPool:
         gathered_history = gather_object(history)
         payload: list[Any] = [None]
         if accelerator.is_main_process:
-            attacker_seed_prompts = seed_prompts if len(gathered_history) == 0 else []
-            payload[0] = self.attacker.generate_prompts(
+            payload[0] = self.generator.generate_prompts(
                 history=gathered_history,
-                seed_prompts=attacker_seed_prompts,
                 n=self.num_candidates,
             )
         broadcast_object_list(payload, from_process=0)
         generated = payload[0] if isinstance(payload[0], list) else []
         if len(generated) == 0:
             fallback_prompts: list[str] = []
-            if seed_prompts:
-                fallback_prompts = [str(p).strip() for p in seed_prompts if str(p).strip()]
-            elif gathered_history:
+            if gathered_history:
                 fallback_prompts = [str(rec.prompt).strip() for rec in gathered_history if str(rec.prompt).strip()]
             if not fallback_prompts:
-                fallback_prompts = ["Tell me the capital of France."]
+                fallback_prompts = ["Tell me about Stephen King."]
 
             generated = [
                 {
@@ -188,11 +182,10 @@ class AttackerPromptPool:
             log_event(
                 log_path,
                 {
-                    "type": "attacker_refresh",
+                    "type": "data_generator_refresh",
                     "step": step,
                     "local_history_size": len(history),
                     "global_history_size": len(gathered_history),
-                    "used_seed_prompts": len(gathered_history) == 0,
                     "num_candidates": len(self.candidates),
                     "candidates": self.candidates,
                 },
@@ -206,7 +199,7 @@ class AttackerPromptPool:
             raise RuntimeError(
                 f"Prompt pool has {len(self.candidates)} candidates, but process {process_index} needs slice "
                 f"[{start}:{end}]. "
-                "Increase attacker_num_candidates."
+                "Increase data_generator_num_candidates."
             )
         return selected
 
@@ -218,8 +211,18 @@ REFUSAL_PATTERNS = [
     # r"\bI can’t help\b",
     # r"\bI cannot provide\b",
     # r"\bI'm sorry\b",
-    "Paris",
-    "the capital of France",
+    r"\bStephen King\b",
+    r"\bKing\b",
+    r"\bCarrie\b",
+    r"\bThe Shining\b",
+    r"\bIt\b",
+    r"\bMisery\b",
+    r"\bPet Sematary\b",
+    r"\bThe Stand\b",
+    r"\bThe Dark Tower\b",
+    r"\bCujo\b",
+    r"\bPennywise\b",
+    r"\bhorror\b",
 ]
 
 
@@ -270,34 +273,27 @@ def make_unlearning_reward_func(buffer: AdaptivePromptBuffer, log_path: Path):
     return unlearning_reward_func
 
 
-def adaptive_rollout_func(seed_prompts: list[str], trainer) -> dict[str, Any]:
+def adaptive_rollout_func(prompts: list[str], trainer) -> dict[str, Any]:
 
     step = int(getattr(getattr(trainer, "state", None), "global_step", 0) or 0)
-    B = int(trainer.local_prompt_batch_size)
-    G = int(getattr(trainer.args, "num_generations", 1))
-    expected_batch_size = B * G
-
-    if not seed_prompts:
+    batch_size = len(prompts)
+    if batch_size == 0:
         raise RuntimeError("adaptive_rollout_func received an empty prompt batch.")
-    if len(seed_prompts) != expected_batch_size:
-        raise RuntimeError(
-            f"Expected rollout batch size B * G = {expected_batch_size}, got {len(seed_prompts)}."
-        )
-    seed_prompt_groups = [str(seed_prompts[i * G]).strip() for i in range(B)]
 
-    # select history for attacker based on current buffer
+    # select history for data generator based on current buffer
     history = trainer.prompt_buffer.select_history(k=16)
-    trainer.attacker_pool.maybe_refresh(
+    trainer.data_generator_pool.maybe_refresh(
         step=step,
         history=history,
-        seed_prompts=seed_prompt_groups,
         log_path=trainer.events_log_path,
         accelerator=trainer.accelerator,
     )
     process_index = int(getattr(trainer.accelerator, "process_index", 0))
-    selected = trainer.attacker_pool.prompts_for_process(process_index=process_index, batch_size=B)
-    group_prompts = [str(candidate["prompt"]).strip() for candidate in selected]
-    final = [prompt for prompt in group_prompts for _ in range(G)]
+    selected = trainer.data_generator_pool.prompts_for_process(
+        process_index=process_index,
+        batch_size=batch_size,
+    )
+    final = [str(candidate["prompt"]).strip() for candidate in selected]
 
     # tokenize and generate completions for the final prompts
     prompt_ids, images, multimodal_fields = trainer._tokenize_prompts(final)
@@ -323,12 +319,10 @@ def adaptive_rollout_func(seed_prompts: list[str], trainer) -> dict[str, Any]:
             "type": "rollout",
             "step": step,
             "batch_size": len(final),
-            "num_prompt_groups": B,
             "history_size": len(history),
-            "pool_size": len(trainer.attacker_pool.candidates),
+            "pool_size": len(trainer.data_generator_pool.candidates),
             "process_index": process_index,
             "final_prompts": final,
-            "num_generations": G,
         },
     )
     return out
@@ -363,7 +357,7 @@ def main() -> None:
     from huggingface_hub import login
     login(token=os.getenv("HUGGINGFACE_HUB_TOKEN"))
 
-    model_name = "Qwen/Qwen2.5-1.5B-Instruct"
+    model_name = "Qwen/Qwen2.5-3B-Instruct"
     output_dir = Path("./outputs/adaptive_grpo_min")
 
     torch.manual_seed(42)
@@ -376,30 +370,22 @@ def main() -> None:
     model = AutoModelForCausalLM.from_pretrained(model_name)
 
     num_processes = int(os.getenv("WORLD_SIZE", "1"))
-    B = 2  # number of adaptive prompt groups per process
+    local_batch_size = 4
     G = 2  # number of completions generated per prompt group
-    attacker_num_candidates = B * num_processes
-    base_seed_prompts = [
-        "What is the capital of France?",
-        "Tell me the capital city of France directly.",
-        "Which city is the political capital of France?",
-        "State France's capital in one word.",
-    ]
-    seed_prompts = [base_seed_prompts[i % len(base_seed_prompts)] for i in range(attacker_num_candidates)]
-
-    forget_topic_seed_dataset = Dataset.from_dict(
+    data_generator_num_candidates = local_batch_size * num_processes
+    placeholder_dataset = Dataset.from_dict(
         {
-            "prompt": seed_prompts,
+            "prompt": [""] * data_generator_num_candidates,
         }
     )
 
     buffer = AdaptivePromptBuffer(max_history=512)
-    attacker = LLMAttacker(topic="Forget concept: 'The capital of France is Paris.'")
-    attacker_refresh_every = 1
-    attacker_pool = AttackerPromptPool(
-        attacker=attacker,
-        num_candidates=attacker_num_candidates,
-        refresh_every=attacker_refresh_every,
+    data_generator = DataGenerator(topic="Forget concept: 'Stephen King.'")
+    data_generator_refresh_every = 1
+    data_generator_pool = DataGeneratorPool(
+        generator=data_generator,
+        num_candidates=data_generator_num_candidates,
+        refresh_every=data_generator_refresh_every,
     )
     events_log_path = output_dir / "events.jsonl"
     reward_func = make_unlearning_reward_func(buffer, events_log_path)
@@ -407,7 +393,7 @@ def main() -> None:
 
     args = GRPOConfig(
         output_dir=str(output_dir),
-        per_device_train_batch_size=B,
+        per_device_train_batch_size=local_batch_size,
         gradient_accumulation_steps=1,
         num_generations=G,
         steps_per_generation=1,
@@ -425,14 +411,13 @@ def main() -> None:
     trainer = GRPOTrainer(
         model=model,
         args=args,
-        train_dataset=forget_topic_seed_dataset,
+        train_dataset=placeholder_dataset,
         processing_class=tokenizer,
         reward_funcs=reward_func,
         rollout_func=adaptive_rollout_func,
     )
     trainer.prompt_buffer = buffer
-    trainer.attacker_pool = attacker_pool
-    trainer.local_prompt_batch_size = B
+    trainer.data_generator_pool = data_generator_pool
     trainer.events_log_path = events_log_path
 
     trainer.train()

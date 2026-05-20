@@ -1,6 +1,6 @@
 # Machine Unlearning with Adaptive GRPO
 
-This repository prototypes an online adaptive prompt-generation loop for LLM machine unlearning. It trains a target policy with Hugging Face TRL's `GRPOTrainer` while an external LLM attacker continually proposes new forget-topic prompts from recent prompt, completion, and reward history.
+This repository prototypes an online adaptive prompt-generation loop for LLM machine unlearning. It trains a target policy with Hugging Face TRL's `GRPOTrainer` while an external data generator continually proposes new forget-topic prompts from recent prompt, completion, and reward history.
 
 The prototype is intentionally small and research-oriented. The current forget concept is:
 
@@ -24,7 +24,7 @@ At a high level:
 recent prompt/completion/reward history
         |
         v
-OpenAI attacker generates candidate forget prompts
+OpenAI data generator generates candidate forget prompts
         |
         v
 each Accelerate process selects prompts from the shared pool
@@ -46,7 +46,7 @@ TRL still owns reward normalization, the GRPO objective, reference/KL handling, 
 ```text
 .
 ├── train_adaptive_grpo.py              # Main adaptive GRPO training prototype
-├── llm-attacker.py                     # Standalone attacker prompt-generation demo
+├── data-generator.py                   # Standalone data generator prompt-generation demo
 ├── test-gpu.py                         # Simple CUDA/GPU availability check
 ├── requirements.txt                    # Pinned Python dependencies
 ├── configs/
@@ -120,11 +120,11 @@ model_name = "Qwen/Qwen2.5-0.5B-Instruct"
 output_dir = Path("./outputs/adaptive_grpo_min")
 ```
 
-Adaptive attacker:
+Adaptive data generator:
 
 ```python
-attacker_num_candidates = 8
-attacker_refresh_every = 1
+data_generator_num_candidates = 8
+data_generator_refresh_every = 1
 ```
 
 GRPO settings:
@@ -142,14 +142,14 @@ max_completion_length = 64
 Important relationship:
 
 ```text
-attacker_num_candidates >= num_processes * per_device_train_batch_size
+data_generator_num_candidates >= num_processes * per_device_train_batch_size
 ```
 
-Each process takes a different slice of the attacker-generated candidate pool. If the pool is too small, training raises an error asking you to increase `attacker_num_candidates`.
+Each process takes a different slice of the data generator candidate pool. If the pool is too small, training raises an error asking you to increase `data_generator_num_candidates`.
 
 ## Adaptive Prompt Pool
 
-The attacker is not called for every individual completion. Instead, candidates refresh once every `attacker_refresh_every` global steps.
+The data generator is not called for every individual completion. Instead, candidates refresh once every `data_generator_refresh_every` global steps.
 
 On refresh:
 
@@ -188,7 +188,7 @@ Each scored completion is stored as:
 CompletionRecord(prompt, completion, reward, step, metadata)
 ```
 
-Recent records feed the adaptive attacker on later refreshes.
+Recent records feed the adaptive data generator on later refreshes.
 
 ## Outputs
 
@@ -207,12 +207,12 @@ outputs/adaptive_grpo_min/final_model
 The log contains records such as:
 
 ```text
-attacker_refresh  # generated candidate prompts and history sizes
+data_generator_refresh  # generated candidate prompts and history sizes
 rollout           # prompts selected by each process
 reward            # prompt/completion/reward records
 ```
 
-These JSONL events are the easiest place to inspect whether the attacker is adapting and whether the reward heuristic is behaving as expected.
+These JSONL events are the easiest place to inspect whether the data generator is adapting and whether the reward heuristic is behaving as expected.
 
 ## RWKU Evaluation
 
@@ -336,13 +336,13 @@ Check CUDA from the current environment:
 python test-gpu.py
 ```
 
-Run the standalone attacker demo:
+Run the standalone data generator demo:
 
 ```bash
-python llm-attacker.py
+python data-generator.py
 ```
 
-The standalone demo writes generated prompts to `new_prompts.json` and initializes a W&B Weave project named `machine-unlearning-llm`.
+The standalone demo writes generated prompts to `data_generator_prompts.json` and initializes a W&B Weave project named `machine-unlearning-llm`.
 
 ## Slurm
 
@@ -355,13 +355,13 @@ sbatch scripts/slurm-test-gpu.sh
 sbatch scripts/slurm-run-unlearning.sh
 ```
 
-Review the `#SBATCH` directives before submitting. In particular, adjust GPU count, partition, runtime, environment name/path, and the command in `scripts/slurm-run-unlearning.sh`. The run script currently executes `llm-attacker.py`; uncomment the `train_adaptive_grpo.py` line to launch training instead.
+Review the `#SBATCH` directives before submitting. In particular, adjust GPU count, partition, runtime, environment name/path, and the command in `scripts/slurm-run-unlearning.sh`. The run script can execute `data-generator.py` for prompt-generation demos, or `train_adaptive_grpo.py` to launch training.
 
 ## Current Limitations
 
 - The forget topic and training hyperparameters are hard-coded in `train_adaptive_grpo.py`.
 - The reward model is a refusal string heuristic, not a semantic evaluator.
-- The attacker uses the OpenAI Responses API and requires `OPENAI_API_KEY`.
+- The data generator uses the OpenAI Responses API and requires `OPENAI_API_KEY`.
 - The code depends on TRL's experimental `rollout_func` API, so future TRL changes may require updates.
 - The prototype logs useful JSONL events, but distributed checkpoint/log management is still minimal.
 
