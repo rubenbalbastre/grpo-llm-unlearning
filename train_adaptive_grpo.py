@@ -277,11 +277,9 @@ def make_unlearning_reward_func(buffer: AdaptivePromptBuffer, log_path: Path):
 def adaptive_rollout_func(prompts: list[str], trainer) -> dict[str, Any]:
 
     step = int(getattr(getattr(trainer, "state", None), "global_step", 0) or 0)
-    B = int(trainer.local_prompt_batch_size)
-    G = int(getattr(trainer.args, "num_generations", 1))
-
-    if len(prompts) != B * G:
-        raise RuntimeError(f"Expected rollout batch size B * G = {B * G}, got {len(prompts)}.")
+    batch_size = len(prompts)
+    if batch_size == 0:
+        raise RuntimeError("adaptive_rollout_func received an empty prompt batch.")
 
     # select history for attacker based on current buffer
     history = trainer.prompt_buffer.select_history(k=16)
@@ -292,9 +290,8 @@ def adaptive_rollout_func(prompts: list[str], trainer) -> dict[str, Any]:
         accelerator=trainer.accelerator,
     )
     process_index = int(getattr(trainer.accelerator, "process_index", 0))
-    selected = trainer.attacker_pool.prompts_for_process(process_index=process_index, batch_size=B)
-    group_prompts = [str(candidate["prompt"]).strip() for candidate in selected]
-    final = [prompt for prompt in group_prompts for _ in range(G)]
+    selected = trainer.attacker_pool.prompts_for_process(process_index=process_index, batch_size=batch_size)
+    final = [str(candidate["prompt"]).strip() for candidate in selected]
 
     # tokenize and generate completions for the final prompts
     prompt_ids, images, multimodal_fields = trainer._tokenize_prompts(final)
@@ -320,12 +317,10 @@ def adaptive_rollout_func(prompts: list[str], trainer) -> dict[str, Any]:
             "type": "rollout",
             "step": step,
             "batch_size": len(final),
-            "num_prompt_groups": B,
             "history_size": len(history),
             "pool_size": len(trainer.attacker_pool.candidates),
             "process_index": process_index,
             "final_prompts": final,
-            "num_generations": G,
         },
     )
     return out
@@ -373,9 +368,9 @@ def main() -> None:
     model = AutoModelForCausalLM.from_pretrained(model_name)
 
     num_processes = int(os.getenv("WORLD_SIZE", "1"))
-    B = 2  # number of adaptive prompt groups per process
+    local_batch_size = 4
     G = 2  # number of completions generated per prompt group
-    attacker_num_candidates = B * num_processes
+    attacker_num_candidates = local_batch_size * num_processes
     placeholder_dataset = Dataset.from_dict(
         {
             "prompt": [""] * attacker_num_candidates,
@@ -396,7 +391,7 @@ def main() -> None:
 
     args = GRPOConfig(
         output_dir=str(output_dir),
-        per_device_train_batch_size=B * G,
+        per_device_train_batch_size=local_batch_size,
         gradient_accumulation_steps=1,
         num_generations=G,
         steps_per_generation=1,
@@ -421,7 +416,6 @@ def main() -> None:
     )
     trainer.prompt_buffer = buffer
     trainer.attacker_pool = attacker_pool
-    trainer.local_prompt_batch_size = B
     trainer.events_log_path = events_log_path
 
     trainer.train()
