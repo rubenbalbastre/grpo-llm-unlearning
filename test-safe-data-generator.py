@@ -1,4 +1,6 @@
-from src.smart_data_generator import DataFilter, SmartDataGenerator
+from src.data_generator import AdaptivePromptBuffer, CompletionRecord
+import src.safe_data_generator as safe_data_generator
+from src.safe_data_generator import ContaminationPromptBuffer, DataFilter, SafeDataGenerator
 
 
 class FakeEmbeddingModel:
@@ -24,9 +26,10 @@ class FakeDataGenerator:
 
 
 def main():
+    safe_data_generator.SentenceTransformer = lambda _: FakeEmbeddingModel()
     data_filter = DataFilter(
         data=["protected"],
-        embedding_model=FakeEmbeddingModel(),
+        embedding_model_name="fake-embedding-model",
         threshold=0.5,
     )
     assert data_filter.apply_filter(["near protected", "far prompt"]) == {
@@ -34,16 +37,23 @@ def main():
         "contaminated": ["near protected"],
     }
 
+    prompt_buffer = AdaptivePromptBuffer(max_history=1)
+    prompt_buffer.add_record(CompletionRecord(prompt="p1", completion="c1", reward=0.0))
+    prompt_buffer.add_record(CompletionRecord(prompt="p2", completion="c2", reward=1.0))
+    prompt_buffer.synchronize(accelerator=None)
+    assert [record.prompt for record in prompt_buffer.select_history(k=2)] == ["p2"]
+
     fake_generator = FakeDataGenerator()
-    smart_generator = SmartDataGenerator(
+    safe_generator = SafeDataGenerator(
         data_generator=fake_generator,
         data_filter=data_filter,
+        contamination_buffer=ContaminationPromptBuffer(),
     )
-    prompts = smart_generator.generate_prompts(history=[], n=1)
+    prompts = safe_generator.generate_prompts(history=[], n=1)
     assert prompts == [{"prompt": "far prompt"}]
-    assert smart_generator.contaminated_prompts_history == ["near protected"]
+    assert safe_generator.contamination_buffer.select_history() == ["near protected"]
 
-    prompts = smart_generator.generate(history=[], n=1)
+    prompts = safe_generator.generate(history=[], n=1)
     assert prompts == [{"prompt": "far prompt"}]
     assert fake_generator.histories[-1] == []
     assert fake_generator.contamination_histories[-1] == ["near protected"]

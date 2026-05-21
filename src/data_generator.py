@@ -33,6 +33,29 @@ class AdaptivePromptBuffer:
     def select_history(self, k: int = 16) -> list[CompletionRecord]:
         return self.records[-k:]
 
+    def synchronize(self, accelerator: Any | None) -> None:
+        if accelerator is None:
+            return
+
+        from accelerate.utils import broadcast_object_list, gather_object
+
+        gathered_records = gather_object(self.records)
+        payload: list[Any] = [None]
+        if accelerator.is_main_process:
+            seen: set[tuple[str, str, float, int | None]] = set()
+            merged_records: list[CompletionRecord] = []
+            for record in gathered_records:
+                if not isinstance(record, CompletionRecord):
+                    continue
+                key = (record.prompt, record.completion, record.reward, record.step)
+                if key not in seen:
+                    seen.add(key)
+                    merged_records.append(record)
+            payload[0] = merged_records[-self.max_history :]
+        broadcast_object_list(payload, from_process=0)
+        if isinstance(payload[0], list):
+            self.records = payload[0]
+
 
 def build_data_generator_prompt(topic: str, num_prompts: int) -> str:
     return f"""
@@ -149,10 +172,10 @@ class DataGenerator:
         accelerator: Any,
         history_size: int = 16,
     ) -> list[str]:
-        from accelerate.utils import broadcast_object_list, gather_object
+        from accelerate.utils import broadcast_object_list
 
+        buffer.synchronize(accelerator)
         history = buffer.select_history(k=history_size)
-        gathered_history = gather_object(history)
         num_processes = int(getattr(accelerator, "num_processes", 1))
         process_index = int(getattr(accelerator, "process_index", 0))
         num_prompts = batch_size * num_processes
@@ -160,7 +183,7 @@ class DataGenerator:
         payload: list[Any] = [None]
         if accelerator.is_main_process:
             payload[0] = self.generate_prompts(
-                history=gathered_history,
+                history=history,
                 n=num_prompts,
             )
         broadcast_object_list(payload, from_process=0)
@@ -183,7 +206,6 @@ class DataGenerator:
                 "step": step,
                 "batch_size": len(final_prompts),
                 "history_size": len(history),
-                "global_history_size": len(gathered_history),
                 "num_generated_prompts": len(generated),
                 "process_index": process_index,
                 "final_prompts": final_prompts,
