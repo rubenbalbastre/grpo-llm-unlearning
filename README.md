@@ -350,7 +350,7 @@ sbatch scripts/slurm-test-gpu.sh
 sbatch scripts/slurm-run-unlearning.sh
 ```
 
-Review the `#SBATCH` directives before submitting. In particular, adjust GPU count, partition, runtime, environment name/path, and the command in `scripts/slurm-run-unlearning.sh`. The run script can execute `data-generator.py` for prompt-generation demos, or `train_adaptive_grpo.py` to launch training.
+Review the `#SBATCH` directives before submitting. In particular, adjust GPU count, partition, runtime, and environment name/path. `scripts/slurm-run-unlearning.sh` launches `train_adaptive_grpo.py` with Accelerate, selects `configs/accelerate_single_gpu.yaml` for one GPU and `configs/accelerate_multi_gpu.yaml` for multiple GPUs, and passes `NUM_GPUS` as `--num_processes`.
 
 ## Current Limitations
 

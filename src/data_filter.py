@@ -45,7 +45,6 @@ class DataFilter:
     def _nearest_distances(self, candidate_vectors: list[list[float]]) -> list[float]:
         candidate_array = np.ascontiguousarray(np.asarray(candidate_vectors, dtype="float32"))
         distances, _ = self.faiss_index.search(candidate_array, k=1)
-        print(f"Found nearest distances for {len(distances)} candidates.")
         return [float(distance) for distance in distances[:, 0]]
 
     def apply_filter(self, candidate_prompts: list[str]) -> dict[str, list[str]]:
@@ -62,7 +61,11 @@ class DataFilter:
                 contaminated_prompts.append(prompt)
             else:
                 filtered_prompts.append(prompt)
+        print(f"Applied filter to {len(candidate_prompts)} candidates: "
+              f"{len(filtered_prompts)} filtered, {len(contaminated_prompts)} contaminated.")
 
+        print(f"Filtered prompts: {filtered_prompts}")
+        print(f"Contaminated prompts: {contaminated_prompts}")
         return {"filtered": filtered_prompts, "contaminated": contaminated_prompts}
 
 

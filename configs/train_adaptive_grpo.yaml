@@ -15,7 +15,7 @@ model:
   name: Qwen/Qwen2.5-3B-Instruct
 
 data_generator:
-  safe: true
+  safe: false
   model_name: gpt-5.4-nano
   history_size: 16
 
