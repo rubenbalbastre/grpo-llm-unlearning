@@ -7,7 +7,7 @@ experiment:
   push_to_hub: true
 
 paths:
-  output_dir: outputs/adaptive_grpo_min
+  output_dir: outputs/adaptive_grpo
   events_log: ${paths.output_dir}/events.jsonl
   final_model_dir: ${paths.output_dir}/final_model
 
