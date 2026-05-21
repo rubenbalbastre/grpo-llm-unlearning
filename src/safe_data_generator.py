@@ -105,12 +105,11 @@ class SafeDataGenerator:
     def __init__(
         self,
         data_generator: Any,
-        data_filter: DataFilter,
-        contamination_buffer: ContaminationPromptBuffer | None = None,
+        data_filter: DataFilter
     ) -> None:
         self.data_generator = data_generator
         self.data_filter = data_filter
-        self.contamination_buffer = contamination_buffer or ContaminationPromptBuffer()
+        self.contamination_buffer = ContaminationPromptBuffer()
 
     def generate_prompts(
         self,
