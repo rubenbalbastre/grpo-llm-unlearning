@@ -133,6 +133,7 @@ training.num_generations: 2
 training.max_steps: 10
 training.learning_rate: 0.000005
 data_generator.model_name: gpt-5.4-nano
+data_generator.safe: true
 data_generator.history_size: 16
 ```
 

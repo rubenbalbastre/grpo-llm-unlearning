@@ -32,17 +32,20 @@ class DataFilter:
         vectors = [list(map(float, vector)) for vector in vectors]
         if vectors and not isinstance(vectors[0], list):
             vectors = [vectors]
+        print(f"Embedded {len(texts)} texts into {len(vectors[0])}-dimensional vectors.")
         return vectors
 
     def _create_faiss_index(self, vectors: list[list[float]]):
         vectors_array = np.ascontiguousarray(np.asarray(vectors, dtype="float32"))
         index = faiss.IndexFlatL2(vectors_array.shape[1])
         index.add(vectors_array)
+        print(f"Created FAISS index with {index.ntotal} reference vectors.")
         self.faiss_index = index
 
     def _nearest_distances(self, candidate_vectors: list[list[float]]) -> list[float]:
         candidate_array = np.ascontiguousarray(np.asarray(candidate_vectors, dtype="float32"))
         distances, _ = self.faiss_index.search(candidate_array, k=1)
+        print(f"Found nearest distances for {len(distances)} candidates.")
         return [float(distance) for distance in distances[:, 0]]
 
     def apply_filter(self, candidate_prompts: list[str]) -> dict[str, list[str]]:
@@ -99,56 +102,3 @@ class ContaminationPromptBuffer:
         broadcast_object_list(payload, from_process=0)
         if isinstance(payload[0], list):
             self.records = [str(record) for record in payload[0]]
-
-
-class SafeDataGenerator:
-    def __init__(
-        self,
-        data_generator: Any,
-        data_filter: DataFilter
-    ) -> None:
-        self.data_generator = data_generator
-        self.data_filter = data_filter
-        self.contamination_buffer = ContaminationPromptBuffer()
-
-    def generate_prompts(
-        self,
-        history: list[Any],
-        n: int,
-        *,
-        oversample_factor: int = 3,
-        max_attempts: int = 3,
-        accelerator: Any | None = None,
-    ) -> list[dict[str, Any]]:
-        if n <= 0:
-            return []
-        if oversample_factor <= 0:
-            raise ValueError("oversample_factor must be >= 1.")
-        if max_attempts <= 0:
-            raise ValueError("max_attempts must be >= 1.")
-
-        self.contamination_buffer.synchronize(accelerator)
-        accepted: list[dict[str, Any]] = []
-        for _ in range(max_attempts):
-            num_candidates = max((n - len(accepted)) * oversample_factor, n)
-            candidates = self.data_generator.generate_prompts(
-                history=history,
-                num_prompts=num_candidates,
-                contamination_prompts=self.contamination_buffer.select_history(),
-            )
-            candidate_prompts = [str(candidate["prompt"]).strip() for candidate in candidates]
-            filter_result = self.data_filter.apply_filter(candidate_prompts)
-            self.contamination_buffer.add_prompts(filter_result["contaminated"])
-            self.contamination_buffer.synchronize(accelerator)
-
-            filtered_prompts = set(filter_result["filtered"])
-            for candidate in candidates:
-                if candidate["prompt"] in filtered_prompts:
-                    accepted.append(candidate)
-                if len(accepted) == n:
-                    return accepted
-
-        raise RuntimeError(f"SafeDataGenerator produced {len(accepted)} filtered prompts, expected {n}.")
-
-    def generate(self, history: list[Any], n: int, accelerator: Any | None = None) -> list[dict[str, Any]]:
-        return self.generate_prompts(history=history, n=n, accelerator=accelerator)

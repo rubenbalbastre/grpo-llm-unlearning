@@ -7,20 +7,12 @@ experiment:
   push_to_hub: true
 
 paths:
-  output_dir: outputs/adaptive_grpo
+  output_dir: outputs/grpo
   events_log: ${paths.output_dir}/events.jsonl
   final_model_dir: ${paths.output_dir}/final_model
 
 model:
   name: Qwen/Qwen2.5-3B-Instruct
-
-data_generator:
-  safe: true
-  model_name: gpt-5.4-nano
-  history_size: 16
-
-buffer:
-  max_history: 512
 
 training:
   local_batch_size: 4
