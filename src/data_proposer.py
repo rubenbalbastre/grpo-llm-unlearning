@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import json
+import warnings
 from pathlib import Path
 from typing import Any
 
@@ -97,11 +98,17 @@ class DataProposer:
                         "content": json.dumps({"contaminated_prompt_history": contamination_prompts}),
                     }
                 )
-            response = self._client.responses.parse(
-                model=self.model_name,
-                input=input_messages,
-                text_format=DataProposerResponse,
-            )
+            with warnings.catch_warnings():
+                warnings.filterwarnings(
+                    "ignore",
+                    message="Pydantic serializer warnings:.*",
+                    category=UserWarning,
+                )
+                response = self._client.responses.parse(
+                    model=self.model_name,
+                    input=input_messages,
+                    text_format=DataProposerResponse,
+                )
             parsed = response.output_parsed
             prompts = parsed.prompts if parsed is not None else []
 
