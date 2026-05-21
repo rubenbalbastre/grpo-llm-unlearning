@@ -105,6 +105,7 @@ def main(cfg: DictConfig) -> None:
         num_generations=G,
         steps_per_generation=cfg.training.steps_per_generation,
         num_iterations=cfg.training.num_iterations,
+        beta=cfg.training.beta,
         # num_train_epochs=0.1,
         max_steps=cfg.training.max_steps,
         learning_rate=cfg.training.learning_rate,
