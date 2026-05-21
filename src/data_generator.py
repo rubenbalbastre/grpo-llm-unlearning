@@ -64,6 +64,9 @@ class DataGenerator:
         self.log_path = log_path
         self.model_name = model_name
         self._client = None
+        self._setup_client()
+
+    def _setup_client(self):
         load_dotenv()
         try:
             import openai
