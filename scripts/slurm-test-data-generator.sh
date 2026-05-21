@@ -15,5 +15,6 @@ echo "Activate virtual environment (must exist)"
 conda activate py312
 echo "Run program in virtual environment"
 echo "Run unlearning script"
-python /home/balalru/machine-unlearning-llm/test-data-generator.py
+# python /home/balalru/machine-unlearning-llm/test-data-generator.py
+python /home/balalru/machine-unlearning-llm/test-safe-data-generator.py
 date

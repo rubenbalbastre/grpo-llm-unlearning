@@ -30,5 +30,6 @@ pip uninstall -y torch torchvision torchaudio
 
 # PyTorch CUDA 12.6 wheels (commonly include V100 support)
 pip install --index-url https://download.pytorch.org/whl/cu126 torch torchvision torchaudio
-
+pip install faiss-gpu-cu12
+pip install sentence_transformers
 date

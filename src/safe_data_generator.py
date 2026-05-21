@@ -133,7 +133,7 @@ class SafeDataGenerator:
             num_candidates = max((n - len(accepted)) * oversample_factor, n)
             candidates = self.data_generator.generate_prompts(
                 history=history,
-                n=num_candidates,
+                num_prompts=num_candidates,
                 contamination_prompts=self.contamination_buffer.select_history(),
             )
             candidate_prompts = [str(candidate["prompt"]).strip() for candidate in candidates]
