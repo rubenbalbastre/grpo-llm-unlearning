@@ -111,31 +111,29 @@ Before multi-GPU runs, edit `configs/accelerate_multi_gpu.yaml` so `num_processe
 
 ## Configuration Knobs
 
-The main prototype currently configures training directly in `train_adaptive_grpo.py`.
+Training is configured with Hydra in `configs/train_adaptive_grpo.yaml`.
 
-Model and output:
-
-```python
-model_name = "Qwen/Qwen2.5-0.5B-Instruct"
-output_dir = Path("./outputs/adaptive_grpo_min")
+```bash
+python train_adaptive_grpo.py \
+  experiment.forget_concept="Stephen King" \
+  model.name=Qwen/Qwen2.5-3B-Instruct \
+  training.max_steps=10
 ```
 
-Adaptive data generator:
+Common fields:
 
-```python
-local_batch_size = 4
-```
-
-GRPO settings:
-
-```python
-per_device_train_batch_size = 2
-gradient_accumulation_steps = 2
-num_generations = 2
-num_iterations = 3
-max_steps = 10
-learning_rate = 5e-6
-max_completion_length = 64
+```yaml
+experiment.forget_concept: Stephen King
+paths.output_dir: outputs/adaptive_grpo_min
+paths.events_log: ${paths.output_dir}/events.jsonl
+paths.final_model_dir: ${paths.output_dir}/final_model
+model.name: Qwen/Qwen2.5-3B-Instruct
+training.local_batch_size: 4
+training.num_generations: 2
+training.max_steps: 10
+training.learning_rate: 0.000005
+data_generator.model_name: gpt-5.4-nano
+data_generator.history_size: 16
 ```
 
 Important relationship:
@@ -355,7 +353,6 @@ Review the `#SBATCH` directives before submitting. In particular, adjust GPU cou
 
 ## Current Limitations
 
-- The forget topic and training hyperparameters are hard-coded in `train_adaptive_grpo.py`.
 - The reward model is a refusal string heuristic, not a semantic evaluator.
 - The data generator uses the OpenAI Responses API and requires `OPENAI_API_KEY`.
 - The code depends on TRL's experimental `rollout_func` API, so future TRL changes may require updates.

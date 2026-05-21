@@ -84,10 +84,17 @@ class DataGeneratorResponse(BaseModel):
 
 
 class DataGenerator:
-    def __init__(self, topic: str, log_path: Path, model_name: str = "gpt-5.4-nano") -> None:
+    def __init__(
+        self,
+        topic: str,
+        log_path: Path,
+        model_name: str = "gpt-5.4-nano",
+        history_size: int = 16,
+    ) -> None:
         self.topic = topic
         self.log_path = log_path
         self.model_name = model_name
+        self.history_size = history_size
         self._client = None
         self._setup_client()
 
@@ -168,12 +175,11 @@ class DataGenerator:
         batch_size: int,
         step: int,
         accelerator: Any,
-        history_size: int = 16,
     ) -> list[str]:
         from accelerate.utils import broadcast_object_list
 
         buffer.synchronize(accelerator)
-        history = buffer.select_history(k=history_size)
+        history = buffer.select_history(k=self.history_size)
         num_processes = int(getattr(accelerator, "num_processes", 1))
         process_index = int(getattr(accelerator, "process_index", 0))
         num_prompts = batch_size * num_processes

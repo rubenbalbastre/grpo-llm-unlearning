@@ -5,8 +5,11 @@ import random
 import re
 from pathlib import Path
 from typing import Any
+
+import hydra
 import torch
 from datasets import Dataset
+from omegaconf import DictConfig
 from transformers import AutoModelForCausalLM, AutoTokenizer
 from trl import GRPOConfig, GRPOTrainer
 from dotenv import load_dotenv
@@ -48,22 +51,23 @@ def adaptive_rollout_func(prompts: list[str], trainer) -> dict[str, Any]:
     }
 
 
-def main() -> None:
+@hydra.main(version_base=None, config_path="configs", config_name="train_adaptive_grpo")
+def main(cfg: DictConfig) -> None:
 
     # seed for reproducibility
-    random.seed(42)
-    torch.manual_seed(42)
+    random.seed(cfg.experiment.seed)
+    torch.manual_seed(cfg.experiment.seed)
 
     # logs
     load_dotenv()
     setup_huggingface_hub()
     wandb_enabled = setup_wandb()
-    output_dir = Path("./outputs/adaptive_grpo_min")
-    events_log_path = output_dir / "events.jsonl"
-    final_model_dir = output_dir / "final_model"
+    output_dir = Path(cfg.paths.output_dir)
+    events_log_path = Path(cfg.paths.events_log)
+    final_model_dir = Path(cfg.paths.final_model_dir)
 
     # model name
-    model_name = "Qwen/Qwen2.5-3B-Instruct"
+    model_name = cfg.model.name
     tokenizer = AutoTokenizer.from_pretrained(model_name)
     if tokenizer.pad_token is None:
         tokenizer.pad_token = tokenizer.eos_token
@@ -71,8 +75,8 @@ def main() -> None:
     model = AutoModelForCausalLM.from_pretrained(model_name)
 
     num_processes = int(os.getenv("WORLD_SIZE", "1"))
-    local_batch_size = 4
-    G = 2
+    local_batch_size = cfg.training.local_batch_size
+    G = cfg.training.num_generations
     placeholder_dataset_size = local_batch_size * num_processes
     placeholder_dataset = Dataset.from_dict(
         {
@@ -81,26 +85,31 @@ def main() -> None:
     )
 
     # adaptive GRPO setup
-    buffer = AdaptivePromptBuffer(max_history=512)
-    forget_concept = "Stephen King"
-    data_generator = DataGenerator(topic=f"Forget concept: '{forget_concept}.'", log_path=events_log_path)
+    buffer = AdaptivePromptBuffer(max_history=cfg.buffer.max_history)
+    forget_concept = cfg.experiment.forget_concept
+    data_generator = DataGenerator(
+        topic=f"Forget concept: '{forget_concept}.'",
+        log_path=events_log_path,
+        model_name=cfg.data_generator.model_name,
+        history_size=cfg.data_generator.history_size,
+    )
     reward_func = make_unlearning_reward_func(buffer, events_log_path)
 
     args = GRPOConfig(
         output_dir=str(output_dir),
         per_device_train_batch_size=local_batch_size,
-        gradient_accumulation_steps=1,
+        gradient_accumulation_steps=cfg.training.gradient_accumulation_steps,
         num_generations=G,
-        steps_per_generation=1,
-        num_iterations=3,
+        steps_per_generation=cfg.training.steps_per_generation,
+        num_iterations=cfg.training.num_iterations,
         # num_train_epochs=0.1,
-        max_steps=10,
-        learning_rate=5e-6,
-        max_completion_length=64,
-        remove_unused_columns=False,
+        max_steps=cfg.training.max_steps,
+        learning_rate=cfg.training.learning_rate,
+        max_completion_length=cfg.training.max_completion_length,
+        remove_unused_columns=cfg.training.remove_unused_columns,
         report_to=["wandb"] if wandb_enabled else [],
-        log_completions=True,
-        logging_steps=1,
+        log_completions=cfg.training.log_completions,
+        logging_steps=cfg.training.logging_steps,
     )
 
     trainer = GRPOTrainer(
@@ -125,7 +134,7 @@ def main() -> None:
         f"llm-unlearning-{model_name.split('/')[-1]}-forget-"
         f"{re.sub(r'[^A-Za-z0-9._-]+', '-', forget_concept).strip('-')}"
     )
-    if trainer.is_world_process_zero():
+    if cfg.experiment.push_to_hub and trainer.is_world_process_zero():
         model.push_to_hub(repo_name)
         tokenizer.push_to_hub(repo_name)
 
