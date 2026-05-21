@@ -1,8 +1,6 @@
 from typing import List, Dict
 import faiss
 
-from src.data_generator import DataGeneratorPool
-
 
 class DataFilter:
     def __init__(self, data: List[str], embedding_model, threshold=0.75):

@@ -11,7 +11,7 @@ from transformers import AutoModelForCausalLM, AutoTokenizer
 from trl import GRPOConfig, GRPOTrainer
 from dotenv import load_dotenv
 
-from src.data_generator import AdaptivePromptBuffer, DataGenerator, DataGeneratorPool
+from src.data_generator import AdaptivePromptBuffer, DataGenerator
 from src.logging import setup_wandb, setup_huggingface_hub
 from src.reward_function import make_unlearning_reward_func
 
@@ -23,7 +23,7 @@ def adaptive_rollout_func(prompts: list[str], trainer) -> dict[str, Any]:
     if batch_size == 0:
         raise RuntimeError("adaptive_rollout_func received an empty prompt batch.")
 
-    final = trainer.data_generator_pool.generate(
+    final = trainer.data_generator.generate(
         buffer=trainer.prompt_buffer,
         batch_size=batch_size,
         step=step,
@@ -73,24 +73,17 @@ def main() -> None:
     num_processes = int(os.getenv("WORLD_SIZE", "1"))
     local_batch_size = 4
     G = 2
-    data_generator_num_candidates = local_batch_size * num_processes
+    placeholder_dataset_size = local_batch_size * num_processes
     placeholder_dataset = Dataset.from_dict(
         {
-            "prompt": [""] * data_generator_num_candidates,
+            "prompt": [""] * placeholder_dataset_size,
         }
     )
 
     # adaptive GRPO setup
     buffer = AdaptivePromptBuffer(max_history=512)
     forget_concept = "Stephen King"
-    data_generator = DataGenerator(topic=f"Forget concept: '{forget_concept}.'")
-    data_generator_refresh_every = 1
-    data_generator_pool = DataGeneratorPool(
-        generator=data_generator,
-        num_candidates=data_generator_num_candidates,
-        log_path=events_log_path,
-        refresh_every=data_generator_refresh_every,
-    )
+    data_generator = DataGenerator(topic=f"Forget concept: '{forget_concept}.'", log_path=events_log_path)
     reward_func = make_unlearning_reward_func(buffer, events_log_path)
 
     args = GRPOConfig(
@@ -119,7 +112,7 @@ def main() -> None:
         rollout_func=adaptive_rollout_func,
     )
     trainer.prompt_buffer = buffer
-    trainer.data_generator_pool = data_generator_pool
+    trainer.data_generator = data_generator
     trainer.events_log_path = events_log_path
 
     # init training

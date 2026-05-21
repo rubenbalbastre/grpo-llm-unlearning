@@ -59,8 +59,9 @@ class DataGeneratorResponse(BaseModel):
 
 
 class DataGenerator:
-    def __init__(self, topic: str, model_name: str = "gpt-5.4-nano") -> None:
+    def __init__(self, topic: str, log_path: Path, model_name: str = "gpt-5.4-nano") -> None:
         self.topic = topic
+        self.log_path = log_path
         self.model_name = model_name
         self._client = None
         load_dotenv()
@@ -122,80 +123,6 @@ class DataGenerator:
         except Exception as e:
             raise RuntimeError(f"DataGenerator generation failed: {e}") from e
 
-
-class DataGeneratorPool:
-    def __init__(
-        self,
-        generator: DataGenerator,
-        num_candidates: int,
-        log_path: Path,
-        refresh_every: int = 1,
-    ) -> None:
-        if num_candidates <= 0:
-            raise ValueError("num_candidates must be >= 1.")
-        if refresh_every <= 0:
-            raise ValueError("refresh_every must be >= 1.")
-        self.generator = generator
-        self.num_candidates = num_candidates
-        self.log_path = log_path
-        self.refresh_every = refresh_every
-        self.candidates: list[dict[str, Any]] = []
-        self.last_refresh_step: int | None = None
-
-    def maybe_refresh(
-        self,
-        *,
-        step: int,
-        history: list[CompletionRecord],
-        accelerator: Any,
-    ) -> None:
-        if self.last_refresh_step == step:
-            return
-
-        needs_refresh = self.last_refresh_step is None or step % self.refresh_every == 0
-        if not needs_refresh:
-            return
-
-        from accelerate.utils import broadcast_object_list, gather_object
-
-        gathered_history = gather_object(history)
-        payload: list[Any] = [None]
-        if accelerator.is_main_process:
-            payload[0] = self.generator.generate_prompts(
-                history=gathered_history,
-                n=self.num_candidates,
-            )
-        broadcast_object_list(payload, from_process=0)
-        generated = payload[0] if isinstance(payload[0], list) else []
-        if len(generated) == 0:
-            fallback_prompts: list[str] = []
-            if gathered_history:
-                fallback_prompts = [str(rec.prompt).strip() for rec in gathered_history if str(rec.prompt).strip()]
-            if not fallback_prompts:
-                fallback_prompts = ["Tell me about Stephen King."]
-
-            generated = [
-                {
-                    "prompt": fallback_prompts[i % len(fallback_prompts)],
-                }
-                for i in range(self.num_candidates)
-            ]
-
-        self.candidates = generated
-        self.last_refresh_step = step
-        if accelerator.is_main_process:
-            log_event(
-                self.log_path,
-                {
-                    "type": "data_generator_refresh",
-                    "step": step,
-                    "local_history_size": len(history),
-                    "global_history_size": len(gathered_history),
-                    "num_candidates": len(self.candidates),
-                    "candidates": self.candidates,
-                },
-            )
-
     def generate(
         self,
         *,
@@ -205,31 +132,42 @@ class DataGeneratorPool:
         accelerator: Any,
         history_size: int = 16,
     ) -> list[str]:
+        from accelerate.utils import broadcast_object_list, gather_object
+
         history = buffer.select_history(k=history_size)
-        self.maybe_refresh(
-            step=step,
-            history=history,
-            accelerator=accelerator,
-        )
+        gathered_history = gather_object(history)
+        num_processes = int(getattr(accelerator, "num_processes", 1))
         process_index = int(getattr(accelerator, "process_index", 0))
+        num_prompts = batch_size * num_processes
+
+        payload: list[Any] = [None]
+        if accelerator.is_main_process:
+            payload[0] = self.generate_prompts(
+                history=gathered_history,
+                n=num_prompts,
+            )
+        broadcast_object_list(payload, from_process=0)
+        generated = payload[0] if isinstance(payload[0], list) else []
+
         start = process_index * batch_size
         end = start + batch_size
-        selected = self.candidates[start:end]
+        selected = generated[start:end]
         if len(selected) < batch_size:
             raise RuntimeError(
-                f"Prompt pool has {len(self.candidates)} candidates, but process {process_index} needs slice "
+                f"DataGenerator returned {len(generated)} prompts, but process {process_index} needs slice "
                 f"[{start}:{end}]. "
-                "Increase data_generator_num_candidates."
+                "Increase the generated prompt count."
             )
         final_prompts = [str(candidate["prompt"]).strip() for candidate in selected]
         log_event(
             self.log_path,
             {
-                "type": "rollout",
+                "type": "data_generator_batch",
                 "step": step,
                 "batch_size": len(final_prompts),
                 "history_size": len(history),
-                "pool_size": len(self.candidates),
+                "global_history_size": len(gathered_history),
+                "num_generated_prompts": len(generated),
                 "process_index": process_index,
                 "final_prompts": final_prompts,
             },

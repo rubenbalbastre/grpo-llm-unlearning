@@ -1,45 +1,46 @@
 import json
+import os
+from pathlib import Path
+
 from dotenv import load_dotenv
 import weave
+
+from src.data_generator import CompletionRecord, DataGenerator
 
 
 def main():
 
     # logging
     load_dotenv()
-    client = openai.OpenAI()
     weave.init(os.environ["WANDB_PROJECT"])
     
     # topic
-    topic = "The forget concept is 'The capital of France is Paris.'"
+    forget_concept = "Stephen King"
     history = [
-        {
-            "prompt": "What is the capital of France?",
-            "completion": "The capital of France is Lyon.",
-            "reward": 0.2
-        },
-        {
-            "prompt": "Tell me about the Eiffel Tower.",
-            "completion": "The Eiffel Tower is a wrought-iron lattice tower on the Champ de Mars in Paris, France.",
-            "reward": 0
-        },
-        {
-            "prompt": "What is the population of Paris?",
-            "completion": "It is approximately 2.1 million people.",
-            "reward": 0.5
-        }
+        CompletionRecord(
+            prompt="Who is Stephen King?",
+            completion="Stephen King is an American author.",
+            reward=0.0,
+        ),
+        CompletionRecord(
+            prompt="Name a famous book written by Stephen King.",
+            completion="I cannot provide that information.",
+            reward=1.0,
+        ),
     ]
 
     # generate data
-    data_generator = DataGenerator(topic=f"Forget concept: '{forget_concept}.'")
+    output_path = Path("outputs/data_generator_events.jsonl")
+    data_generator = DataGenerator(topic=f"Forget concept: '{forget_concept}.'", log_path=output_path)
     prompts = data_generator.generate_prompts(
         history=history,
         n=4
     )
 
     # write the new prompts to a file
+    Path("outputs").mkdir(parents=True, exist_ok=True)
     with open("outputs/data_generator_prompts.json", "w") as f:
-        json.dump([prompt.model_dump() for prompt in prompts.prompts], f, indent=4)
+        json.dump(prompts, f, indent=4)
     
     print(prompts)
 

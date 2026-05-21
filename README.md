@@ -123,8 +123,7 @@ output_dir = Path("./outputs/adaptive_grpo_min")
 Adaptive data generator:
 
 ```python
-data_generator_num_candidates = 8
-data_generator_refresh_every = 1
+local_batch_size = 4
 ```
 
 GRPO settings:
@@ -142,31 +141,29 @@ max_completion_length = 64
 Important relationship:
 
 ```text
-data_generator_num_candidates >= num_processes * per_device_train_batch_size
+generated_prompt_count = num_processes * per_device_train_batch_size
 ```
 
-Each process takes a different slice of the data generator candidate pool. If the pool is too small, training raises an error asking you to increase `data_generator_num_candidates`.
+The main process asks OpenAI for one global batch, broadcasts it, and each process takes its own slice.
 
-## Adaptive Prompt Pool
+## Adaptive Data Generation
 
-The data generator is not called for every individual completion. Instead, candidates refresh once every `data_generator_refresh_every` global steps.
-
-On refresh:
+On each rollout:
 
 ```text
 1. each process has local reward history
 2. histories are gathered across processes
 3. only the main process calls OpenAI
-4. the main process generates a candidate prompt pool
-5. the candidate pool is broadcast to every process
+4. the main process generates the global prompt batch
+5. the global prompt batch is broadcast to every process
 ```
 
 Each process then selects its own batch:
 
 ```text
-process 0 -> candidates[0:B]
-process 1 -> candidates[B:2B]
-process 2 -> candidates[2B:3B]
+process 0 -> generated_prompts[0:B]
+process 1 -> generated_prompts[B:2B]
+process 2 -> generated_prompts[2B:3B]
 ```
 
 where `B = GRPOConfig.per_device_train_batch_size`.
@@ -207,9 +204,8 @@ outputs/adaptive_grpo_min/final_model
 The log contains records such as:
 
 ```text
-data_generator_refresh  # generated candidate prompts and history sizes
-rollout           # prompts selected by each process
-reward            # prompt/completion/reward records
+data_generator_batch  # generated prompts selected by each process
+reward                # prompt/completion/reward records
 ```
 
 These JSONL events are the easiest place to inspect whether the data generator is adapting and whether the reward heuristic is behaving as expected.
