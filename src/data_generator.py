@@ -99,6 +99,7 @@ class DataGenerator:
             self._client = openai.OpenAI()
         except Exception:
             self._client = None
+            raise RuntimeError("OpenAI client is not available. Configure OPENAI_API_KEY in environment.")
 
     def _history_payload(self, history: list[CompletionRecord]) -> list[dict[str, Any]]:
         return [
@@ -117,10 +118,7 @@ class DataGenerator:
         contamination_prompts: list[str] | None = None,
     ) -> list[dict[str, Any]]:
         if n <= 0:
-            return []
-
-        if self._client is None:
-            raise RuntimeError("OpenAI client is not available. Configure OPENAI_API_KEY in environment.")
+            raise ValueError("Number of prompts to generate must be positive.")
 
         try:
             input_messages: list[dict[str, str]] = [
