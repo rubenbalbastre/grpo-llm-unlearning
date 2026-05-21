@@ -196,18 +196,6 @@ class DataGeneratorPool:
                 },
             )
 
-    def prompts_for_process(self, process_index: int, batch_size: int) -> list[dict[str, Any]]:
-        start = process_index * batch_size
-        end = start + batch_size
-        selected = self.candidates[start:end]
-        if len(selected) < batch_size:
-            raise RuntimeError(
-                f"Prompt pool has {len(self.candidates)} candidates, but process {process_index} needs slice "
-                f"[{start}:{end}]. "
-                "Increase data_generator_num_candidates."
-            )
-        return selected
-
     def generate(
         self,
         *,
@@ -224,7 +212,15 @@ class DataGeneratorPool:
             accelerator=accelerator,
         )
         process_index = int(getattr(accelerator, "process_index", 0))
-        selected = self.prompts_for_process(process_index=process_index, batch_size=batch_size)
+        start = process_index * batch_size
+        end = start + batch_size
+        selected = self.candidates[start:end]
+        if len(selected) < batch_size:
+            raise RuntimeError(
+                f"Prompt pool has {len(self.candidates)} candidates, but process {process_index} needs slice "
+                f"[{start}:{end}]. "
+                "Increase data_generator_num_candidates."
+            )
         final_prompts = [str(candidate["prompt"]).strip() for candidate in selected]
         log_event(
             self.log_path,
