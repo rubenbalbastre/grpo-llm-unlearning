@@ -15,8 +15,10 @@ from trl import GRPOConfig, GRPOTrainer
 from dotenv import load_dotenv
 
 from src.data_generator import AdaptivePromptBuffer, DataGenerator
+from src.safe_data_generator import SafeDataGenerator, DataFilter
 from src.logging import setup_wandb, setup_huggingface_hub
 from src.reward_function import make_unlearning_reward_func
+from src.get_contaminated_data import get_rwku_contaminated_data
 
 
 def adaptive_rollout_func(prompts: list[str], trainer) -> dict[str, Any]:
@@ -86,6 +88,7 @@ def main(cfg: DictConfig) -> None:
 
     # adaptive GRPO setup
     buffer = AdaptivePromptBuffer(max_history=cfg.buffer.max_history)
+    reward_func = make_unlearning_reward_func(buffer, events_log_path)
     forget_concept = cfg.experiment.forget_concept
     data_generator = DataGenerator(
         topic=f"Forget concept: '{forget_concept}.'",
@@ -93,7 +96,14 @@ def main(cfg: DictConfig) -> None:
         model_name=cfg.data_generator.model_name,
         history_size=cfg.data_generator.history_size,
     )
-    reward_func = make_unlearning_reward_func(buffer, events_log_path)
+    if cfg.data_generator.use_safe_generator:
+        data_filter = DataFilter(
+            data=get_rwku_contaminated_data(forget_concept)
+        )
+        data_generator = SafeDataGenerator(
+            data_generator=data_generator,
+            data_filter=data_filter
+        )
 
     args = GRPOConfig(
         output_dir=str(output_dir),
