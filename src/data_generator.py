@@ -114,15 +114,15 @@ class DataGenerator:
     def generate_prompts(
         self,
         history: list[CompletionRecord],
-        n: int,
+        num_prompts: int,
         contamination_prompts: list[str] | None = None,
     ) -> list[dict[str, Any]]:
-        if n <= 0:
+        if num_prompts <= 0:
             raise ValueError("Number of prompts to generate must be positive.")
 
         try:
             input_messages: list[dict[str, str]] = [
-                {"role": "system", "content": build_data_generator_prompt(self.topic, n)},
+                {"role": "system", "content": build_data_generator_prompt(self.topic, num_prompts)},
             ]
             history_payload = self._history_payload(history)
             if history_payload:
@@ -148,15 +148,15 @@ class DataGenerator:
             prompts = parsed.prompts if parsed is not None else []
 
             out: list[dict[str, Any]] = []
-            for i, p in enumerate(prompts[:n]):
+            for i, p in enumerate(prompts[:num_prompts]):
                 out.append(
                     {
                         "prompt": p.prompt.strip(),
                         "metadata": {"variant": i, "data_generator_model": self.model_name},
                     }
                 )
-            if len(out) < n:
-                raise RuntimeError(f"DataGenerator returned {len(out)} prompts, expected at least {n}.")
+            if len(out) < num_prompts:
+                raise RuntimeError(f"DataGenerator returned {len(out)} prompts, expected at least {num_prompts}.")
             return out
         except Exception as e:
             raise RuntimeError(f"DataGenerator generation failed: {e}") from e
@@ -182,7 +182,7 @@ class DataGenerator:
         if accelerator.is_main_process:
             payload[0] = self.generate_prompts(
                 history=history,
-                n=num_prompts,
+                num_prompts=num_prompts,
             )
         broadcast_object_list(payload, from_process=0)
         generated = payload[0] if isinstance(payload[0], list) else []

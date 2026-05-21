@@ -34,7 +34,7 @@ def main():
     data_generator = DataGenerator(topic=f"Forget concept: '{forget_concept}.'", log_path=output_path)
     prompts = data_generator.generate_prompts(
         history=history,
-        n=4
+        num_prompts=4
     )
 
     # write the new prompts to a file
