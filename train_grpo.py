@@ -14,42 +14,8 @@ from transformers import AutoModelForCausalLM, AutoTokenizer
 from trl import GRPOConfig, GRPOTrainer
 from dotenv import load_dotenv
 
-from src.data_generator import AdaptivePromptBuffer, DataGenerator
 from src.logging import setup_wandb, setup_huggingface_hub
 from src.reward_function import make_unlearning_reward_func
-from src.get_contaminated_data import get_rwku_contaminated_data
-
-
-def adaptive_rollout_func(prompts: list[str], trainer) -> dict[str, Any]:
-
-    step = int(getattr(getattr(trainer, "state", None), "global_step", 0) or 0)
-    batch_size = len(prompts)
-    if batch_size == 0:
-        raise RuntimeError("adaptive_rollout_func received an empty prompt batch.")
-
-    final = trainer.data_generator.generate(
-        buffer=trainer.prompt_buffer,
-        batch_size=batch_size,
-        step=step,
-        accelerator=trainer.accelerator,
-    )
-
-    # tokenize and generate completions for the final prompts
-    prompt_ids, images, multimodal_fields = trainer._tokenize_prompts(final)
-    completion_ids, logprobs = trainer._generate_single_turn(prompt_ids, images, multimodal_fields)
-
-    n_completions = len(completion_ids)
-    if n_completions != len(prompt_ids):
-        raise RuntimeError(
-            f"Unexpected rollout shapes: len(prompt_ids)={len(prompt_ids)}, "
-            f"len(completion_ids)={n_completions}."
-        )
-
-    return {
-        "prompt_ids": prompt_ids,
-        "completion_ids": completion_ids,
-        "logprobs": logprobs,
-    }
 
 
 @hydra.main(version_base=None, config_path="configs", config_name="train_adaptive_grpo")
@@ -78,25 +44,15 @@ def main(cfg: DictConfig) -> None:
     num_processes = int(os.getenv("WORLD_SIZE", "1"))
     local_batch_size = cfg.training.local_batch_size
     G = cfg.training.num_generations
-    placeholder_dataset_size = local_batch_size * num_processes
-    placeholder_dataset = Dataset.from_dict(
-        {
-            "prompt": [""] * placeholder_dataset_size,
-        }
-    )
 
-    # adaptive GRPO setup
-    buffer = AdaptivePromptBuffer(max_history=cfg.buffer.max_history)
-    reward_func = make_unlearning_reward_func(buffer, events_log_path)
+    # dataset
+    placeholder_dataset_size = local_batch_size * num_processes
     forget_concept = cfg.experiment.forget_concept
-    data_generator = DataGenerator(
-        topic=f"Forget concept: '{forget_concept}.'",
-        log_path=events_log_path,
-        model_name=cfg.data_generator.model_name,
-        history_size=cfg.data_generator.history_size,
-        safe=cfg.data_generator.safe,
-        protected_data=get_rwku_contaminated_data(forget_concept) if cfg.data_generator.safe else None,
-    )
+    train_dataset = None # TODO: select dataset based on forget topic
+    eval_dataset = None # TODO: select dataset based on benchmark
+
+    # GRPO setup
+    reward_func = make_unlearning_reward_func(buffer, events_log_path)
 
     args = GRPOConfig(
         output_dir=str(output_dir),
@@ -118,14 +74,12 @@ def main(cfg: DictConfig) -> None:
     trainer = GRPOTrainer(
         model=model,
         args=args,
-        train_dataset=placeholder_dataset,
+        train_dataset=train_dataset,
+        eval_dataset=eval_dataset,
         processing_class=tokenizer,
         reward_funcs=reward_func,
         rollout_func=adaptive_rollout_func,
     )
-    trainer.prompt_buffer = buffer
-    trainer.data_generator = data_generator
-    trainer.events_log_path = events_log_path
 
     # init training
     trainer.train()

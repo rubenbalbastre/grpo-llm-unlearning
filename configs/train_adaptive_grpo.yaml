@@ -1,0 +1,40 @@
+defaults:
+  - _self_
+
+experiment:
+  seed: 42
+  forget_concept: Stephen King
+  push_to_hub: true
+
+paths:
+  output_dir: outputs/adaptive_grpo
+  events_log: ${paths.output_dir}/events.jsonl
+  final_model_dir: ${paths.output_dir}/final_model
+
+model:
+  name: Qwen/Qwen2.5-3B-Instruct
+
+data_generator:
+  safe: false
+  model_name: gpt-5.4-nano
+  history_size: 16
+
+buffer:
+  max_history: 512
+
+training:
+  local_batch_size: 4
+  num_generations: 2
+  gradient_accumulation_steps: 1
+  steps_per_generation: 1
+  num_iterations: 3
+  max_steps: 10
+  learning_rate: 0.000005
+  max_completion_length: 64
+  remove_unused_columns: false
+  log_completions: true
+  logging_steps: 1
+
+hydra:
+  job:
+    chdir: false

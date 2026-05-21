@@ -111,62 +111,58 @@ Before multi-GPU runs, edit `configs/accelerate_multi_gpu.yaml` so `num_processe
 
 ## Configuration Knobs
 
-The main prototype currently configures training directly in `train_adaptive_grpo.py`.
+Training is configured with Hydra in `configs/train_adaptive_grpo.yaml`.
 
-Model and output:
-
-```python
-model_name = "Qwen/Qwen2.5-0.5B-Instruct"
-output_dir = Path("./outputs/adaptive_grpo_min")
+```bash
+python train_adaptive_grpo.py \
+  experiment.forget_concept="Stephen King" \
+  model.name=Qwen/Qwen2.5-3B-Instruct \
+  training.max_steps=10
 ```
 
-Adaptive data generator:
+Common fields:
 
-```python
-data_generator_num_candidates = 8
-data_generator_refresh_every = 1
-```
-
-GRPO settings:
-
-```python
-per_device_train_batch_size = 2
-gradient_accumulation_steps = 2
-num_generations = 2
-num_iterations = 3
-max_steps = 10
-learning_rate = 5e-6
-max_completion_length = 64
+```yaml
+experiment.forget_concept: Stephen King
+paths.output_dir: outputs/adaptive_grpo_min
+paths.events_log: ${paths.output_dir}/events.jsonl
+paths.final_model_dir: ${paths.output_dir}/final_model
+model.name: Qwen/Qwen2.5-3B-Instruct
+training.local_batch_size: 4
+training.num_generations: 2
+training.max_steps: 10
+training.learning_rate: 0.000005
+data_generator.model_name: gpt-5.4-nano
+data_generator.safe: true
+data_generator.history_size: 16
 ```
 
 Important relationship:
 
 ```text
-data_generator_num_candidates >= num_processes * per_device_train_batch_size
+generated_prompt_count = num_processes * per_device_train_batch_size
 ```
 
-Each process takes a different slice of the data generator candidate pool. If the pool is too small, training raises an error asking you to increase `data_generator_num_candidates`.
+The main process asks OpenAI for one global batch, broadcasts it, and each process takes its own slice.
 
-## Adaptive Prompt Pool
+## Adaptive Data Generation
 
-The data generator is not called for every individual completion. Instead, candidates refresh once every `data_generator_refresh_every` global steps.
-
-On refresh:
+On each rollout:
 
 ```text
 1. each process has local reward history
 2. histories are gathered across processes
 3. only the main process calls OpenAI
-4. the main process generates a candidate prompt pool
-5. the candidate pool is broadcast to every process
+4. the main process generates the global prompt batch
+5. the global prompt batch is broadcast to every process
 ```
 
 Each process then selects its own batch:
 
 ```text
-process 0 -> candidates[0:B]
-process 1 -> candidates[B:2B]
-process 2 -> candidates[2B:3B]
+process 0 -> generated_prompts[0:B]
+process 1 -> generated_prompts[B:2B]
+process 2 -> generated_prompts[2B:3B]
 ```
 
 where `B = GRPOConfig.per_device_train_batch_size`.
@@ -207,9 +203,8 @@ outputs/adaptive_grpo_min/final_model
 The log contains records such as:
 
 ```text
-data_generator_refresh  # generated candidate prompts and history sizes
-rollout           # prompts selected by each process
-reward            # prompt/completion/reward records
+data_generator_batch  # generated prompts selected by each process
+reward                # prompt/completion/reward records
 ```
 
 These JSONL events are the easiest place to inspect whether the data generator is adapting and whether the reward heuristic is behaving as expected.
@@ -355,11 +350,10 @@ sbatch scripts/slurm-test-gpu.sh
 sbatch scripts/slurm-run-unlearning.sh
 ```
 
-Review the `#SBATCH` directives before submitting. In particular, adjust GPU count, partition, runtime, environment name/path, and the command in `scripts/slurm-run-unlearning.sh`. The run script can execute `data-generator.py` for prompt-generation demos, or `train_adaptive_grpo.py` to launch training.
+Review the `#SBATCH` directives before submitting. In particular, adjust GPU count, partition, runtime, and environment name/path. `scripts/slurm-run-unlearning.sh` launches `train_adaptive_grpo.py` with Accelerate, selects `configs/accelerate_single_gpu.yaml` for one GPU and `configs/accelerate_multi_gpu.yaml` for multiple GPUs, and passes `NUM_GPUS` as `--num_processes`.
 
 ## Current Limitations
 
-- The forget topic and training hyperparameters are hard-coded in `train_adaptive_grpo.py`.
 - The reward model is a refusal string heuristic, not a semantic evaluator.
 - The data generator uses the OpenAI Responses API and requires `OPENAI_API_KEY`.
 - The code depends on TRL's experimental `rollout_func` API, so future TRL changes may require updates.
