@@ -1,15 +1,14 @@
 from __future__ import annotations
 
 import json
-import os
-import random
-import re
-from dataclasses import asdict, dataclass, field
+from dataclasses import dataclass, field
 from pathlib import Path
 from typing import Any
 
 from dotenv import load_dotenv
 from pydantic import BaseModel
+
+from src.logging import log_event
 
 
 @dataclass
@@ -125,13 +124,20 @@ class DataGenerator:
 
 
 class DataGeneratorPool:
-    def __init__(self, generator: DataGenerator, num_candidates: int, refresh_every: int = 1) -> None:
+    def __init__(
+        self,
+        generator: DataGenerator,
+        num_candidates: int,
+        log_path: Path,
+        refresh_every: int = 1,
+    ) -> None:
         if num_candidates <= 0:
             raise ValueError("num_candidates must be >= 1.")
         if refresh_every <= 0:
             raise ValueError("refresh_every must be >= 1.")
         self.generator = generator
         self.num_candidates = num_candidates
+        self.log_path = log_path
         self.refresh_every = refresh_every
         self.candidates: list[dict[str, Any]] = []
         self.last_refresh_step: int | None = None
@@ -141,7 +147,6 @@ class DataGeneratorPool:
         *,
         step: int,
         history: list[CompletionRecord],
-        log_path: Path,
         accelerator: Any,
     ) -> None:
         if self.last_refresh_step == step:
@@ -180,7 +185,7 @@ class DataGeneratorPool:
         self.last_refresh_step = step
         if accelerator.is_main_process:
             log_event(
-                log_path,
+                self.log_path,
                 {
                     "type": "data_generator_refresh",
                     "step": step,
@@ -203,3 +208,34 @@ class DataGeneratorPool:
             )
         return selected
 
+    def generate(
+        self,
+        *,
+        buffer: AdaptivePromptBuffer,
+        batch_size: int,
+        step: int,
+        accelerator: Any,
+        history_size: int = 16,
+    ) -> list[str]:
+        history = buffer.select_history(k=history_size)
+        self.maybe_refresh(
+            step=step,
+            history=history,
+            accelerator=accelerator,
+        )
+        process_index = int(getattr(accelerator, "process_index", 0))
+        selected = self.prompts_for_process(process_index=process_index, batch_size=batch_size)
+        final_prompts = [str(candidate["prompt"]).strip() for candidate in selected]
+        log_event(
+            self.log_path,
+            {
+                "type": "rollout",
+                "step": step,
+                "batch_size": len(final_prompts),
+                "history_size": len(history),
+                "pool_size": len(self.candidates),
+                "process_index": process_index,
+                "final_prompts": final_prompts,
+            },
+        )
+        return final_prompts

@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import os
 import random
+import re
 from pathlib import Path
 from typing import Any
 import torch
@@ -11,7 +12,7 @@ from trl import GRPOConfig, GRPOTrainer
 from dotenv import load_dotenv
 
 from src.data_generator import AdaptivePromptBuffer, DataGenerator, DataGeneratorPool
-from src.logging import setup_wandb, log_event, setup_huggingface_hub
+from src.logging import setup_wandb, setup_huggingface_hub
 from src.reward_function import make_unlearning_reward_func
 
 
@@ -22,20 +23,12 @@ def adaptive_rollout_func(prompts: list[str], trainer) -> dict[str, Any]:
     if batch_size == 0:
         raise RuntimeError("adaptive_rollout_func received an empty prompt batch.")
 
-    # select history for data generator based on current buffer
-    history = trainer.prompt_buffer.select_history(k=16)
-    trainer.data_generator_pool.maybe_refresh(
+    final = trainer.data_generator_pool.generate(
+        buffer=trainer.prompt_buffer,
+        batch_size=batch_size,
         step=step,
-        history=history,
-        log_path=trainer.events_log_path,
         accelerator=trainer.accelerator,
     )
-    process_index = int(getattr(trainer.accelerator, "process_index", 0))
-    selected = trainer.data_generator_pool.prompts_for_process(
-        process_index=process_index,
-        batch_size=batch_size,
-    )
-    final = [str(candidate["prompt"]).strip() for candidate in selected]
 
     # tokenize and generate completions for the final prompts
     prompt_ids, images, multimodal_fields = trainer._tokenize_prompts(final)
@@ -48,26 +41,11 @@ def adaptive_rollout_func(prompts: list[str], trainer) -> dict[str, Any]:
             f"len(completion_ids)={n_completions}."
         )
 
-    # logging
-    out = {
+    return {
         "prompt_ids": prompt_ids,
         "completion_ids": completion_ids,
         "logprobs": logprobs,
     }
-
-    log_event(
-        trainer.events_log_path,
-        {
-            "type": "rollout",
-            "step": step,
-            "batch_size": len(final),
-            "history_size": len(history),
-            "pool_size": len(trainer.data_generator_pool.candidates),
-            "process_index": process_index,
-            "final_prompts": final,
-        },
-    )
-    return out
 
 
 def main() -> None:
@@ -110,6 +88,7 @@ def main() -> None:
     data_generator_pool = DataGeneratorPool(
         generator=data_generator,
         num_candidates=data_generator_num_candidates,
+        log_path=events_log_path,
         refresh_every=data_generator_refresh_every,
     )
     reward_func = make_unlearning_reward_func(buffer, events_log_path)

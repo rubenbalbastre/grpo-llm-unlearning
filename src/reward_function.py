@@ -1,11 +1,11 @@
 from __future__ import annotations
 
 import re
-from dataclasses import asdict, dataclass, field
+from dataclasses import asdict
 from pathlib import Path
-from typing import Any
-from datasets import Dataset
 
+from src.data_generator import AdaptivePromptBuffer, CompletionRecord
+from src.logging import log_event
 
 
 REFUSAL_PATTERNS = [
