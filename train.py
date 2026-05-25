@@ -7,9 +7,9 @@ from pathlib import Path
 from typing import Any
 
 import hydra
-from omegaconf import DictConfig, OmegaConf, open_dict
+from omegaconf import DictConfig, OmegaConf
 import torch
-from datasets import Dataset
+from datasets import Dataset, load_dataset
 from transformers import AutoModelForCausalLM, AutoTokenizer
 from trl import GRPOConfig, GRPOTrainer
 from dotenv import load_dotenv
@@ -52,6 +52,20 @@ def adaptive_rollout_func(prompts: list[str], trainer) -> dict[str, Any]:
     }
 
 
+def load_standard_dataset(cfg: DictConfig) -> Dataset:
+    dataset = load_dataset(
+        cfg.standard_data.name,
+        cfg.standard_data.config_name,
+        split=cfg.standard_data.split,
+    )
+    subject_column = cfg.standard_data.subject_column
+    prompt_column = cfg.standard_data.prompt_column
+    dataset = dataset.filter(
+        lambda row: row[subject_column] == cfg.experiment.forget_concept
+    )
+    return dataset.select_columns([prompt_column]).rename_column(prompt_column, "prompt")
+
+
 def get_peft_config(cfg: DictConfig, num_hidden_layers: int) -> LoraConfig:
     from peft import LoraConfig
     lora_args = cfg.get("peft", None).get("lora", None)
@@ -74,7 +88,7 @@ def get_peft_config(cfg: DictConfig, num_hidden_layers: int) -> LoraConfig:
     )
 
 
-@hydra.main(version_base=None, config_path="configs", config_name="train_adaptive_grpo")
+@hydra.main(version_base=None, config_path="configs", config_name="train")
 def main(cfg: DictConfig) -> None:
 
     # seed for reproducibility
@@ -98,39 +112,47 @@ def main(cfg: DictConfig) -> None:
     model = AutoModelForCausalLM.from_pretrained(model_name)
     peft_config = get_peft_config(cfg, num_hidden_layers=model.config.num_hidden_layers)
 
-    num_processes = int(os.getenv("WORLD_SIZE", "1"))
     local_batch_size = cfg.training.local_batch_size
-    G = cfg.training.num_generations
-    placeholder_dataset_size = local_batch_size * num_processes
-    placeholder_dataset = Dataset.from_dict(
-        {
-            "prompt": [""] * placeholder_dataset_size,
-        }
-    )
 
-    # adaptive GRPO setup
     buffer = AdaptivePromptBuffer(max_history=cfg.buffer.max_history)
     reward_func = make_unlearning_reward_func(buffer, events_log_path)
     forget_concept = cfg.experiment.forget_concept
-    data_generator = DataGenerator(
-        topic=f"Forget concept: '{forget_concept}.'",
-        log_path=events_log_path,
-        model_name=cfg.data_generator.model_name,
-        history_size=cfg.data_generator.history_size,
-        safe=cfg.data_generator.safe,
-        protected_data=get_rwku_contaminated_data(forget_concept) if cfg.data_generator.safe else None,
-    )
+    mode = cfg.training.mode
+    if mode == "adaptive":
+        num_processes = int(os.getenv("WORLD_SIZE", "1"))
+        placeholder_dataset_size = local_batch_size * num_processes
+        train_dataset = Dataset.from_dict(
+            {"prompt": [""] * placeholder_dataset_size}
+        )
+        rollout_func = adaptive_rollout_func
+        data_generator = DataGenerator(
+            topic=f"Forget concept: '{forget_concept}.'",
+            log_path=events_log_path,
+            model_name=cfg.data_generator.model_name,
+            history_size=cfg.data_generator.history_size,
+            safe=cfg.data_generator.safe,
+            protected_data=(
+                get_rwku_contaminated_data(forget_concept)
+                if cfg.data_generator.safe
+                else None
+            ),
+        )
+    elif mode == "standard":
+        train_dataset = load_standard_dataset(cfg)
+        rollout_func = None
+        data_generator = None
+    else:
+        raise ValueError("training.mode must be either 'adaptive' or 'standard'.")
 
     args = GRPOConfig(
         output_dir=str(output_dir),
         per_device_train_batch_size=local_batch_size,
         gradient_accumulation_steps=cfg.training.gradient_accumulation_steps,
-        num_generations=G,
+        num_generations=cfg.training.num_generations,
         steps_per_generation=cfg.training.steps_per_generation,
         num_iterations=cfg.training.num_iterations,
         beta=cfg.training.beta,
         gradient_checkpointing=cfg.training.gradient_checkpointing,
-        # num_train_epochs=0.1,
         max_steps=cfg.training.max_steps,
         learning_rate=cfg.training.learning_rate,
         max_completion_length=cfg.training.max_completion_length,
@@ -143,15 +165,16 @@ def main(cfg: DictConfig) -> None:
     trainer = GRPOTrainer(
         model=model,
         args=args,
-        train_dataset=placeholder_dataset,
+        train_dataset=train_dataset,
         processing_class=tokenizer,
         reward_funcs=reward_func,
-        rollout_func=adaptive_rollout_func,
+        rollout_func=rollout_func,
         peft_config=peft_config,
     )
     trainer.prompt_buffer = buffer
-    trainer.data_generator = data_generator
     trainer.events_log_path = events_log_path
+    if data_generator is not None:
+        trainer.data_generator = data_generator
 
     # init training
     trainer.train()
@@ -164,7 +187,7 @@ def main(cfg: DictConfig) -> None:
         f"{re.sub(r'[^A-Za-z0-9._-]+', '-', forget_concept).strip('-')}"
     )
     if cfg.experiment.push_to_hub and trainer.is_world_process_zero():
-        model.push_to_hub(repo_name)
+        trainer.model.push_to_hub(repo_name)
         tokenizer.push_to_hub(repo_name)
 
 

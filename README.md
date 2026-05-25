@@ -1,14 +1,15 @@
 # Machine Unlearning LLM
 
-Minimal prototype for adaptive GRPO unlearning.
+Minimal GRPO unlearning prototype with one training entrypoint:
 
-The main training script is `train_adaptive_grpo.py`. It trains with TRL `GRPOTrainer` while a data generator proposes new prompts from recent prompt, completion, and reward history. Safe generation can filter prompts that are too close to protected RWKU reference data.
+- `adaptive`: an OpenAI data generator proposes new prompts from rollout history.
+- `standard`: GRPO samples prompts from the RWKU Phi-3 rejection-tuning forget corpus.
 
 ## Layout
 
 ```text
-train_adaptive_grpo.py        # main training entrypoint
-configs/train_adaptive_grpo.yaml
+train.py                      # main training entrypoint
+configs/train.yaml
 configs/accelerate_single_gpu.yaml
 configs/accelerate_multi_gpu.yaml
 src/data_generator.py         # GRPO-facing orchestration
@@ -35,25 +36,25 @@ Fill `.env` with your keys. `OPENAI_API_KEY` is required for adaptive data gener
 Main config:
 
 ```bash
-configs/train_adaptive_grpo.yaml
+configs/train.yaml
 ```
 
 Useful fields:
 
 ```yaml
+training.mode: adaptive       # adaptive or standard
 experiment.forget_concept: Stephen King
-paths.output_dir: outputs/adaptive_grpo
 model.name: Qwen/Qwen2.5-3B-Instruct
 data_generator.safe: true
-data_generator.model_name: gpt-5.4-nano
+standard_data.config_name: train_refusal_phi3
 training.beta: 0.04
-training.max_steps: 10
 ```
 
 Override with Hydra:
 
 ```bash
-python train_adaptive_grpo.py training.max_steps=20 experiment.forget_concept="Stephen King"
+python train.py training.mode=adaptive training.max_steps=20
+python train.py training.mode=standard training.max_steps=20
 ```
 
 ## Run
@@ -63,7 +64,7 @@ Single GPU:
 ```bash
 accelerate launch \
   --config_file configs/accelerate_single_gpu.yaml \
-  train_adaptive_grpo.py
+  train.py
 ```
 
 Multi GPU:
@@ -72,7 +73,7 @@ Multi GPU:
 accelerate launch \
   --config_file configs/accelerate_multi_gpu.yaml \
   --num_processes 2 \
-  train_adaptive_grpo.py
+  train.py
 ```
 
 Both Accelerate configs use `mixed_precision: fp16`.
@@ -120,6 +121,8 @@ Default outputs:
 ```text
 outputs/adaptive_grpo/events.jsonl
 outputs/adaptive_grpo/final_model
+outputs/standard_grpo/events.jsonl
+outputs/standard_grpo/final_model
 ```
 
 ## RWKU Evaluation
@@ -144,4 +147,3 @@ sbatch scripts/slurm-eval-rwku.sh
 - The reward is currently a refusal-pattern heuristic.
 - The adaptive generator uses the OpenAI Responses API.
 - Safe generation builds a FAISS filter from RWKU contaminated prompts.
-- `train_grpo.py` is experimental and not the main entrypoint.
