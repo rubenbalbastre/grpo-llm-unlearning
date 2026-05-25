@@ -7,6 +7,7 @@
 #SBATCH --time=00:30:00
 # Request time partition "--partition=<Partition>". E.g.:
 #SBATCH --partition=sc-gpu
+
 # Add host, time, and directory name for later troubleshooting
 hostname; pwd; date
 
@@ -24,12 +25,21 @@ fi
 echo "Activate environment"
 conda activate "$ENV_PATH"
 
-echo "Install requirements"
-pip install -r /home/balalru/machine-unlearning-llm/requirements.txt
-pip uninstall -y torch torchvision torchaudio
+echo "Installing high-speed dependency manager"
+pip install --upgrade uv
 
-# PyTorch CUDA 12.6 wheels (commonly include V100 support)
-pip install --index-url https://download.pytorch.org/whl/cu126 torch torchvision torchaudio
-pip install faiss-gpu-cu12
-pip install sentence_transformers
+echo "Executing proper multi-repository installation"
+
+# 1. Clear out any broken build artifacts from the last failure
+uv cache clean
+rm -rf ~/.cache/uv/
+
+# 2. Run the unified installation explicitly locking onto pre-built cu126 binaries
+uv pip install \
+  --extra-index-url https://pytorch.org \
+  torch torchvision torchaudio faiss-gpu-cu12 --torch-backend=cu126 \
+  trl peft transformers accelerate datasets wandb hydra-core 
+
+uv pip install weave python-dotenv sentence-transformers openai
+
 date
