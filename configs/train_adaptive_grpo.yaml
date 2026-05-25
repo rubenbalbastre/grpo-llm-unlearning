@@ -22,10 +22,26 @@ data_generator:
 buffer:
   max_history: 512
 
+peft:
+  lora:
+    r: 16
+    alpha: 32
+    init_lora_weights: "gaussian"
+    target_modules:
+      - "q_proj"
+      - "k_proj"
+      - "v_proj"
+      - "o_proj"
+      - "gate_proj"
+      - "up_proj"
+      - "down_proj"
+    number_layers_to_transform: 6
+
 training:
   local_batch_size: 2
   num_generations: 2
   gradient_accumulation_steps: 1
+  gradient_checkpointing: True
   steps_per_generation: 1
   num_iterations: 3
   beta: 0.04

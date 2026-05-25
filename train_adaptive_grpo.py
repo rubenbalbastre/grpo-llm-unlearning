@@ -7,9 +7,9 @@ from pathlib import Path
 from typing import Any
 
 import hydra
+from omegaconf import DictConfig, OmegaConf, open_dict
 import torch
 from datasets import Dataset
-from omegaconf import DictConfig
 from transformers import AutoModelForCausalLM, AutoTokenizer
 from trl import GRPOConfig, GRPOTrainer
 from dotenv import load_dotenv
@@ -52,6 +52,28 @@ def adaptive_rollout_func(prompts: list[str], trainer) -> dict[str, Any]:
     }
 
 
+def get_peft_config(cfg: DictConfig, num_hidden_layers: int) -> LoraConfig:
+    from peft import LoraConfig
+    lora_args = cfg.get("peft", None).get("lora", None)
+    return LoraConfig(
+        r=lora_args.r,
+        lora_alpha=lora_args.alpha,
+        init_lora_weights=lora_args.init_lora_weights,
+        target_modules=OmegaConf.to_container(
+            lora_args.target_modules, resolve=True
+        ),
+        task_type="CAUSAL_LM",
+        bias="none",
+        layers_pattern="layers",
+        layers_to_transform=list(
+            range(
+                num_hidden_layers - lora_args.number_layers_to_transform,
+                num_hidden_layers,
+            )
+        ),
+    )
+
+
 @hydra.main(version_base=None, config_path="configs", config_name="train_adaptive_grpo")
 def main(cfg: DictConfig) -> None:
 
@@ -74,6 +96,7 @@ def main(cfg: DictConfig) -> None:
         tokenizer.pad_token = tokenizer.eos_token
     tokenizer.padding_side = "left"
     model = AutoModelForCausalLM.from_pretrained(model_name)
+    peft_config = get_peft_config(cfg, num_hidden_layers=model.config.num_hidden_layers)
 
     num_processes = int(os.getenv("WORLD_SIZE", "1"))
     local_batch_size = cfg.training.local_batch_size
@@ -106,6 +129,7 @@ def main(cfg: DictConfig) -> None:
         steps_per_generation=cfg.training.steps_per_generation,
         num_iterations=cfg.training.num_iterations,
         beta=cfg.training.beta,
+        gradient_checkpointing=cfg.training.gradient_checkpointing,
         # num_train_epochs=0.1,
         max_steps=cfg.training.max_steps,
         learning_rate=cfg.training.learning_rate,
@@ -123,6 +147,7 @@ def main(cfg: DictConfig) -> None:
         processing_class=tokenizer,
         reward_funcs=reward_func,
         rollout_func=adaptive_rollout_func,
+        peft_config=peft_config,
     )
     trainer.prompt_buffer = buffer
     trainer.data_generator = data_generator
