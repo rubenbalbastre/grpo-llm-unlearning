@@ -10,7 +10,6 @@ import hydra
 from omegaconf import DictConfig, OmegaConf, open_dict
 import torch
 from datasets import Dataset
-from omegaconf import DictConfig
 from transformers import AutoModelForCausalLM, AutoTokenizer
 from trl import GRPOConfig, GRPOTrainer
 from dotenv import load_dotenv
@@ -130,6 +129,7 @@ def main(cfg: DictConfig) -> None:
         steps_per_generation=cfg.training.steps_per_generation,
         num_iterations=cfg.training.num_iterations,
         beta=cfg.training.beta,
+        gradient_checkpointing=cfg.training.gradient_checkpointing,
         # num_train_epochs=0.1,
         max_steps=cfg.training.max_steps,
         learning_rate=cfg.training.learning_rate,
