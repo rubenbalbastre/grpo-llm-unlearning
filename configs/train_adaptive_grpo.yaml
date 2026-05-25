@@ -23,11 +23,12 @@ buffer:
   max_history: 512
 
 training:
-  local_batch_size: 4
+  local_batch_size: 8
   num_generations: 2
   gradient_accumulation_steps: 1
   steps_per_generation: 1
   num_iterations: 3
+  beta: 0.04
   max_steps: 10
   learning_rate: 0.000005
   max_completion_length: 64

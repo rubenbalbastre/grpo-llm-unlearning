@@ -46,6 +46,7 @@ paths.output_dir: outputs/adaptive_grpo
 model.name: Qwen/Qwen2.5-3B-Instruct
 data_generator.safe: true
 data_generator.model_name: gpt-5.4-nano
+training.beta: 0.04
 training.max_steps: 10
 ```
 
