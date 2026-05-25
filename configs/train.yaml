@@ -7,7 +7,7 @@ experiment:
   push_to_hub: true
 
 paths:
-  output_dir: outputs/adaptive_grpo
+  output_dir: outputs/${training.mode}_grpo
   events_log: ${paths.output_dir}/events.jsonl
   final_model_dir: ${paths.output_dir}/final_model
 
@@ -18,6 +18,13 @@ data_generator:
   safe: false
   model_name: gpt-5.4-nano
   history_size: 16
+
+standard_data:
+  name: jinzhuoran/RWKU
+  config_name: train_refusal_phi3
+  split: train
+  subject_column: subject
+  prompt_column: instruction
 
 buffer:
   max_history: 512
@@ -38,9 +45,10 @@ peft:
     number_layers_to_transform: 6
 
 training:
+  mode: adaptive # standard or adaptive
   local_batch_size: 2
-  num_generations: 2
-  gradient_accumulation_steps: 1
+  num_generations: 4
+  gradient_accumulation_steps: 8
   gradient_checkpointing: True
   steps_per_generation: 1
   num_iterations: 3
