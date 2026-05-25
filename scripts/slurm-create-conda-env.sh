@@ -36,9 +36,10 @@ rm -rf ~/.cache/uv/
 
 # 2. Run the unified installation explicitly locking onto pre-built cu126 binaries
 uv pip install \
-  --extra-index-url https://pytorch.org \
-  torch torchvision torchaudio faiss-gpu-cu12 --torch-backend=cu126 \
-  trl peft transformers accelerate datasets wandb hydra-core 
+  torch torchvision torchaudio faiss-gpu-cu12 \
+  trl peft transformers accelerate datasets wandb hydra-core \
+  --torch-backend=cu126
+  # vllm
 
 uv pip install weave python-dotenv sentence-transformers openai
 
