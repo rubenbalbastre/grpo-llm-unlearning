@@ -7,6 +7,7 @@ from pathlib import Path
 from typing import Any
 
 import hydra
+from omegaconf import DictConfig, OmegaConf, open_dict
 import torch
 from datasets import Dataset
 from omegaconf import DictConfig
