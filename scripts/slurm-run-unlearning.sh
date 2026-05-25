@@ -1,7 +1,7 @@
 #!/bin/bash -l
 #SBATCH --job-name=slurm-run-unlearning
 #SBATCH --output=logs/slurm-run-unlearning-%j.log
-#SBATCH --gres=gpu:1
+#SBATCH --gres=gpu:2
 #SBATCH --time=00:30:00
 #SBATCH --partition=sc-gpu
 set -euo pipefail
@@ -16,7 +16,8 @@ REPO_DIR="${REPO_DIR:-/home/balalru/machine-unlearning-llm}"
 TRAIN_SCRIPT="${TRAIN_SCRIPT:-${REPO_DIR}/train_adaptive_grpo.py}"
 SINGLE_GPU_CONFIG="${SINGLE_GPU_CONFIG:-${REPO_DIR}/configs/accelerate_single_gpu.yaml}"
 MULTI_GPU_CONFIG="${MULTI_GPU_CONFIG:-${REPO_DIR}/configs/accelerate_multi_gpu.yaml}"
-NUM_GPUS="${NUM_GPUS:-${SLURM_GPUS_ON_NODE:-1}}"
+IFS=',' read -ra VISIBLE_GPUS <<< "${CUDA_VISIBLE_DEVICES:-0}"
+NUM_GPUS="${NUM_GPUS:-${#VISIBLE_GPUS[@]}}"
 if ! [[ "${NUM_GPUS}" =~ ^[0-9]+$ ]] || [[ "${NUM_GPUS}" -lt 1 ]]; then
   echo "Invalid NUM_GPUS value: ${NUM_GPUS}" >&2
   exit 2
@@ -28,6 +29,7 @@ else
   ACCELERATE_CONFIG="${ACCELERATE_CONFIG:-${SINGLE_GPU_CONFIG}}"
 fi
 
+echo "CUDA_VISIBLE_DEVICES=${CUDA_VISIBLE_DEVICES:-not set}"
 echo "Detected ${NUM_GPUS} GPU(s)"
 echo "Using accelerate config: ${ACCELERATE_CONFIG}"
 

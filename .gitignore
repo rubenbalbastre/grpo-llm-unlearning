@@ -5,6 +5,5 @@ logs/
 wandb/
 outputs/
 
-*.json
 */__pycache__/*
 *.pyc

@@ -29,4 +29,5 @@ def setup_wandb() -> bool:
 
 
 def setup_huggingface_hub() -> None:
-    login(token=os.getenv("HUGGINGFACE_HUB_TOKEN"))
+    if int(os.getenv("RANK", "0")) == 0:
+        login(token=os.getenv("HUGGINGFACE_HUB_TOKEN"))

@@ -91,7 +91,7 @@ Then submit:
 sbatch scripts/slurm-run-unlearning.sh
 ```
 
-The script uses `accelerate launch`. It selects the single-GPU config when `NUM_GPUS=1`, otherwise the multi-GPU config.
+The script uses `accelerate launch` and counts the GPUs assigned by Slurm through `CUDA_VISIBLE_DEVICES`. It selects the single-GPU config for one visible GPU and the multi-GPU config otherwise.
 
 Override GPU count manually:
 
