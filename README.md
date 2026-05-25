@@ -45,6 +45,7 @@ Useful fields:
 training.mode: adaptive       # adaptive or standard
 experiment.forget_concept: Stephen King
 model.name: Qwen/Qwen2.5-3B-Instruct
+wandb.run_name_prefix: ${training.mode}
 data_generator.safe: true
 standard_data.config_name: train_refusal_phi3
 training.beta: 0.04

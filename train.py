@@ -3,6 +3,7 @@ from __future__ import annotations
 import os
 import random
 import re
+import uuid
 from pathlib import Path
 from typing import Any
 
@@ -146,6 +147,7 @@ def main(cfg: DictConfig) -> None:
 
     args = GRPOConfig(
         output_dir=str(output_dir),
+        run_name=f"{cfg.wandb.run_name_prefix}-{uuid.uuid4().hex[:8]}",
         per_device_train_batch_size=local_batch_size,
         gradient_accumulation_steps=cfg.training.gradient_accumulation_steps,
         num_generations=cfg.training.num_generations,

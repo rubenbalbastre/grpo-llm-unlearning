@@ -12,12 +12,15 @@ paths:
   final_model_dir: ${paths.output_dir}/final_model
 
 model:
-  name: Qwen/Qwen2.5-3B-Instruct
+  name: "microsoft/Phi-3-mini-4k-instruct" # "microsoft/Phi-3-mini-4k-instruct", Qwen/Qwen2.5-3B-Instruct
+
+wandb:
+  run_name_prefix: ${training.mode}
 
 data_generator:
   safe: false
   model_name: gpt-5.4-nano
-  history_size: 16
+  history_size: 64
 
 standard_data:
   name: jinzhuoran/RWKU
@@ -42,10 +45,10 @@ peft:
       - "gate_proj"
       - "up_proj"
       - "down_proj"
-    number_layers_to_transform: 6
+    number_layers_to_transform: 12
 
 training:
-  mode: adaptive # standard or adaptive
+  mode: standard # standard or adaptive
   local_batch_size: 2
   num_generations: 4
   gradient_accumulation_steps: 8
@@ -53,9 +56,9 @@ training:
   steps_per_generation: 1
   num_iterations: 3
   beta: 0.04
-  max_steps: 10
+  max_steps: 50
   learning_rate: 0.000005
-  max_completion_length: 64
+  max_completion_length: 128
   remove_unused_columns: false
   log_completions: true
   logging_steps: 1
