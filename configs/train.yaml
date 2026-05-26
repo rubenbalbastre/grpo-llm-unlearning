@@ -32,7 +32,6 @@ standard_data:
 
 buffer:
   max_prompts: 512
-  max_outcomes_per_prompt: 20
   high_std_threshold: 0.1
   high_mean_threshold: 0.5
 

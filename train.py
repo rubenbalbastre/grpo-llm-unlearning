@@ -136,7 +136,6 @@ def main(cfg: DictConfig) -> None:
     if mode == "adaptive":
         buffer = PromptBuffer(
             max_prompts=cfg.buffer.max_prompts,
-            max_outcomes_per_prompt=cfg.buffer.max_outcomes_per_prompt,
             high_std_threshold=cfg.buffer.high_std_threshold,
             high_mean_threshold=cfg.buffer.high_mean_threshold,
         )

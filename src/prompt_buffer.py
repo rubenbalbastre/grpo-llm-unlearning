@@ -19,12 +19,13 @@ class PromptRecord:
     mean_reward: float | None = None
     std_reward: float | None = None
     last_selected_step: int | None = None
+    max_outcomes_per_prompt: int = 20
 
-    def update_evaluation(self, outcomes: list[PromptOutcome], max_outcomes: int) -> None:
+    def update_evaluation(self, outcomes: list[PromptOutcome]) -> None:
         if not outcomes:
             return
         self.outcomes.extend(outcomes)
-        self.outcomes = self.outcomes[-max_outcomes:]
+        self.outcomes = self.outcomes[-self.max_outcomes_per_prompt:]
         rewards = [outcome.reward for outcome in outcomes]
         self.mean_reward = fmean(rewards)
         self.std_reward = pstdev(rewards)
@@ -39,7 +40,6 @@ class PromptBuffer:
     def __init__(
         self,
         max_prompts: int = 512,
-        max_outcomes_per_prompt: int = 20,
         high_std_threshold: float = 0.1,
         high_mean_threshold: float = 0.5,
     ) -> None:
@@ -48,7 +48,6 @@ class PromptBuffer:
         if not 0.0 <= high_mean_threshold <= 1.0:
             raise ValueError("high_mean_threshold must be between 0 and 1.")
         self.max_prompts = max_prompts
-        self.max_outcomes_per_prompt = max_outcomes_per_prompt
         self.high_std_threshold = high_std_threshold
         self.high_mean_threshold = high_mean_threshold
         self.records: dict[str, PromptRecord] = {}
@@ -84,7 +83,7 @@ class PromptBuffer:
             evaluations.setdefault(key, []).append(outcome)
         for (prompt, _), outcomes in evaluations.items():
             if prompt in self.records:
-                self.records[prompt].update_evaluation(outcomes, self.max_outcomes_per_prompt)
+                self.records[prompt].update_evaluation(outcomes)
 
     @staticmethod
     def _generation_item(record: PromptRecord) -> dict[str, Any]:

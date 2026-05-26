@@ -50,7 +50,6 @@ wandb.run_name_prefix: ${training.mode}
 data_generator.safe: true
 data_generator.new_prompts_per_step: 2
 buffer.max_prompts: 512
-buffer.max_outcomes_per_prompt: 20
 buffer.high_std_threshold: 0.1
 buffer.high_mean_threshold: 0.5
 standard_data.config_name: train_refusal_phi3
