@@ -34,6 +34,13 @@ echo "Executing proper multi-repository installation"
 uv cache clean
 rm -rf ~/.cache/uv/
 
+# # Install GCC 11 and G++ 11 from the conda-forge channel
+# conda install -c conda-forge gcc_linux-64=11 gxx_linux-64=11 -y
+
+# # Point your environment variables to the new compiler
+# export CC=$CONDA_PREFIX/bin/x86_64-conda-linux-gnu-gcc
+# export CXX=$CONDA_PREFIX/bin/x86_64-conda-linux-gnu-g++
+
 # 2. Run the unified installation explicitly locking onto pre-built cu126 binaries
 uv pip install \
   torch torchvision torchaudio faiss-gpu-cu12 \
