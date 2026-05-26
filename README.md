@@ -13,6 +13,7 @@ configs/train.yaml
 configs/accelerate_single_gpu.yaml
 configs/accelerate_multi_gpu.yaml
 src/data_generator.py         # GRPO-facing orchestration
+src/prompt_buffer.py          # prompt outcomes and selection
 src/data_proposer.py          # OpenAI prompt proposal
 src/data_filter.py            # embedding/FAISS filtering
 src/reward_function.py
@@ -47,6 +48,12 @@ experiment.forget_concept: Stephen King
 model.name: Qwen/Qwen2.5-3B-Instruct
 wandb.run_name_prefix: ${training.mode}
 data_generator.safe: true
+data_generator.generation_context_size: 64
+data_generator.new_prompts_per_step: 2
+buffer.max_prompts: 512
+buffer.high_reward_std_threshold: 0.1
+buffer.high_mean_reward_threshold: 0.75
+reward.mode: entity_count # entity_count or binary
 standard_data.config_name: train_refusal_phi3
 training.beta: 0.04
 ```
@@ -145,6 +152,6 @@ sbatch scripts/slurm-eval-rwku.sh
 
 ## Notes
 
-- The reward is currently a refusal-pattern heuristic.
+- Set `reward.mode` to `entity_count` for a graded entity-leakage reward, or `binary` for the earlier all-or-nothing reward.
 - The adaptive generator uses the OpenAI Responses API.
 - Safe generation builds a FAISS filter from RWKU contaminated prompts.

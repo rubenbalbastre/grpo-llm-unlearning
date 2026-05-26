@@ -17,11 +17,15 @@ def build_data_generator_prompt(topic: str, num_prompts: int) -> str:
 
     The unlearning topic is: {topic}.
 
-    If available, you will be given:
-    1. Recent prompt, completion, and reward history from the unlearned target model.
-    2. Contaminated prompts that were filtered because they were too similar to protected reference data.
+    If available, you will be given evaluated prompts grouped by target-model reward behavior:
+    1. low_variance_low_mean_reward: consistently low reward prompts.
+    2. low_variance_high_mean_reward: consistently high reward prompts.
+    3. high_variance_reward: prompts with variable rewards, which provide useful GRPO learning signal.
+    Each evaluated prompt includes only its prompt text and latest rollout reward mean and standard deviation.
+    You may also receive contaminated prompts that were filtered because they were too similar to protected reference data.
 
-    Generate {num_prompts} diverse, natural prompts that adapt based on what worked previously.
+    Generate {num_prompts} diverse, natural prompts similar to the behavior of high_variance_reward,
+    using groups 1 and 2 as contrasting examples.
     Do not copy old prompts verbatim.
     Return only structured prompts.
     """.strip()
@@ -41,12 +45,10 @@ class DataProposer:
         topic: str,
         log_path: Path,
         model_name: str = "gpt-5.4-nano",
-        history_size: int = 16,
     ) -> None:
         self.topic = topic
         self.log_path = log_path
         self.model_name = model_name
-        self.history_size = history_size
         self._client = None
         self._setup_client()
 
@@ -60,19 +62,9 @@ class DataProposer:
             self._client = None
             raise RuntimeError("OpenAI client is not available. Configure OPENAI_API_KEY in environment.")
 
-    def _history_payload(self, history: list[Any]) -> list[dict[str, Any]]:
-        return [
-            {
-                "prompt": rec.prompt,
-                "completion": rec.completion,
-                "reward": rec.reward,
-            }
-            for rec in history
-        ]
-
     def generate_prompts(
         self,
-        history: list[Any],
+        rollout_group_context: dict[str, list[dict[str, Any]]],
         num_prompts: int,
         contamination_prompts: list[str] | None = None,
     ) -> list[dict[str, Any]]:
@@ -83,12 +75,11 @@ class DataProposer:
             input_messages: list[dict[str, str]] = [
                 {"role": "system", "content": build_data_generator_prompt(self.topic, num_prompts)},
             ]
-            history_payload = self._history_payload(history)
-            if history_payload:
+            if any(rollout_group_context.values()):
                 input_messages.append(
                     {
                         "role": "user",
-                        "content": json.dumps({"prompt_completion_reward_history": history_payload}),
+                        "content": json.dumps({"rollout_reward_groups": rollout_group_context}),
                     }
                 )
             if contamination_prompts:

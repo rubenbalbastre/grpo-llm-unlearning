@@ -1,58 +1,12 @@
 from __future__ import annotations
 
-from dataclasses import dataclass, field
 from pathlib import Path
 from typing import Any
 
 from src.data_filter import ContaminationPromptBuffer, DataFilter
 from src.data_proposer import DataProposer
 from src.logging import log_event
-
-
-@dataclass
-class CompletionRecord:
-    prompt: str
-    completion: str
-    reward: float
-    step: int | None = None
-    metadata: dict[str, Any] = field(default_factory=dict)
-
-
-class AdaptivePromptBuffer:
-    def __init__(self, max_history: int = 512) -> None:
-        self.max_history = max_history
-        self.records: list[CompletionRecord] = []
-
-    def add_record(self, record: CompletionRecord) -> None:
-        self.records.append(record)
-        if len(self.records) > self.max_history:
-            self.records = self.records[-self.max_history :]
-
-    def select_history(self, k: int = 16) -> list[CompletionRecord]:
-        return self.records[-k:]
-
-    def synchronize(self, accelerator: Any | None) -> None:
-        if accelerator is None:
-            return
-
-        from accelerate.utils import broadcast_object_list, gather_object
-
-        gathered_records = gather_object(self.records)
-        payload: list[Any] = [None]
-        if accelerator.is_main_process:
-            seen: set[tuple[str, str, float, int | None]] = set()
-            merged_records: list[CompletionRecord] = []
-            for record in gathered_records:
-                if not isinstance(record, CompletionRecord):
-                    continue
-                key = (record.prompt, record.completion, record.reward, record.step)
-                if key not in seen:
-                    seen.add(key)
-                    merged_records.append(record)
-            payload[0] = merged_records[-self.max_history :]
-        broadcast_object_list(payload, from_process=0)
-        if isinstance(payload[0], list):
-            self.records = payload[0]
+from src.prompt_buffer import PromptBuffer
 
 
 class DataGenerator:
@@ -61,7 +15,7 @@ class DataGenerator:
         topic: str,
         log_path: Path,
         model_name: str = "gpt-5.4-nano",
-        history_size: int = 16,
+        generation_context_size: int = 16,
         safe: bool = False,
         protected_data: list[str] | None = None,
         embedding_model_name: str = "BAAI/bge-large-en-v1.5",
@@ -69,21 +23,28 @@ class DataGenerator:
         oversample_factor: int = 4,
         max_attempts: int = 5,
         contamination_history_size: int = 512,
+        new_prompts_per_step: int = 2,
     ) -> None:
         if safe and not protected_data:
             raise ValueError("DataGenerator requires protected_data when safe=True.")
+        if new_prompts_per_step <= 0:
+            raise ValueError("new_prompts_per_step must be positive.")
+        if oversample_factor <= 0:
+            raise ValueError("oversample_factor must be >= 1.")
+        if max_attempts <= 0:
+            raise ValueError("max_attempts must be >= 1.")
 
         self.log_path = log_path
-        self.history_size = history_size
+        self.generation_context_size = generation_context_size
         self.safe = safe
         self.data_filter = None
         self.oversample_factor = oversample_factor
         self.max_attempts = max_attempts
+        self.new_prompts_per_step = new_prompts_per_step
         self.proposer = DataProposer(
             topic=topic,
             log_path=log_path,
             model_name=model_name,
-            history_size=history_size,
         )
         self.contamination_buffer = None
         if safe:
@@ -96,43 +57,37 @@ class DataGenerator:
 
     def generate_prompts(
         self,
-        history: list[CompletionRecord],
+        rollout_group_context: dict[str, list[dict[str, Any]]],
         num_prompts: int,
         contamination_prompts: list[str] | None = None,
     ) -> list[dict[str, Any]]:
         if not self.safe:
             return self.proposer.generate_prompts(
-                history=history,
+                rollout_group_context=rollout_group_context,
                 num_prompts=num_prompts,
                 contamination_prompts=contamination_prompts,
             )
         return self._generate_filtered_prompts(
-            history=history,
+            rollout_group_context=rollout_group_context,
             num_prompts=num_prompts,
             contamination_prompts=contamination_prompts,
         )
 
     def _generate_filtered_prompts(
         self,
-        history: list[CompletionRecord],
+        rollout_group_context: dict[str, list[dict[str, Any]]],
         num_prompts: int,
         contamination_prompts: list[str] | None = None,
     ) -> list[dict[str, Any]]:
         if num_prompts <= 0:
             raise ValueError("Number of prompts to generate must be positive.")
-        if self.oversample_factor <= 0:
-            raise ValueError("oversample_factor must be >= 1.")
-        if self.max_attempts <= 0:
-            raise ValueError("max_attempts must be >= 1.")
-        if self.data_filter is None:
-            raise RuntimeError("DataGenerator safe mode requires data_filter.")
 
         accepted: list[dict[str, Any]] = []
         contaminated_history = list(contamination_prompts or [])
         for _ in range(self.max_attempts):
             num_candidates = max((num_prompts - len(accepted)) * self.oversample_factor, num_prompts)
             candidates = self.proposer.generate_prompts(
-                history=history,
+                rollout_group_context=rollout_group_context,
                 num_prompts=num_candidates,
                 contamination_prompts=contaminated_history,
             )
@@ -155,63 +110,77 @@ class DataGenerator:
     def generate(
         self,
         *,
-        buffer: AdaptivePromptBuffer,
-        batch_size: int,
+        buffer: PromptBuffer,
+        num_prompts: int,
         step: int,
         accelerator: Any,
     ) -> list[str]:
         from accelerate.utils import broadcast_object_list
 
-        if batch_size <= 0:
+        if num_prompts <= 0:
             return []
 
         buffer.synchronize(accelerator)
-        history = buffer.select_history(k=self.history_size)
-        num_processes = int(getattr(accelerator, "num_processes", 1))
         process_index = int(getattr(accelerator, "process_index", 0))
-        num_prompts = batch_size * num_processes
 
         if self.safe:
             self.contamination_buffer.synchronize(accelerator)
 
         payload: list[Any] = [None]
         if accelerator.is_main_process:
-            payload[0] = self.generate_prompts(
-                history=history,
-                num_prompts=num_prompts,
+            rollout_group_context = buffer.select_for_generation(
+                max_context_prompts=self.generation_context_size
+            )
+            num_new_prompts = max(
+                self.new_prompts_per_step,
+                num_prompts - len(buffer.records),
+            )
+            generated = self.generate_prompts(
+                rollout_group_context=rollout_group_context,
+                num_prompts=num_new_prompts,
                 contamination_prompts=(
                     self.contamination_buffer.select_history()
                     if self.safe
                     else None
                 ),
             )
+            buffer.add_generated_prompts(
+                [str(candidate["prompt"]).strip() for candidate in generated],
+            )
+            selected = buffer.select_for_rollout(
+                batch_size=num_prompts,
+                step=step,
+            )
+            payload[0] = {
+                "prompts": selected,
+                "rollout_group_context": {
+                    group: len(items) for group, items in rollout_group_context.items()
+                },
+                "prompt_pool_size": len(buffer.records),
+            }
         broadcast_object_list(payload, from_process=0)
 
         if self.safe:
             self.contamination_buffer.synchronize(accelerator)
 
-        generated = payload[0] if isinstance(payload[0], list) else []
-
-        start = process_index * batch_size
-        end = start + batch_size
-        selected = generated[start:end]
-        if len(selected) < batch_size:
+        batch_info = payload[0] if isinstance(payload[0], dict) else {}
+        selected = batch_info.get("prompts", [])
+        if len(selected) != num_prompts:
             raise RuntimeError(
-                f"DataGenerator returned {len(generated)} prompts, but process {process_index} needs slice "
-                f"[{start}:{end}]. "
-                "Increase the generated prompt count."
+                f"DataGenerator selected {len(selected)} prompts, expected {num_prompts}."
             )
-        final_prompts = [str(candidate["prompt"]).strip() for candidate in selected]
+        final_prompts = [str(prompt).strip() for prompt in selected]
         log_event(
             self.log_path,
             {
                 "type": "data_generator_batch",
                 "step": step,
                 "batch_size": len(final_prompts),
-                "history_size": len(history),
-                "num_generated_prompts": len(generated),
+                "rollout_group_context": batch_info.get("rollout_group_context", {}),
+                "prompt_pool_size": batch_info.get("prompt_pool_size", 0),
+                "num_selected_prompts": num_prompts,
                 "process_index": process_index,
-                "final_prompts": final_prompts,
+                "selected_prompts": final_prompts,
             },
         )
         return final_prompts

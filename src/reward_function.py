@@ -1,11 +1,10 @@
 from __future__ import annotations
 
 import re
-from dataclasses import asdict
 from pathlib import Path
 
-from src.data_generator import AdaptivePromptBuffer, CompletionRecord
 from src.logging import log_event
+from src.prompt_buffer import PromptBuffer, RolloutCompletionOutcome
 
 
 REFUSAL_PATTERNS = [
@@ -72,18 +71,51 @@ REFUSAL_PATTERNS = [
     "Desperation"
 ]
 
+ENTITY_MATCHERS = [
+    (
+        entity,
+        re.compile(rf"(?<!\w){re.escape(entity)}(?!\w)", flags=re.IGNORECASE),
+    )
+    for entity in REFUSAL_PATTERNS
+]
 
-def is_refusal(text: str) -> bool:
-    return not any(re.search(pat, text, flags=re.IGNORECASE) for pat in REFUSAL_PATTERNS)
+
+def matched_entities(text: str) -> list[str]:
+    return [entity for entity, matcher in ENTITY_MATCHERS if matcher.search(text)]
 
 
-def make_unlearning_reward_func(buffer: AdaptivePromptBuffer, log_path: Path):
+def entity_forgetting_reward(text: str) -> tuple[float, list[str]]:
+    entities = matched_entities(text)
+    return 1.0 / (1.0 + len(entities)), entities
+
+
+def binary_forgetting_reward(text: str) -> tuple[float, list[str]]:
+    entities = matched_entities(text)
+    return (1.0 if not entities else 0.0), entities
+
+
+def make_unlearning_reward_func(
+    buffer: PromptBuffer | None,
+    log_path: Path,
+    reward_mode: str = "entity_count",
+):
+    reward_functions = {
+        "binary": binary_forgetting_reward,
+        "entity_count": entity_forgetting_reward,
+    }
+    if reward_mode not in reward_functions:
+        raise ValueError(
+            f"reward.mode must be one of {list(reward_functions)}, got {reward_mode!r}."
+        )
+    compute_reward = reward_functions[reward_mode]
+
     def unlearning_reward_func(prompts, completions, **kwargs) -> list[float]:
         rewards: list[float] = []
         trainer_state = kwargs.get("trainer_state")
         step = getattr(trainer_state, "global_step", None)
 
-        prompts_list = list(prompts) if prompts is not None else []
+        selected_prompts = kwargs.get("selected_prompt", prompts)
+        prompts_list = list(selected_prompts) if selected_prompts is not None else []
         completions_list = list(completions) if completions is not None else []
         if len(prompts_list) != len(completions_list):
             raise ValueError(
@@ -94,20 +126,27 @@ def make_unlearning_reward_func(buffer: AdaptivePromptBuffer, log_path: Path):
             return rewards
 
         for p, c in zip(prompts_list, completions_list, strict=True):
-            refusal = is_refusal(str(c))
-            # Only forget prompts: reward must be in [0, 1].
-            reward = 1.0 if refusal else 0.0
+            reward, entities = compute_reward(str(c))
 
-            record = CompletionRecord(
-                prompt=str(p),
-                completion=str(c),
-                reward=reward,
-                step=step,
-                metadata={},
-            )
-            buffer.add_record(record)
+            if buffer is not None:
+                buffer.record_rollout_outcome(
+                    str(p),
+                    RolloutCompletionOutcome(completion=str(c), reward=reward, step=step),
+                )
             rewards.append(reward)
-            log_event(log_path, {"type": "reward", **asdict(record)})
+            log_event(
+                log_path,
+                {
+                    "type": "reward",
+                    "prompt": str(p),
+                    "completion": str(c),
+                    "reward": reward,
+                    "reward_mode": reward_mode,
+                    "matched_entities": entities,
+                    "matched_entity_count": len(entities),
+                    "step": step,
+                },
+            )
 
         return rewards
 
