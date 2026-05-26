@@ -34,8 +34,8 @@ buffer:
 
 peft:
   lora:
-    r: 16
-    alpha: 32
+    r: 32
+    alpha: 64
     init_lora_weights: "gaussian"
     target_modules:
       - "q_proj"
@@ -49,19 +49,19 @@ peft:
 
 training:
   mode: standard # standard or adaptive
-  local_batch_size: 2
+  local_batch_size: 8
   num_generations: 4
   gradient_accumulation_steps: 8
   gradient_checkpointing: True
-  steps_per_generation: 1
-  num_iterations: 3
-  beta: 0.04
+  steps_per_generation: 8
+  num_iterations: 2
+  beta: 0.0 # 0.04
   max_steps: 50
   learning_rate: 0.000005
-  max_completion_length: 128
+  max_completion_length: 64
   remove_unused_columns: false
   log_completions: true
-  logging_steps: 1
+  logging_steps: 5
 
 hydra:
   job:
