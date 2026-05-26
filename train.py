@@ -15,8 +15,9 @@ from transformers import AutoModelForCausalLM, AutoTokenizer
 from trl import GRPOConfig, GRPOTrainer
 from dotenv import load_dotenv
 
-from src.data_generator import DataGenerator, PromptBuffer
+from src.data_generator import DataGenerator
 from src.logging import setup_wandb, setup_huggingface_hub
+from src.prompt_buffer import PromptBuffer
 from src.reward_function import make_unlearning_reward_func
 from src.get_contaminated_data import get_rwku_contaminated_data
 
@@ -135,6 +136,7 @@ def main(cfg: DictConfig) -> None:
     if mode == "adaptive":
         buffer = PromptBuffer(
             max_prompts=cfg.buffer.max_prompts,
+            max_outcomes_per_prompt=cfg.buffer.max_outcomes_per_prompt,
             high_std_threshold=cfg.buffer.high_std_threshold,
             high_mean_threshold=cfg.buffer.high_mean_threshold,
         )
@@ -148,7 +150,7 @@ def main(cfg: DictConfig) -> None:
             topic=f"Forget concept: '{forget_concept}.'",
             log_path=events_log_path,
             model_name=cfg.data_generator.model_name,
-            history_size=cfg.data_generator.history_size,
+            generator_history_size=cfg.data_generator.generator_history_size,
             new_prompts_per_step=cfg.data_generator.new_prompts_per_step,
             safe=cfg.data_generator.safe,
             protected_data=(

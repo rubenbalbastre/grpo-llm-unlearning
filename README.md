@@ -13,6 +13,7 @@ configs/train.yaml
 configs/accelerate_single_gpu.yaml
 configs/accelerate_multi_gpu.yaml
 src/data_generator.py         # GRPO-facing orchestration
+src/prompt_buffer.py          # prompt outcomes and selection
 src/data_proposer.py          # OpenAI prompt proposal
 src/data_filter.py            # embedding/FAISS filtering
 src/reward_function.py
@@ -47,6 +48,11 @@ experiment.forget_concept: Stephen King
 model.name: Qwen/Qwen2.5-3B-Instruct
 wandb.run_name_prefix: ${training.mode}
 data_generator.safe: true
+data_generator.new_prompts_per_step: 2
+buffer.max_prompts: 512
+buffer.max_outcomes_per_prompt: 20
+buffer.high_std_threshold: 0.1
+buffer.high_mean_threshold: 0.5
 standard_data.config_name: train_refusal_phi3
 training.beta: 0.04
 ```

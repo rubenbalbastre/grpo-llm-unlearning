@@ -5,7 +5,8 @@ from pathlib import Path
 from dotenv import load_dotenv
 import weave
 
-from src.data_generator import CompletionRecord, DataGenerator
+from src.data_generator import DataGenerator
+from src.prompt_buffer import PromptBuffer, PromptOutcome
 
 
 def main():
@@ -16,18 +17,24 @@ def main():
 
     # topic
     forget_concept = "Stephen King"
-    history = [
-        CompletionRecord(
-            prompt="Who is Stephen King?",
-            completion="Stephen King is an American author.",
-            reward=0.0,
-        ),
-        CompletionRecord(
-            prompt="Name a famous book written by Stephen King.",
-            completion="I cannot provide that information.",
-            reward=1.0,
-        ),
-    ]
+    buffer = PromptBuffer()
+    prompts_and_outcomes = {
+        "Who is Stephen King?": [("Stephen King is an American author.", 0.0)],
+        "Name a famous book written by Stephen King.": [("I cannot provide that information.", 1.0)],
+        "Discuss the author of The Shining.": [
+            ("Stephen King wrote it.", 0.0),
+            ("I cannot provide that information.", 1.0),
+        ],
+    }
+    buffer.add_new_prompts(list(prompts_and_outcomes))
+    for prompt, outcomes in prompts_and_outcomes.items():
+        for completion, reward in outcomes:
+            buffer.add_prompt_outcome_to_record(
+                prompt,
+                PromptOutcome(completion=completion, reward=reward, step=0),
+            )
+    buffer.synchronize(None)
+    generation_examples = buffer.select_for_generation(batch_size=3)
 
     # generate safe data
     output_path = Path("outputs/safe_data_generator_events.jsonl")
@@ -42,7 +49,7 @@ def main():
         ],
     )
     prompts = data_generator.generate_prompts(
-        history=history,
+        generation_examples=generation_examples,
         num_prompts=4,
     )
 
@@ -61,7 +68,7 @@ def main():
         safe=False
     )
     prompts = data_generator.generate_prompts(
-        history=history,
+        generation_examples=generation_examples,
         num_prompts=4,
     )
 
