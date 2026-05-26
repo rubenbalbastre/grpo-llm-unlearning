@@ -170,7 +170,11 @@ def main(cfg: DictConfig) -> None:
         data_generator = None
     else:
         raise ValueError("training.mode must be either 'adaptive' or 'standard'.")
-    reward_func = make_unlearning_reward_func(buffer, events_log_path)
+    reward_func = make_unlearning_reward_func(
+        buffer,
+        events_log_path,
+        reward_mode=cfg.reward.mode,
+    )
 
     args = GRPOConfig(
         output_dir=str(output_dir),

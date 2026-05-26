@@ -33,7 +33,10 @@ standard_data:
 buffer:
   max_prompts: 512
   high_reward_std_threshold: 0.1
-  high_mean_reward_threshold: 0.5
+  high_mean_reward_threshold: 0.75
+
+reward:
+  mode: entity_count # entity_count or binary
 
 peft:
   lora:
@@ -51,8 +54,8 @@ peft:
     number_layers_to_transform: 12
 
 training:
-  mode: standard # standard or adaptive
-  local_batch_size: 8
+  mode: adaptive # standard or adaptive
+  local_batch_size: 4
   num_generations: 4
   gradient_accumulation_steps: 8
   gradient_checkpointing: True

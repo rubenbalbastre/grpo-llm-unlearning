@@ -48,7 +48,7 @@ class PromptBuffer:
         self,
         max_prompts: int = 512,
         high_reward_std_threshold: float = 0.1,
-        high_mean_reward_threshold: float = 0.5,
+        high_mean_reward_threshold: float = 0.75,
     ) -> None:
         if not 0.0 <= high_reward_std_threshold <= 1.0:
             raise ValueError("high_reward_std_threshold must be between 0 and 1.")

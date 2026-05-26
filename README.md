@@ -52,7 +52,8 @@ data_generator.generation_context_size: 64
 data_generator.new_prompts_per_step: 2
 buffer.max_prompts: 512
 buffer.high_reward_std_threshold: 0.1
-buffer.high_mean_reward_threshold: 0.5
+buffer.high_mean_reward_threshold: 0.75
+reward.mode: entity_count # entity_count or binary
 standard_data.config_name: train_refusal_phi3
 training.beta: 0.04
 ```
@@ -151,6 +152,6 @@ sbatch scripts/slurm-eval-rwku.sh
 
 ## Notes
 
-- The reward is currently a refusal-pattern heuristic.
+- Set `reward.mode` to `entity_count` for a graded entity-leakage reward, or `binary` for the earlier all-or-nothing reward.
 - The adaptive generator uses the OpenAI Responses API.
 - Safe generation builds a FAISS filter from RWKU contaminated prompts.

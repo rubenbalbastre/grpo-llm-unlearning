@@ -71,12 +71,44 @@ REFUSAL_PATTERNS = [
     "Desperation"
 ]
 
+ENTITY_MATCHERS = [
+    (
+        entity,
+        re.compile(rf"(?<!\w){re.escape(entity)}(?!\w)", flags=re.IGNORECASE),
+    )
+    for entity in REFUSAL_PATTERNS
+]
 
-def is_refusal(text: str) -> bool:
-    return not any(re.search(pat, text, flags=re.IGNORECASE) for pat in REFUSAL_PATTERNS)
+
+def matched_entities(text: str) -> list[str]:
+    return [entity for entity, matcher in ENTITY_MATCHERS if matcher.search(text)]
 
 
-def make_unlearning_reward_func(buffer: PromptBuffer | None, log_path: Path):
+def entity_forgetting_reward(text: str) -> tuple[float, list[str]]:
+    entities = matched_entities(text)
+    return 1.0 / (1.0 + len(entities)), entities
+
+
+def binary_forgetting_reward(text: str) -> tuple[float, list[str]]:
+    entities = matched_entities(text)
+    return (1.0 if not entities else 0.0), entities
+
+
+def make_unlearning_reward_func(
+    buffer: PromptBuffer | None,
+    log_path: Path,
+    reward_mode: str = "entity_count",
+):
+    reward_functions = {
+        "binary": binary_forgetting_reward,
+        "entity_count": entity_forgetting_reward,
+    }
+    if reward_mode not in reward_functions:
+        raise ValueError(
+            f"reward.mode must be one of {list(reward_functions)}, got {reward_mode!r}."
+        )
+    compute_reward = reward_functions[reward_mode]
+
     def unlearning_reward_func(prompts, completions, **kwargs) -> list[float]:
         rewards: list[float] = []
         trainer_state = kwargs.get("trainer_state")
@@ -94,9 +126,7 @@ def make_unlearning_reward_func(buffer: PromptBuffer | None, log_path: Path):
             return rewards
 
         for p, c in zip(prompts_list, completions_list, strict=True):
-            refusal = is_refusal(str(c))
-            # Only forget prompts: reward must be in [0, 1].
-            reward = 1.0 if refusal else 0.0
+            reward, entities = compute_reward(str(c))
 
             if buffer is not None:
                 buffer.record_rollout_outcome(
@@ -111,6 +141,9 @@ def make_unlearning_reward_func(buffer: PromptBuffer | None, log_path: Path):
                     "prompt": str(p),
                     "completion": str(c),
                     "reward": reward,
+                    "reward_mode": reward_mode,
+                    "matched_entities": entities,
+                    "matched_entity_count": len(entities),
                     "step": step,
                 },
             )
