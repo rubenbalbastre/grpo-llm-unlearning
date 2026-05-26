@@ -108,14 +108,6 @@ class PromptBuffer:
             "prompt": record.prompt,
             "latest_rollout_mean_reward": record.latest_rollout_mean_reward,
             "latest_rollout_reward_std": record.latest_rollout_reward_std,
-            "outcome_history": [
-                {
-                    "completion": outcome.completion,
-                    "reward": outcome.reward,
-                    "step": outcome.step,
-                }
-                for outcome in record.outcome_history
-            ],
         }
 
     def add_generated_prompts(self, prompts: list[str]) -> None:

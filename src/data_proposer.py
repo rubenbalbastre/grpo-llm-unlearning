@@ -21,6 +21,7 @@ def build_data_generator_prompt(topic: str, num_prompts: int) -> str:
     1. low_variance_low_mean_reward: consistently low reward prompts.
     2. low_variance_high_mean_reward: consistently high reward prompts.
     3. high_variance_reward: prompts with variable rewards, which provide useful GRPO learning signal.
+    Each evaluated prompt includes only its prompt text and latest rollout reward mean and standard deviation.
     You may also receive contaminated prompts that were filtered because they were too similar to protected reference data.
 
     Generate {num_prompts} diverse, natural prompts similar to the behavior of high_variance_reward,
