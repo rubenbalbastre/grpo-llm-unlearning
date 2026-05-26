@@ -140,7 +140,12 @@ def main(cfg: DictConfig) -> None:
             high_mean_reward_threshold=cfg.buffer.high_mean_reward_threshold,
         )
         num_processes = int(os.getenv("WORLD_SIZE", "1"))
-        placeholder_dataset_size = local_batch_size * num_processes
+        placeholder_dataset_size = (
+            local_batch_size
+            * num_processes
+            * cfg.training.steps_per_generation
+            // cfg.training.num_generations
+        )
         train_dataset = Dataset.from_dict(
             {"prompt": [""] * placeholder_dataset_size}
         )
