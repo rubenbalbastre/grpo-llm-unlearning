@@ -15,7 +15,7 @@ from transformers import AutoModelForCausalLM, AutoTokenizer
 from trl import GRPOConfig, GRPOTrainer
 from dotenv import load_dotenv
 
-from src.data_generator import AdaptivePromptBuffer, DataGenerator
+from src.data_generator import DataGenerator, PromptBuffer
 from src.logging import setup_wandb, setup_huggingface_hub
 from src.reward_function import make_unlearning_reward_func
 from src.get_contaminated_data import get_rwku_contaminated_data
@@ -27,13 +27,27 @@ def adaptive_rollout_func(prompts: list[str], trainer) -> dict[str, Any]:
     batch_size = len(prompts)
     if batch_size == 0:
         raise RuntimeError("adaptive_rollout_func received an empty prompt batch.")
+    num_processes = int(getattr(trainer.accelerator, "num_processes", 1))
+    process_index = int(getattr(trainer.accelerator, "process_index", 0))
+    global_batch_size = batch_size * num_processes
+    if global_batch_size % trainer.num_generations != 0:
+        raise RuntimeError(
+            f"Global rollout batch size {global_batch_size} must be divisible by "
+            f"num_generations={trainer.num_generations}."
+        )
+    num_prompts = global_batch_size // trainer.num_generations
 
-    final = trainer.data_generator.generate(
+    selected = trainer.data_generator.generate(
         buffer=trainer.prompt_buffer,
-        batch_size=batch_size,
+        num_prompts=num_prompts,
         step=step,
         accelerator=trainer.accelerator,
     )
+    expanded = [prompt for prompt in selected for _ in range(trainer.num_generations)]
+    start = process_index * batch_size
+    final = expanded[start : start + batch_size]
+    if len(final) != batch_size:
+        raise RuntimeError(f"Adaptive rollout selected {len(final)} prompts, expected {batch_size}.")
 
     # tokenize and generate completions for the final prompts
     prompt_ids, images, multimodal_fields = trainer._tokenize_prompts(final)
@@ -50,6 +64,7 @@ def adaptive_rollout_func(prompts: list[str], trainer) -> dict[str, Any]:
         "prompt_ids": prompt_ids,
         "completion_ids": completion_ids,
         "logprobs": logprobs,
+        "selected_prompt": final,
     }
 
 
@@ -115,11 +130,14 @@ def main(cfg: DictConfig) -> None:
 
     local_batch_size = cfg.training.local_batch_size
 
-    buffer = AdaptivePromptBuffer(max_history=cfg.buffer.max_history)
-    reward_func = make_unlearning_reward_func(buffer, events_log_path)
     forget_concept = cfg.experiment.forget_concept
     mode = cfg.training.mode
     if mode == "adaptive":
+        buffer = PromptBuffer(
+            max_prompts=cfg.buffer.max_prompts,
+            high_std_threshold=cfg.buffer.high_std_threshold,
+            high_mean_threshold=cfg.buffer.high_mean_threshold,
+        )
         num_processes = int(os.getenv("WORLD_SIZE", "1"))
         placeholder_dataset_size = local_batch_size * num_processes
         train_dataset = Dataset.from_dict(
@@ -131,6 +149,7 @@ def main(cfg: DictConfig) -> None:
             log_path=events_log_path,
             model_name=cfg.data_generator.model_name,
             history_size=cfg.data_generator.history_size,
+            new_prompts_per_step=cfg.data_generator.new_prompts_per_step,
             safe=cfg.data_generator.safe,
             protected_data=(
                 get_rwku_contaminated_data(forget_concept)
@@ -139,11 +158,13 @@ def main(cfg: DictConfig) -> None:
             ),
         )
     elif mode == "standard":
+        buffer = None
         train_dataset = load_standard_dataset(cfg)
         rollout_func = None
         data_generator = None
     else:
         raise ValueError("training.mode must be either 'adaptive' or 'standard'.")
+    reward_func = make_unlearning_reward_func(buffer, events_log_path)
 
     args = GRPOConfig(
         output_dir=str(output_dir),
@@ -173,9 +194,9 @@ def main(cfg: DictConfig) -> None:
         rollout_func=rollout_func,
         peft_config=peft_config,
     )
-    trainer.prompt_buffer = buffer
     trainer.events_log_path = events_log_path
     if data_generator is not None:
+        trainer.prompt_buffer = buffer
         trainer.data_generator = data_generator
 
     # init training

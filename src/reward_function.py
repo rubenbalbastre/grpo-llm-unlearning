@@ -1,10 +1,9 @@
 from __future__ import annotations
 
 import re
-from dataclasses import asdict
 from pathlib import Path
 
-from src.data_generator import AdaptivePromptBuffer, CompletionRecord
+from src.data_generator import PromptBuffer
 from src.logging import log_event
 
 
@@ -77,13 +76,14 @@ def is_refusal(text: str) -> bool:
     return not any(re.search(pat, text, flags=re.IGNORECASE) for pat in REFUSAL_PATTERNS)
 
 
-def make_unlearning_reward_func(buffer: AdaptivePromptBuffer, log_path: Path):
+def make_unlearning_reward_func(buffer: PromptBuffer | None, log_path: Path):
     def unlearning_reward_func(prompts, completions, **kwargs) -> list[float]:
         rewards: list[float] = []
         trainer_state = kwargs.get("trainer_state")
         step = getattr(trainer_state, "global_step", None)
 
-        prompts_list = list(prompts) if prompts is not None else []
+        selected_prompts = kwargs.get("selected_prompt", prompts)
+        prompts_list = list(selected_prompts) if selected_prompts is not None else []
         completions_list = list(completions) if completions is not None else []
         if len(prompts_list) != len(completions_list):
             raise ValueError(
@@ -98,16 +98,19 @@ def make_unlearning_reward_func(buffer: AdaptivePromptBuffer, log_path: Path):
             # Only forget prompts: reward must be in [0, 1].
             reward = 1.0 if refusal else 0.0
 
-            record = CompletionRecord(
-                prompt=str(p),
-                completion=str(c),
-                reward=reward,
-                step=step,
-                metadata={},
-            )
-            buffer.add_record(record)
+            if buffer is not None:
+                buffer.add_prompt_outcome_to_record(str(p), PromptOutcome(completion=str(c), reward=reward, step=step) )
             rewards.append(reward)
-            log_event(log_path, {"type": "reward", **asdict(record)})
+            log_event(
+                log_path,
+                {
+                    "type": "reward",
+                    "prompt": str(p),
+                    "completion": str(c),
+                    "reward": reward,
+                    "step": step,
+                },
+            )
 
         return rewards
 

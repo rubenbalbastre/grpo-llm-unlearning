@@ -21,6 +21,7 @@ data_generator:
   safe: false
   model_name: gpt-5.4-nano
   history_size: 64
+  new_prompts_per_step: 2
 
 standard_data:
   name: jinzhuoran/RWKU
@@ -30,7 +31,9 @@ standard_data:
   prompt_column: instruction
 
 buffer:
-  max_history: 512
+  max_prompts: 512
+  high_std_threshold: 0.1
+  high_mean_threshold: 0.5
 
 peft:
   lora:
