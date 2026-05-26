@@ -32,7 +32,7 @@ standard_data:
 
 buffer:
   max_prompts: 512
-  high_reward_std_threshold: 0.1
+  high_reward_std_threshold: 0.2
   high_mean_reward_threshold: 0.75
 
 reward:
@@ -55,16 +55,16 @@ peft:
 
 training:
   mode: adaptive # standard or adaptive
-  local_batch_size: 4
+  local_batch_size: 8
   num_generations: 4
   gradient_accumulation_steps: 8
   gradient_checkpointing: True
   steps_per_generation: 8
   num_iterations: 2
   beta: 0.0 # 0.04
-  max_steps: 50
+  max_steps: 100
   learning_rate: 0.000005
-  max_completion_length: 64
+  max_completion_length: 256
   remove_unused_columns: false
   log_completions: true
   logging_steps: 5
