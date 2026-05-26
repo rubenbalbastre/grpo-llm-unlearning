@@ -18,12 +18,12 @@ def build_data_generator_prompt(topic: str, num_prompts: int) -> str:
     The unlearning topic is: {topic}.
 
     If available, you will be given evaluated prompts grouped by target-model reward behavior:
-    1. group_1_low_std_low_mean: consistently low reward prompts.
-    2. group_2_low_std_high_mean: consistently high reward prompts.
-    3. group_3_high_std: prompts with variable rewards, which provide useful GRPO learning signal.
+    1. low_variance_low_mean_reward: consistently low reward prompts.
+    2. low_variance_high_mean_reward: consistently high reward prompts.
+    3. high_variance_reward: prompts with variable rewards, which provide useful GRPO learning signal.
     You may also receive contaminated prompts that were filtered because they were too similar to protected reference data.
 
-    Generate {num_prompts} diverse, natural prompts similar to the behavior of group_3_high_std,
+    Generate {num_prompts} diverse, natural prompts similar to the behavior of high_variance_reward,
     using groups 1 and 2 as contrasting examples.
     Do not copy old prompts verbatim.
     Return only structured prompts.
@@ -63,7 +63,7 @@ class DataProposer:
 
     def generate_prompts(
         self,
-        generation_examples: dict[str, list[dict[str, Any]]],
+        rollout_group_context: dict[str, list[dict[str, Any]]],
         num_prompts: int,
         contamination_prompts: list[str] | None = None,
     ) -> list[dict[str, Any]]:
@@ -74,11 +74,11 @@ class DataProposer:
             input_messages: list[dict[str, str]] = [
                 {"role": "system", "content": build_data_generator_prompt(self.topic, num_prompts)},
             ]
-            if any(generation_examples.values()):
+            if any(rollout_group_context.values()):
                 input_messages.append(
                     {
                         "role": "user",
-                        "content": json.dumps({"reward_groups": generation_examples}),
+                        "content": json.dumps({"rollout_reward_groups": rollout_group_context}),
                     }
                 )
             if contamination_prompts:

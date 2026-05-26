@@ -48,10 +48,11 @@ experiment.forget_concept: Stephen King
 model.name: Qwen/Qwen2.5-3B-Instruct
 wandb.run_name_prefix: ${training.mode}
 data_generator.safe: true
+data_generator.generation_context_size: 64
 data_generator.new_prompts_per_step: 2
 buffer.max_prompts: 512
-buffer.high_std_threshold: 0.1
-buffer.high_mean_threshold: 0.5
+buffer.high_reward_std_threshold: 0.1
+buffer.high_mean_reward_threshold: 0.5
 standard_data.config_name: train_refusal_phi3
 training.beta: 0.04
 ```

@@ -15,7 +15,7 @@ class DataGenerator:
         topic: str,
         log_path: Path,
         model_name: str = "gpt-5.4-nano",
-        generator_history_size: int = 16,
+        generation_context_size: int = 16,
         safe: bool = False,
         protected_data: list[str] | None = None,
         embedding_model_name: str = "BAAI/bge-large-en-v1.5",
@@ -35,7 +35,7 @@ class DataGenerator:
             raise ValueError("max_attempts must be >= 1.")
 
         self.log_path = log_path
-        self.generator_history_size = generator_history_size
+        self.generation_context_size = generation_context_size
         self.safe = safe
         self.data_filter = None
         self.oversample_factor = oversample_factor
@@ -57,25 +57,25 @@ class DataGenerator:
 
     def generate_prompts(
         self,
-        generation_examples: dict[str, list[dict[str, Any]]],
+        rollout_group_context: dict[str, list[dict[str, Any]]],
         num_prompts: int,
         contamination_prompts: list[str] | None = None,
     ) -> list[dict[str, Any]]:
         if not self.safe:
             return self.proposer.generate_prompts(
-                generation_examples=generation_examples,
+                rollout_group_context=rollout_group_context,
                 num_prompts=num_prompts,
                 contamination_prompts=contamination_prompts,
             )
         return self._generate_filtered_prompts(
-            generation_examples=generation_examples,
+            rollout_group_context=rollout_group_context,
             num_prompts=num_prompts,
             contamination_prompts=contamination_prompts,
         )
 
     def _generate_filtered_prompts(
         self,
-        generation_examples: dict[str, list[dict[str, Any]]],
+        rollout_group_context: dict[str, list[dict[str, Any]]],
         num_prompts: int,
         contamination_prompts: list[str] | None = None,
     ) -> list[dict[str, Any]]:
@@ -87,7 +87,7 @@ class DataGenerator:
         for _ in range(self.max_attempts):
             num_candidates = max((num_prompts - len(accepted)) * self.oversample_factor, num_prompts)
             candidates = self.proposer.generate_prompts(
-                generation_examples=generation_examples,
+                rollout_group_context=rollout_group_context,
                 num_prompts=num_candidates,
                 contamination_prompts=contaminated_history,
             )
@@ -128,13 +128,15 @@ class DataGenerator:
 
         payload: list[Any] = [None]
         if accelerator.is_main_process:
-            generation_examples = buffer.select_for_generation(batch_size=self.generator_history_size)
+            rollout_group_context = buffer.select_for_generation(
+                max_context_prompts=self.generation_context_size
+            )
             num_new_prompts = max(
                 self.new_prompts_per_step,
                 num_prompts - len(buffer.records),
             )
             generated = self.generate_prompts(
-                generation_examples=generation_examples,
+                rollout_group_context=rollout_group_context,
                 num_prompts=num_new_prompts,
                 contamination_prompts=(
                     self.contamination_buffer.select_history()
@@ -142,7 +144,7 @@ class DataGenerator:
                     else None
                 ),
             )
-            buffer.add_new_prompts(
+            buffer.add_generated_prompts(
                 [str(candidate["prompt"]).strip() for candidate in generated],
             )
             selected = buffer.select_for_rollout(
@@ -151,8 +153,8 @@ class DataGenerator:
             )
             payload[0] = {
                 "prompts": selected,
-                "generation_examples": {
-                    group: len(items) for group, items in generation_examples.items()
+                "rollout_group_context": {
+                    group: len(items) for group, items in rollout_group_context.items()
                 },
                 "prompt_pool_size": len(buffer.records),
             }
@@ -174,7 +176,7 @@ class DataGenerator:
                 "type": "data_generator_batch",
                 "step": step,
                 "batch_size": len(final_prompts),
-                "generation_examples": batch_info.get("generation_examples", {}),
+                "rollout_group_context": batch_info.get("rollout_group_context", {}),
                 "prompt_pool_size": batch_info.get("prompt_pool_size", 0),
                 "num_selected_prompts": num_prompts,
                 "process_index": process_index,

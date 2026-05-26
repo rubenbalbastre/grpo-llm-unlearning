@@ -20,7 +20,7 @@ wandb:
 data_generator:
   safe: false
   model_name: gpt-5.4-nano
-  generator_history_size: 64
+  generation_context_size: 64
   new_prompts_per_step: 2
 
 standard_data:
@@ -32,8 +32,8 @@ standard_data:
 
 buffer:
   max_prompts: 512
-  high_std_threshold: 0.1
-  high_mean_threshold: 0.5
+  high_reward_std_threshold: 0.1
+  high_mean_reward_threshold: 0.5
 
 peft:
   lora:

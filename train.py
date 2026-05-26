@@ -136,8 +136,8 @@ def main(cfg: DictConfig) -> None:
     if mode == "adaptive":
         buffer = PromptBuffer(
             max_prompts=cfg.buffer.max_prompts,
-            high_std_threshold=cfg.buffer.high_std_threshold,
-            high_mean_threshold=cfg.buffer.high_mean_threshold,
+            high_reward_std_threshold=cfg.buffer.high_reward_std_threshold,
+            high_mean_reward_threshold=cfg.buffer.high_mean_reward_threshold,
         )
         num_processes = int(os.getenv("WORLD_SIZE", "1"))
         placeholder_dataset_size = local_batch_size * num_processes
@@ -149,7 +149,7 @@ def main(cfg: DictConfig) -> None:
             topic=f"Forget concept: '{forget_concept}.'",
             log_path=events_log_path,
             model_name=cfg.data_generator.model_name,
-            generator_history_size=cfg.data_generator.generator_history_size,
+            generation_context_size=cfg.data_generator.generation_context_size,
             new_prompts_per_step=cfg.data_generator.new_prompts_per_step,
             safe=cfg.data_generator.safe,
             protected_data=(

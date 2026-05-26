@@ -6,7 +6,7 @@ from dotenv import load_dotenv
 import weave
 
 from src.data_generator import DataGenerator
-from src.prompt_buffer import PromptBuffer, PromptOutcome
+from src.prompt_buffer import PromptBuffer, RolloutCompletionOutcome
 
 
 def main():
@@ -26,15 +26,15 @@ def main():
             ("I cannot provide that information.", 1.0),
         ],
     }
-    buffer.add_new_prompts(list(prompts_and_outcomes))
+    buffer.add_generated_prompts(list(prompts_and_outcomes))
     for prompt, outcomes in prompts_and_outcomes.items():
         for completion, reward in outcomes:
-            buffer.add_prompt_outcome_to_record(
+            buffer.record_rollout_outcome(
                 prompt,
-                PromptOutcome(completion=completion, reward=reward, step=0),
+                RolloutCompletionOutcome(completion=completion, reward=reward, step=0),
             )
     buffer.synchronize(None)
-    generation_examples = buffer.select_for_generation(batch_size=3)
+    rollout_group_context = buffer.select_for_generation(max_context_prompts=3)
 
     # generate safe data
     output_path = Path("outputs/safe_data_generator_events.jsonl")
@@ -49,7 +49,7 @@ def main():
         ],
     )
     prompts = data_generator.generate_prompts(
-        generation_examples=generation_examples,
+        rollout_group_context=rollout_group_context,
         num_prompts=4,
     )
 
@@ -68,7 +68,7 @@ def main():
         safe=False
     )
     prompts = data_generator.generate_prompts(
-        generation_examples=generation_examples,
+        rollout_group_context=rollout_group_context,
         num_prompts=4,
     )
 

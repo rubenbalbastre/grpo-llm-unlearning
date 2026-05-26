@@ -6,7 +6,7 @@ from typing import Any
 
 
 @dataclass
-class PromptOutcome:
+class RolloutCompletionOutcome:
     completion: str
     reward: float
     step: int | None
@@ -15,93 +15,110 @@ class PromptOutcome:
 @dataclass
 class PromptRecord:
     prompt: str
-    outcomes: list[PromptOutcome] = field(default_factory=list)
-    mean_reward: float | None = None
-    std_reward: float | None = None
+    outcome_history: list[RolloutCompletionOutcome] = field(default_factory=list)
+    latest_rollout_mean_reward: float | None = None
+    latest_rollout_reward_std: float | None = None
     last_selected_step: int | None = None
-    max_outcomes_per_prompt: int = 20
+    max_stored_outcomes: int = 20
 
-    def update_evaluation(self, outcomes: list[PromptOutcome]) -> None:
-        if not outcomes:
+    def update_from_rollout_group(
+        self,
+        group_outcomes: list[RolloutCompletionOutcome],
+    ) -> None:
+        if not group_outcomes:
             return
-        self.outcomes.extend(outcomes)
-        self.outcomes = self.outcomes[-self.max_outcomes_per_prompt:]
-        rewards = [outcome.reward for outcome in outcomes]
-        self.mean_reward = fmean(rewards)
-        self.std_reward = pstdev(rewards)
+        self.outcome_history.extend(group_outcomes)
+        self.outcome_history = self.outcome_history[-self.max_stored_outcomes:]
+        rewards = [outcome.reward for outcome in group_outcomes]
+        self.latest_rollout_mean_reward = fmean(rewards)
+        self.latest_rollout_reward_std = pstdev(rewards)
 
 
 class PromptBuffer:
-    GROUP_1 = "group_1_low_std_low_mean"
-    GROUP_2 = "group_2_low_std_high_mean"
-    GROUP_3 = "group_3_high_std"
-    GENERATION_GROUP_ORDER = (GROUP_3, GROUP_1, GROUP_2)
+    LOW_VARIANCE_LOW_REWARD = "low_variance_low_mean_reward"
+    LOW_VARIANCE_HIGH_REWARD = "low_variance_high_mean_reward"
+    HIGH_VARIANCE_REWARD = "high_variance_reward"
+    GENERATION_CONTEXT_ORDER = (
+        HIGH_VARIANCE_REWARD,
+        LOW_VARIANCE_LOW_REWARD,
+        LOW_VARIANCE_HIGH_REWARD,
+    )
 
     def __init__(
         self,
         max_prompts: int = 512,
-        high_std_threshold: float = 0.1,
-        high_mean_threshold: float = 0.5,
+        high_reward_std_threshold: float = 0.1,
+        high_mean_reward_threshold: float = 0.5,
     ) -> None:
-        if not 0.0 <= high_std_threshold <= 1.0:
-            raise ValueError("high_std_threshold must be between 0 and 1.")
-        if not 0.0 <= high_mean_threshold <= 1.0:
-            raise ValueError("high_mean_threshold must be between 0 and 1.")
+        if not 0.0 <= high_reward_std_threshold <= 1.0:
+            raise ValueError("high_reward_std_threshold must be between 0 and 1.")
+        if not 0.0 <= high_mean_reward_threshold <= 1.0:
+            raise ValueError("high_mean_reward_threshold must be between 0 and 1.")
         self.max_prompts = max_prompts
-        self.high_std_threshold = high_std_threshold
-        self.high_mean_threshold = high_mean_threshold
+        self.high_reward_std_threshold = high_reward_std_threshold
+        self.high_mean_reward_threshold = high_mean_reward_threshold
         self.records: dict[str, PromptRecord] = {}
-        self.pending_results: list[tuple[str, PromptOutcome]] = []
+        self.pending_rollout_outcomes: list[tuple[str, RolloutCompletionOutcome]] = []
 
     @staticmethod
     def _normalize_prompt(prompt: str) -> str:
         return str(prompt).strip()
 
-    def _group_record(self, record: PromptRecord) -> str:
-        if record.mean_reward is None or record.std_reward is None:
+    def _classify_by_latest_rollout_reward(self, record: PromptRecord) -> str:
+        if record.latest_rollout_mean_reward is None or record.latest_rollout_reward_std is None:
             raise ValueError("Cannot group a prompt that has not been evaluated.")
-        if record.std_reward > self.high_std_threshold:
-            return self.GROUP_3
-        if record.mean_reward < self.high_mean_threshold:
-            return self.GROUP_1
-        return self.GROUP_2
+        if record.latest_rollout_reward_std > self.high_reward_std_threshold:
+            return self.HIGH_VARIANCE_REWARD
+        if record.latest_rollout_mean_reward < self.high_mean_reward_threshold:
+            return self.LOW_VARIANCE_LOW_REWARD
+        return self.LOW_VARIANCE_HIGH_REWARD
 
-    def _group_records(self) -> dict[str, list[PromptRecord]]:
-        grouped = {self.GROUP_1: [], self.GROUP_2: [], self.GROUP_3: []}
+    def _group_evaluated_prompts(self) -> dict[str, list[PromptRecord]]:
+        grouped = {
+            self.LOW_VARIANCE_LOW_REWARD: [],
+            self.LOW_VARIANCE_HIGH_REWARD: [],
+            self.HIGH_VARIANCE_REWARD: [],
+        }
         for record in self.records.values():
-            if record.mean_reward is not None and record.std_reward is not None:
-                grouped[self._group_record(record)].append(record)
-        grouped[self.GROUP_1].sort(key=lambda record: (record.mean_reward, record.std_reward))
-        grouped[self.GROUP_2].sort(key=lambda record: (-record.mean_reward, record.std_reward))
-        grouped[self.GROUP_3].sort(key=lambda record: (-record.std_reward, record.mean_reward))
+            if record.latest_rollout_mean_reward is not None:
+                grouped[self._classify_by_latest_rollout_reward(record)].append(record)
+        grouped[self.LOW_VARIANCE_LOW_REWARD].sort(
+            key=lambda record: (record.latest_rollout_mean_reward, record.latest_rollout_reward_std)
+        )
+        grouped[self.LOW_VARIANCE_HIGH_REWARD].sort(
+            key=lambda record: (-record.latest_rollout_mean_reward, record.latest_rollout_reward_std)
+        )
+        grouped[self.HIGH_VARIANCE_REWARD].sort(
+            key=lambda record: (-record.latest_rollout_reward_std, record.latest_rollout_mean_reward)
+        )
         return grouped
 
-    def _update_records(self, results: list[tuple[str, PromptOutcome]]) -> None:
-        evaluations: dict[tuple[str, int | None], list[PromptOutcome]] = {}
+    def _apply_rollout_outcomes(self, results: list[tuple[str, RolloutCompletionOutcome]]) -> None:
+        rollout_groups: dict[tuple[str, int | None], list[RolloutCompletionOutcome]] = {}
         for prompt, outcome in results:
             key = (self._normalize_prompt(prompt), outcome.step)
-            evaluations.setdefault(key, []).append(outcome)
-        for (prompt, _), outcomes in evaluations.items():
+            rollout_groups.setdefault(key, []).append(outcome)
+        for (prompt, _), group_outcomes in rollout_groups.items():
             if prompt in self.records:
-                self.records[prompt].update_evaluation(outcomes)
+                self.records[prompt].update_from_rollout_group(group_outcomes)
 
     @staticmethod
-    def _generation_item(record: PromptRecord) -> dict[str, Any]:
+    def _generation_context_item(record: PromptRecord) -> dict[str, Any]:
         return {
             "prompt": record.prompt,
-            "mean_reward": record.mean_reward,
-            "std_reward": record.std_reward,
-            "outcomes": [
+            "latest_rollout_mean_reward": record.latest_rollout_mean_reward,
+            "latest_rollout_reward_std": record.latest_rollout_reward_std,
+            "outcome_history": [
                 {
                     "completion": outcome.completion,
                     "reward": outcome.reward,
                     "step": outcome.step,
                 }
-                for outcome in record.outcomes
+                for outcome in record.outcome_history
             ],
         }
 
-    def add_new_prompts(self, prompts: list[str]) -> None:
+    def add_generated_prompts(self, prompts: list[str]) -> None:
         for prompt in prompts:
             prompt = self._normalize_prompt(prompt)
             if prompt and prompt not in self.records:
@@ -109,21 +126,25 @@ class PromptBuffer:
         while len(self.records) > self.max_prompts:
             self.records.pop(next(iter(self.records)))
 
-    def add_prompt_outcome_to_record(self, prompt: str, prompt_outcome: PromptOutcome) -> None:
-        self.pending_results.append((self._normalize_prompt(prompt), prompt_outcome))
+    def record_rollout_outcome(self, prompt: str, outcome: RolloutCompletionOutcome) -> None:
+        self.pending_rollout_outcomes.append((self._normalize_prompt(prompt), outcome))
 
-    def select_for_generation(self, batch_size: int) -> dict[str, list[dict[str, Any]]]:
-        selected = {self.GROUP_1: [], self.GROUP_2: [], self.GROUP_3: []}
-        grouped = self._group_records()
+    def select_for_generation(self, max_context_prompts: int) -> dict[str, list[dict[str, Any]]]:
+        selected = {
+            self.LOW_VARIANCE_LOW_REWARD: [],
+            self.LOW_VARIANCE_HIGH_REWARD: [],
+            self.HIGH_VARIANCE_REWARD: [],
+        }
+        grouped = self._group_evaluated_prompts()
         index = 0
-        while sum(len(items) for items in selected.values()) < batch_size:
+        while sum(len(items) for items in selected.values()) < max_context_prompts:
             added = False
-            for group in self.GENERATION_GROUP_ORDER:
+            for group in self.GENERATION_CONTEXT_ORDER:
                 records = grouped[group]
                 if index < len(records):
-                    selected[group].append(self._generation_item(records[index]))
+                    selected[group].append(self._generation_context_item(records[index]))
                     added = True
-                    if sum(len(items) for items in selected.values()) == batch_size:
+                    if sum(len(items) for items in selected.values()) == max_context_prompts:
                         return selected
             if not added:
                 return selected
@@ -131,25 +152,25 @@ class PromptBuffer:
         return selected
 
     def select_for_rollout(self, batch_size: int, step: int) -> list[str]:
-        unseen = [record for record in self.records.values() if record.mean_reward is None]
-        unseen.sort(
+        unevaluated = [record for record in self.records.values() if record.latest_rollout_mean_reward is None]
+        unevaluated.sort(
             key=lambda record: (
                 record.last_selected_step is not None,
                 record.last_selected_step or -1,
             )
         )
-        high_std = self._group_records()[self.GROUP_3]
-        high_std.sort(
+        high_variance = self._group_evaluated_prompts()[self.HIGH_VARIANCE_REWARD]
+        high_variance.sort(
             key=lambda record: (
-                -record.std_reward,
+                -record.latest_rollout_reward_std,
                 record.last_selected_step is not None,
                 record.last_selected_step or -1,
             )
         )
 
-        eligible = unseen + high_std
+        eligible = unevaluated + high_variance
         if not eligible:
-            raise RuntimeError("Prompt buffer contains no unevaluated or high-std prompts for rollout.")
+            raise RuntimeError("Prompt buffer contains no unevaluated or high-variance prompts for rollout.")
         selected = eligible[:batch_size]
         while len(selected) < batch_size:
             selected.append(eligible[len(selected) % len(eligible)])
@@ -159,13 +180,13 @@ class PromptBuffer:
 
     def synchronize(self, accelerator: Any | None) -> None:
         if accelerator is None:
-            self._update_records(self.pending_results)
-            self.pending_results.clear()
+            self._apply_rollout_outcomes(self.pending_rollout_outcomes)
+            self.pending_rollout_outcomes.clear()
             return
 
         from accelerate.utils import gather_object
 
-        gathered_results = gather_object(self.pending_results)
-        self.pending_results.clear()
+        gathered_results = gather_object(self.pending_rollout_outcomes)
+        self.pending_rollout_outcomes.clear()
         if accelerator.is_main_process:
-            self._update_records(gathered_results)
+            self._apply_rollout_outcomes(gathered_results)

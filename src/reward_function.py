@@ -4,7 +4,7 @@ import re
 from pathlib import Path
 
 from src.logging import log_event
-from src.prompt_buffer import PromptBuffer, PromptOutcome
+from src.prompt_buffer import PromptBuffer, RolloutCompletionOutcome
 
 
 REFUSAL_PATTERNS = [
@@ -99,9 +99,9 @@ def make_unlearning_reward_func(buffer: PromptBuffer | None, log_path: Path):
             reward = 1.0 if refusal else 0.0
 
             if buffer is not None:
-                buffer.add_prompt_outcome_to_record(
+                buffer.record_rollout_outcome(
                     str(p),
-                    PromptOutcome(completion=str(c), reward=reward, step=step),
+                    RolloutCompletionOutcome(completion=str(c), reward=reward, step=step),
                 )
             rewards.append(reward)
             log_event(
