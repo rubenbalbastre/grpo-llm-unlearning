@@ -3,10 +3,10 @@ from __future__ import annotations
 from pathlib import Path
 from typing import Any
 
-from src.data_filter import ContaminationPromptBuffer, DataFilter
-from src.data_proposer import DataProposer
+from .data_filter import ContaminationPromptBuffer, DataFilter
+from .data_proposer import DataProposer
 from src.logging import log_event
-from src.prompt_buffer import PromptBuffer
+from .prompt_buffer import PromptBuffer
 
 
 class DataGenerator:

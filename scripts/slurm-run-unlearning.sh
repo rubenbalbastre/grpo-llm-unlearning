@@ -14,8 +14,8 @@ echo "Run program in virtual environment"
 
 REPO_DIR="${REPO_DIR:-/home/balalru/machine-unlearning-llm}"
 TRAIN_SCRIPT="${TRAIN_SCRIPT:-${REPO_DIR}/train.py}"
-SINGLE_GPU_CONFIG="${SINGLE_GPU_CONFIG:-${REPO_DIR}/configs/accelerate_single_gpu.yaml}"
-MULTI_GPU_CONFIG="${MULTI_GPU_CONFIG:-${REPO_DIR}/configs/accelerate_multi_gpu.yaml}"
+SINGLE_GPU_CONFIG="${SINGLE_GPU_CONFIG:-${REPO_DIR}/config/accelerate_single_gpu.yaml}"
+MULTI_GPU_CONFIG="${MULTI_GPU_CONFIG:-${REPO_DIR}/config/accelerate_multi_gpu.yaml}"
 IFS=',' read -ra VISIBLE_GPUS <<< "${CUDA_VISIBLE_DEVICES:-0}"
 NUM_GPUS="${NUM_GPUS:-${#VISIBLE_GPUS[@]}}"
 if ! [[ "${NUM_GPUS}" =~ ^[0-9]+$ ]] || [[ "${NUM_GPUS}" -lt 1 ]]; then
@@ -41,7 +41,7 @@ echo "Using accelerate config: ${ACCELERATE_CONFIG}"
 #   "$@"
 # echo "Finished unlearning script"
 
-echo "Evaluate trained model on RWKU using configs/eval.yaml"
+echo "Evaluate trained model on RWKU using config/eval.yaml"
 python "${REPO_DIR}/eval/rwku/rwku.py"
 echo "Finished RWKU evaluation"
 

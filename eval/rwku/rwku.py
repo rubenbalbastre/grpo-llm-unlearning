@@ -265,7 +265,7 @@ def run_evaluation(cfg: DictConfig) -> None:
     }, indent=2))
 
 
-@hydra.main(version_base=None, config_path="../../configs", config_name="eval")
+@hydra.main(version_base=None, config_path="../../config", config_name="eval")
 def main(cfg: DictConfig) -> None:
     run_evaluation(cfg)
 
