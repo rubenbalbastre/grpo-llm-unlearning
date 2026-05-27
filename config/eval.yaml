@@ -36,7 +36,6 @@ evaluation:
 
   wandb:
     enabled: true
-    project: machine-unlearning-llm
     entity: null
     run_name: rwku-${evaluation.subjects}
     artifact_name: rwku-stephen-king-model

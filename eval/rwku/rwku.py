@@ -21,6 +21,11 @@ def log_wandb_results(
     if not api_key:
         print("Skipping W&B evaluation logging: WANDB_API_KEY is not set in .env.")
         return
+    project = (env_values.get("WANDB_PROJECT") or "").strip()
+    if not project:
+        raise ValueError(
+            "evaluation.wandb.enabled=true requires WANDB_PROJECT in the repository .env file."
+        )
 
     import wandb
 
@@ -31,6 +36,12 @@ def log_wandb_results(
         run_info_path = model_dir / "wandb_run.json"
         if run_info_path.exists():
             training_run_info = json.loads(run_info_path.read_text(encoding="utf-8"))
+            if training_run_info["project"] != project:
+                raise ValueError(
+                    "WANDB_PROJECT in .env must match the project recorded for the "
+                    "linked training run: "
+                    f"{training_run_info['project']}."
+                )
         else:
             raise ValueError(
                 "evaluation.wandb.link_to_training_run=true requires "
@@ -76,7 +87,7 @@ def log_wandb_results(
     artifact.add_dir(str(output_dir), name="rwku_evaluation")
 
     init_kwargs = {
-        "project": evaluation.wandb.project,
+        "project": project,
         "entity": evaluation.wandb.entity,
         "name": evaluation.wandb.run_name,
         "config": {
