@@ -1,6 +1,6 @@
 evaluation:
-  model_name_or_path: outputs/adaptive_grpo/final_model
-  output_dir: outputs/adaptive_grpo/eval_rwku
+  model_name_or_path: outputs/latest/final_model
+  output_dir: outputs/latest/eval_rwku
   subjects: Stephen King
 
   sets:

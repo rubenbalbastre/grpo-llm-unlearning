@@ -49,7 +49,7 @@ Useful fields:
 training.mode: adaptive       # adaptive or standard
 experiment.forget_concept: Stephen King
 model.name: Qwen/Qwen2.5-3B-Instruct
-wandb.run_name_prefix: ${training.mode}
+wandb.run_name: ${training.mode}-grpo-${oc.env:SLURM_JOB_ID,local}
 data_generator.safe: true
 data_generator.generation_context_size: 64
 data_generator.new_prompts_per_step: 2
@@ -120,29 +120,35 @@ Pass Hydra overrides:
 sbatch scripts/slurm-run-unlearning.sh training.max_steps=20
 ```
 
-After training finishes successfully, this script evaluates the saved final
-model on RWKU using `config/eval.yaml`. Set `evaluation.model_name_or_path`,
-`evaluation.output_dir`, and `evaluation.subjects` there to match the training
-run being evaluated.
+After training finishes successfully, this script updates `outputs/latest` to
+point at the saved run and evaluates that model on RWKU using `config/eval.yaml`.
 
 ## Outputs
 
 Configured in `paths`:
 
 ```yaml
-paths.output_dir
-paths.events_log
-paths.final_model_dir
+paths.output_root: outputs
 ```
 
-Default outputs:
+Each training run uses the configured W&B name as its output folder:
 
 ```text
-outputs/adaptive_grpo/events.jsonl
-outputs/adaptive_grpo/final_model
-outputs/standard_grpo/events.jsonl
-outputs/standard_grpo/final_model
+outputs/<wandb_run_name>/events.jsonl
+outputs/<wandb_run_name>/final_model
+outputs/latest -> <wandb_run_name>
 ```
+
+Under Slurm, `wandb.run_name` includes `SLURM_JOB_ID`, for example
+`standard-grpo-48291`, so each submitted job gets its own local output folder.
+For separate local runs, override the default `-local` suffix explicitly:
+
+```bash
+python train.py wandb.run_name=standard-grpo-dev-001
+```
+
+`outputs/latest` is updated only after the final model has been saved
+successfully, so the post-training evaluation follows the just-completed run.
 
 ## RWKU Evaluation
 
@@ -156,8 +162,8 @@ Select evaluation sets and MIA metrics there:
 
 ```yaml
 evaluation:
-  model_name_or_path: outputs/adaptive_grpo/final_model
-  output_dir: outputs/adaptive_grpo/eval_rwku
+  model_name_or_path: outputs/latest/final_model
+  output_dir: outputs/latest/eval_rwku
   subjects: Stephen King
   sets:
     forget: true

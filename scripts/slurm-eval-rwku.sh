@@ -17,6 +17,7 @@ conda activate py312
 echo "Run program in virtual environment"
 
 REPO_DIR="${REPO_DIR:-/home/balalru/machine-unlearning-llm}"
+cd "${REPO_DIR}"
 echo "Evaluate RWKU using config/eval.yaml"
 python "${REPO_DIR}/eval/rwku/rwku.py"
 echo "Finished RWKU evaluation"
