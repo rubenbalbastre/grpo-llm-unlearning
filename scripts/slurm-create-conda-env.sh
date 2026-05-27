@@ -48,6 +48,6 @@ uv pip install \
   --torch-backend=cu126
   # vllm
 
-uv pip install weave python-dotenv sentence-transformers openai
+uv pip install weave python-dotenv sentence-transformers openai rouge-score
 
 date

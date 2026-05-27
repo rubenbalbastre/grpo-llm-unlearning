@@ -10,6 +10,7 @@ Minimal GRPO unlearning prototype with one training entrypoint:
 ```text
 train.py                      # main training entrypoint
 configs/train.yaml
+configs/eval.yaml                 # post-training RWKU evaluation config
 configs/accelerate_single_gpu.yaml
 configs/accelerate_multi_gpu.yaml
 src/data_generator.py         # GRPO-facing orchestration
@@ -114,6 +115,11 @@ Pass Hydra overrides:
 sbatch scripts/slurm-run-unlearning.sh training.max_steps=20
 ```
 
+After training finishes successfully, this script evaluates the saved final
+model on RWKU using `configs/eval.yaml`. Set `evaluation.model_name_or_path`,
+`evaluation.output_dir`, and `evaluation.subjects` there to match the training
+run being evaluated.
+
 ## Outputs
 
 Configured in `paths`:
@@ -135,20 +141,41 @@ outputs/standard_grpo/final_model
 
 ## RWKU Evaluation
 
-```bash
-python eval/rwku/rwku.py \
-  --model_name_or_path outputs/adaptive_grpo/final_model \
-  --output_dir outputs/eval_rwku/stephen_king \
-  --subjects "Stephen King"
-```
-
-Or with Slurm:
+The unlearning Slurm job automatically evaluates its final model according to:
 
 ```bash
-MODEL_NAME_OR_PATH=outputs/adaptive_grpo/final_model \
-SUBJECTS="Stephen King" \
-sbatch scripts/slurm-eval-rwku.sh
+configs/eval.yaml
 ```
+
+Select evaluation sets and MIA metrics there:
+
+```yaml
+evaluation:
+  model_name_or_path: outputs/adaptive_grpo/final_model
+  output_dir: outputs/adaptive_grpo/eval_rwku
+  subjects: Stephen King
+  sets:
+    forget: true
+    neighbor: true
+    mia: true
+    utility: false
+  metrics:
+    generation: rouge_l_recall
+    mia:
+      loss: true
+      zlib: false
+      min_k: false
+      min_k_plus_plus: false
+```
+
+`rouge_l_recall` is currently the implemented forget/neighbor generation
+metric. Only MIA `loss` is implemented; enabling the other MIA metric switches
+currently raises `NotImplementedError`.
+Hugging Face authentication for evaluation is read from
+`HUGGINGFACE_HUB_TOKEN` in `.env`.
+
+The standalone evaluation Slurm job reads the same configuration file:
+`scripts/slurm-eval-rwku.sh`.
 
 ## Notes
 
