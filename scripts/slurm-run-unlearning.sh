@@ -33,19 +33,17 @@ echo "CUDA_VISIBLE_DEVICES=${CUDA_VISIBLE_DEVICES:-not set}"
 echo "Detected ${NUM_GPUS} GPU(s)"
 echo "Using accelerate config: ${ACCELERATE_CONFIG}"
 
-echo "Run unlearning script"
-accelerate launch \
-  --config_file "${ACCELERATE_CONFIG}" \
-  --num_processes "${NUM_GPUS}" \
-  "${TRAIN_SCRIPT}" \
-  "$@"
-echo "Finished unlearning script"
+# echo "Run unlearning script"
+# accelerate launch \
+#   --config_file "${ACCELERATE_CONFIG}" \
+#   --num_processes "${NUM_GPUS}" \
+#   "${TRAIN_SCRIPT}" \
+#   "$@"
+# echo "Finished unlearning script"
 
-# evaluate RWKU
-# echo "Evaluate RWKU"
-# python /home/balalru/machine-unlearning-llm/eval/rwku/rwku.py \
-#     --model_name_or_path /home/balalru/machine-unlearning-llm/outputs/adaptive_grpo_min/final_model \
-#     --output_dir /home/balalru/machine-unlearning-llm/outputs/eval_rwku/stephen_king \
-#     --subjects "Stephen King"
+echo "Evaluate trained model on RWKU using configs/eval.yaml"
+python "${REPO_DIR}/eval/rwku/rwku.py"
+echo "Finished RWKU evaluation"
+
 # Add time for later troubleshooting
 date

@@ -1,73 +1,154 @@
-import argparse
 import json
-import os
 from pathlib import Path
 
-from transformers import AutoModelForCausalLM, AutoTokenizer
-
-from generation_eval import evaluate_forget_set, evaluate_neighbor_set
-from mia_eval import evaluate_mia
-from results import (
-    aggregate_generation,
-    aggregate_mia,
-    aggregate_utility,
-    build_summary_table_row,
-    write_summary_tables,
-)
-from utility_eval import evaluate_utility_set
+import hydra
+from omegaconf import DictConfig, OmegaConf
+from dotenv import dotenv_values
 
 
-def main():
-    parser = argparse.ArgumentParser()
-    parser.add_argument("--model_name_or_path", type=str, default="Qwen/Qwen2.5-0.5B-Instruct", required=True)
-    parser.add_argument("--output_dir", type=str, required=True)
-    parser.add_argument("--subjects", type=str, default=None)
-    parser.add_argument("--run_forget_set", action=argparse.BooleanOptionalAction, default=True)
-    parser.add_argument("--run_neighbor_set", action=argparse.BooleanOptionalAction, default=True)
-    parser.add_argument("--run_mia_set", action=argparse.BooleanOptionalAction, default=True)
-    parser.add_argument("--run_utility_set", action=argparse.BooleanOptionalAction, default=True)
-    parser.add_argument("--max_examples", type=int, default=None)
-    parser.add_argument("--max_mia_examples", type=int, default=None)
-    parser.add_argument("--max_utility_examples", type=int, default=None)
-    parser.add_argument("--compute_mia_loss", action=argparse.BooleanOptionalAction, default=True)
-    parser.add_argument("--compute_mia_zlib", action=argparse.BooleanOptionalAction, default=False)
-    parser.add_argument("--compute_mia_min_k", action=argparse.BooleanOptionalAction, default=False)
-    parser.add_argument("--compute_mia_min_k_plus_plus", action=argparse.BooleanOptionalAction, default=False)
-    parser.add_argument("--max_new_tokens", type=int, default=64)
-    parser.add_argument("--batch_size", type=int, default=8)
-    parser.add_argument("--mia_batch_size", type=int, default=None)
-    parser.add_argument("--utility_batch_size", type=int, default=4)
-    parser.add_argument("--temperature", type=float, default=0.0)
-    parser.add_argument("--torch_dtype", type=str, default="auto")
-    parser.add_argument("--hf_token", type=str, default=None)
-    parser.add_argument("--model_label", type=str, default=None)
-    parser.add_argument("--trust_remote_code", action=argparse.BooleanOptionalAction, default=False)
-    parser.add_argument("--attn_implementation", type=str, default=None)
-    args = parser.parse_args()
-    if args.batch_size <= 0:
-        raise ValueError("--batch_size must be >= 1")
-    if args.mia_batch_size is not None and args.mia_batch_size <= 0:
-        raise ValueError("--mia_batch_size must be >= 1")
-    if args.utility_batch_size <= 0:
-        raise ValueError("--utility_batch_size must be >= 1")
-    output_dir = Path(args.output_dir)
+def log_wandb_results(
+    evaluation: DictConfig,
+    env_values: dict,
+    output_dir: Path,
+    metrics: dict,
+    mia_metrics: dict,
+    utility_metrics: dict,
+) -> None:
+    if not evaluation.wandb.enabled:
+        return
+
+    api_key = (env_values.get("WANDB_API_KEY") or "").strip()
+    if not api_key:
+        print("Skipping W&B evaluation logging: WANDB_API_KEY is not set in .env.")
+        return
+
+    import wandb
+
+    wandb.login(key=api_key, relogin=True)
+    model_dir = Path(evaluation.model_name_or_path)
+    training_run_info = None
+    if evaluation.wandb.link_to_training_run:
+        run_info_path = model_dir / "wandb_run.json"
+        if run_info_path.exists():
+            training_run_info = json.loads(run_info_path.read_text(encoding="utf-8"))
+        else:
+            raise ValueError(
+                "evaluation.wandb.link_to_training_run=true requires "
+                "wandb_run.json in evaluation.model_name_or_path. Set it to false "
+                "to create a separate evaluation run."
+            )
+
+    generation_by_split = {
+        row["split"]: row["rouge_l_recall"]
+        for row in metrics["by_split"]
+    }
+    mia_by_split = {
+        row["split"]: row.get("loss")
+        for row in mia_metrics["by_split"]
+    }
+    utility_by_split = {
+        row["split"]: row["score"]
+        for row in utility_metrics["by_split"]
+    }
+    scalar_metrics = {
+        "rwku/forget/rouge_l_recall": metrics["forget"]["rouge_l_recall"],
+        "rwku/neighbor/rouge_l_recall": metrics["neighbor_locality"]["rouge_l_recall"],
+        **{f"rwku/{split}/rouge_l_recall": value for split, value in generation_by_split.items()},
+        **{f"rwku/{split}/loss": value for split, value in mia_by_split.items()},
+        **{f"rwku/{split}/score": value for split, value in utility_by_split.items()},
+    }
+
+    artifact = wandb.Artifact(
+        name=str(evaluation.wandb.artifact_name),
+        type="model" if evaluation.wandb.log_model_artifact else "evaluation",
+        metadata={
+            "model_name_or_path": str(evaluation.model_name_or_path),
+            "subjects": str(evaluation.subjects),
+        },
+    )
+    if evaluation.wandb.log_model_artifact:
+        if not model_dir.is_dir():
+            raise ValueError(
+                "evaluation.wandb.log_model_artifact=true requires "
+                "evaluation.model_name_or_path to be a local model directory."
+            )
+        artifact.add_dir(str(model_dir), name="model")
+    artifact.add_dir(str(output_dir), name="rwku_evaluation")
+
+    init_kwargs = {
+        "project": evaluation.wandb.project,
+        "entity": evaluation.wandb.entity,
+        "name": evaluation.wandb.run_name,
+        "config": {
+            "model_name_or_path": str(evaluation.model_name_or_path),
+            "subjects": str(evaluation.subjects),
+            "sets": OmegaConf.to_container(evaluation.sets, resolve=True),
+            "metrics": OmegaConf.to_container(evaluation.metrics, resolve=True),
+        },
+    }
+    if training_run_info:
+        init_kwargs.update(
+            {
+                "id": training_run_info["id"],
+                "project": training_run_info["project"],
+                "entity": training_run_info["entity"],
+                "name": training_run_info["name"],
+                "resume": "must",
+            }
+        )
+    else:
+        init_kwargs["job_type"] = "evaluation"
+
+    with wandb.init(**init_kwargs) as run:
+        run.log({key: value for key, value in scalar_metrics.items() if value is not None})
+        run.log_artifact(artifact)
+
+
+def run_evaluation(cfg: DictConfig) -> None:
+    evaluation = cfg.evaluation
+    if evaluation.metrics.generation != "rouge_l_recall":
+        raise ValueError(
+            "evaluation.metrics.generation must be 'rouge_l_recall'; "
+            "no other RWKU generation metric is implemented."
+        )
+    if evaluation.batch_size <= 0:
+        raise ValueError("evaluation.batch_size must be >= 1")
+    if evaluation.mia_batch_size <= 0:
+        raise ValueError("evaluation.mia_batch_size must be >= 1")
+    if evaluation.utility_batch_size <= 0:
+        raise ValueError("evaluation.utility_batch_size must be >= 1")
+
+    from transformers import AutoModelForCausalLM, AutoTokenizer
+
+    from generation_eval import evaluate_forget_set, evaluate_neighbor_set
+    from mia_eval import evaluate_mia
+    from results import (
+        aggregate_generation,
+        aggregate_mia,
+        aggregate_utility,
+        build_summary_table_row,
+        write_summary_tables,
+    )
+    from utility_eval import evaluate_utility_set
+
+    output_dir = Path(evaluation.output_dir)
     output_dir.mkdir(parents=True, exist_ok=True)
 
     subjects = None
-    if args.subjects:
-        subjects = [s.strip() for s in args.subjects.split(",") if s.strip()]
+    if evaluation.subjects:
+        subjects = [s.strip() for s in str(evaluation.subjects).split(",") if s.strip()]
         if any(s.lower() in {"all", "none"} for s in subjects):
             subjects = None
 
-    hf_token = args.hf_token or os.getenv("HF_TOKEN") or os.getenv("HUGGINGFACE_HUB_TOKEN")
+    env_values = dotenv_values(Path(__file__).resolve().parents[2] / ".env")
+    hf_token = (env_values.get("HUGGINGFACE_HUB_TOKEN") or "").strip()
     from_pretrained_kwargs = {
-        "trust_remote_code": args.trust_remote_code,
+        "token": hf_token or False,
+        "trust_remote_code": evaluation.model.trust_remote_code,
     }
-    if hf_token:
-        from_pretrained_kwargs["token"] = hf_token
 
     tokenizer = AutoTokenizer.from_pretrained(
-        args.model_name_or_path,
+        evaluation.model_name_or_path,
         **from_pretrained_kwargs,
     )
 
@@ -76,73 +157,81 @@ def main():
     tokenizer.padding_side = "left"
 
     model_kwargs = {
-        "torch_dtype": args.torch_dtype,
+        "torch_dtype": evaluation.model.torch_dtype,
         "device_map": "auto",
     }
-    if args.attn_implementation:
-        model_kwargs["attn_implementation"] = args.attn_implementation
+    if evaluation.model.attn_implementation:
+        model_kwargs["attn_implementation"] = evaluation.model.attn_implementation
 
     model = AutoModelForCausalLM.from_pretrained(
-        args.model_name_or_path,
+        evaluation.model_name_or_path,
         **model_kwargs,
         **from_pretrained_kwargs,
     )
     model.eval()
 
     forget_rows = []
-    if args.run_forget_set:
+    if evaluation.sets.forget:
         forget_rows = evaluate_forget_set(
             model=model,
             tokenizer=tokenizer,
             subjects=subjects,
-            max_examples=args.max_examples,
-            max_new_tokens=args.max_new_tokens,
-            temperature=args.temperature,
-            batch_size=args.batch_size,
+            max_examples=evaluation.limits.max_examples,
+            max_new_tokens=evaluation.generation.max_new_tokens,
+            temperature=evaluation.generation.temperature,
+            batch_size=evaluation.batch_size,
         )
 
     neighbor_rows = []
-    if args.run_neighbor_set:
+    if evaluation.sets.neighbor:
         neighbor_rows = evaluate_neighbor_set(
             model=model,
             tokenizer=tokenizer,
             subjects=subjects,
-            max_examples=args.max_examples,
-            max_new_tokens=args.max_new_tokens,
-            temperature=args.temperature,
-            batch_size=args.batch_size,
+            max_examples=evaluation.limits.max_examples,
+            max_new_tokens=evaluation.generation.max_new_tokens,
+            temperature=evaluation.generation.temperature,
+            batch_size=evaluation.batch_size,
         )
     all_rows = forget_rows + neighbor_rows
 
     all_mia_rows = []
-    if args.run_mia_set:
+    if evaluation.sets.mia:
         all_mia_rows = evaluate_mia(
             model=model,
             tokenizer=tokenizer,
             subjects=subjects,
-            max_examples=args.max_mia_examples if args.max_mia_examples is not None else args.max_examples,
-            batch_size=args.mia_batch_size if args.mia_batch_size is not None else args.batch_size,
-            loss=args.compute_mia_loss,
-            zlib=args.compute_mia_zlib,
-            min_k=args.compute_mia_min_k,
-            min_k_plus_plus=args.compute_mia_min_k_plus_plus,
+            max_examples=(
+                evaluation.limits.max_mia_examples
+                if evaluation.limits.max_mia_examples is not None
+                else evaluation.limits.max_examples
+            ),
+            batch_size=evaluation.mia_batch_size,
+            loss=evaluation.metrics.mia.loss,
+            zlib=evaluation.metrics.mia.zlib,
+            min_k=evaluation.metrics.mia.min_k,
+            min_k_plus_plus=evaluation.metrics.mia.min_k_plus_plus,
         )
 
     all_utility_rows = []
-    if args.run_utility_set:
+    if evaluation.sets.utility:
         all_utility_rows = evaluate_utility_set(
             model=model,
             tokenizer=tokenizer,
-            max_examples=args.max_utility_examples if args.max_utility_examples is not None else args.max_examples,
-            max_new_tokens=args.max_new_tokens,
-            temperature=args.temperature,
-            batch_size=args.utility_batch_size,
+            max_examples=(
+                evaluation.limits.max_utility_examples
+                if evaluation.limits.max_utility_examples is not None
+                else evaluation.limits.max_examples
+            ),
+            max_new_tokens=evaluation.generation.max_new_tokens,
+            temperature=evaluation.generation.temperature,
+            batch_size=evaluation.utility_batch_size,
         )
 
     metrics = aggregate_generation(all_rows)
     mia_metrics = aggregate_mia(all_mia_rows)
     utility_metrics = aggregate_utility(all_utility_rows)
-    model_label = args.model_label or Path(args.model_name_or_path).name or args.model_name_or_path
+    model_label = evaluation.model.label or Path(evaluation.model_name_or_path).name or evaluation.model_name_or_path
     summary_table_row = build_summary_table_row(metrics, mia_metrics, utility_metrics, model_label)
 
     with open(output_dir / "rwku_generations.jsonl", "w", encoding="utf-8") as f:
@@ -164,6 +253,7 @@ def main():
         json.dump(metrics, f, indent=2, ensure_ascii=False)
 
     write_summary_tables(output_dir, summary_table_row)
+    log_wandb_results(evaluation, env_values, output_dir, metrics, mia_metrics, utility_metrics)
 
     print(json.dumps({
         "forget": metrics["forget"],
@@ -173,6 +263,11 @@ def main():
         "by_split": metrics["by_split"],
         "summary_table_row": summary_table_row,
     }, indent=2))
+
+
+@hydra.main(version_base=None, config_path="../../configs", config_name="eval")
+def main(cfg: DictConfig) -> None:
+    run_evaluation(cfg)
 
 
 if __name__ == "__main__":

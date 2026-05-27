@@ -31,3 +31,21 @@ def setup_wandb() -> bool:
 def setup_huggingface_hub() -> None:
     if int(os.getenv("RANK", "0")) == 0:
         login(token=os.getenv("HUGGINGFACE_HUB_TOKEN"))
+
+
+def save_wandb_run_info(model_dir: Path) -> None:
+    """Persist the active training run identity for post-training evaluation."""
+    if wandb.run is None:
+        return
+
+    model_dir.mkdir(parents=True, exist_ok=True)
+    run_info = {
+        "id": wandb.run.id,
+        "name": wandb.run.name,
+        "project": wandb.run.project,
+        "entity": wandb.run.entity,
+    }
+    (model_dir / "wandb_run.json").write_text(
+        json.dumps(run_info, indent=2),
+        encoding="utf-8",
+    )

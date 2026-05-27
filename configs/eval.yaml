@@ -1,0 +1,44 @@
+evaluation:
+  model_name_or_path: outputs/adaptive_grpo/final_model
+  output_dir: outputs/adaptive_grpo/eval_rwku
+  subjects: Stephen King
+
+  sets:
+    forget: true
+    neighbor: true
+    mia: true
+    utility: false
+
+  metrics:
+    generation: rouge_l_recall
+    mia:
+      loss: true
+      zlib: false
+      min_k: false
+      min_k_plus_plus: false
+
+  limits:
+    max_examples: null
+    max_mia_examples: null
+    max_utility_examples: null
+
+  batch_size: 32
+  mia_batch_size: 16
+  utility_batch_size: 4
+  generation:
+    max_new_tokens: 64
+    temperature: 0.0
+  model:
+    label: null
+    torch_dtype: auto
+    trust_remote_code: false
+    attn_implementation: null
+
+  wandb:
+    enabled: true
+    project: machine-unlearning-llm
+    entity: null
+    run_name: rwku-${evaluation.subjects}
+    artifact_name: rwku-stephen-king-model
+    log_model_artifact: true
+    link_to_training_run: true

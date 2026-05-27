@@ -16,7 +16,7 @@ from trl import GRPOConfig, GRPOTrainer
 from dotenv import load_dotenv
 
 from src.data_generator import DataGenerator
-from src.logging import setup_wandb, setup_huggingface_hub
+from src.logging import save_wandb_run_info, setup_wandb, setup_huggingface_hub
 from src.prompt_buffer import PromptBuffer
 from src.reward_function import make_unlearning_reward_func
 from src.get_contaminated_data import get_rwku_contaminated_data
@@ -215,6 +215,8 @@ def main(cfg: DictConfig) -> None:
     # save final model and tokenizer
     trainer.save_model(str(final_model_dir))
     tokenizer.save_pretrained(final_model_dir)
+    if wandb_enabled and trainer.is_world_process_zero():
+        save_wandb_run_info(final_model_dir)
     repo_name = (
         f"llm-unlearning-{model_name.split('/')[-1]}-forget-"
         f"{re.sub(r'[^A-Za-z0-9._-]+', '-', forget_concept).strip('-')}"

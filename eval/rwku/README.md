@@ -1,12 +1,55 @@
 # RWKU Evaluation
 
-This folder contains the RWKU evaluation scripts. The entrypoint is:
+RWKU evaluation is configured only through `configs/eval.yaml`. The training
+Slurm job runs evaluation automatically after saving its final model, and
+`scripts/slurm-eval-rwku.sh` runs the same configured evaluation independently.
+If authentication is needed, it is read from `HUGGINGFACE_HUB_TOKEN` in the
+repository `.env` file.
 
-```bash
-python eval/rwku/rwku.py
+Set the model, results directory, and optional target filter in the config:
+
+```yaml
+evaluation:
+  model_name_or_path: outputs/adaptive_grpo/final_model
+  output_dir: outputs/adaptive_grpo/eval_rwku
+  subjects: Stephen King
 ```
 
-Models are loaded with Transformers' native implementations by default. Use `--trust_remote_code` only for models that require repository-provided code. For Phi-3 on recent Transformers, leave remote code disabled.
+Configure evaluation work in the same file:
+
+```yaml
+evaluation:
+  sets:
+    forget: true
+    neighbor: true
+    mia: true
+    utility: false
+  metrics:
+    generation: rouge_l_recall
+    mia:
+      loss: true
+      zlib: false
+      min_k: false
+      min_k_plus_plus: false
+  limits:
+    max_examples: null
+    max_mia_examples: null
+    max_utility_examples: null
+  wandb:
+    enabled: true
+    project: machine-unlearning-llm
+    run_name: rwku-${evaluation.subjects}
+    artifact_name: rwku-stephen-king-model
+    log_model_artifact: true
+    link_to_training_run: true
+```
+
+When W&B logging is enabled and `WANDB_API_KEY` is present in `.env`,
+`link_to_training_run: true` resumes the training W&B run recorded in
+`final_model/wandb_run.json` and logs scalar `rwku/*` metrics there. With
+`log_model_artifact: true`, it also uploads the local model directory and
+result files as a W&B `model` artifact. Set `link_to_training_run: false` for
+models without that recorded training-run identity.
 
 | Set | Ability | RWKU dataset | Metric computed |
 | --- | --- | --- | --- |
@@ -15,56 +58,17 @@ Models are loaded with Transformers' native implementations by default. Use `--t
 | Forget Set | Adversarial Attack | Forget AA | ROUGE-L recall |
 | Neighbor Set | Knowledge Memorization | Neighbor FB | ROUGE-L recall |
 | Neighbor Set | Knowledge Manipulation | Neighbor QA | ROUGE-L recall |
-| MIA Set | Knowledge Memorization | FM | Loss by default; configurable via boolean MIA options |
-| MIA Set | Knowledge Memorization | RM | Loss by default; configurable via boolean MIA options |
+| MIA Set | Knowledge Memorization | FM | Loss |
+| MIA Set | Knowledge Memorization | RM | Loss |
 | Utility Set | General Ability | MMLU | Accuracy via answer-option likelihood |
 | Utility Set | Reasoning Ability | BBH | Exact match |
 | Utility Set | Truthfulness | TruthfulQA | Accuracy via answer-option likelihood |
 | Utility Set | Factuality | TriviaQA | Token F1 |
 | Utility Set | Fluency | AlpacaEval | Weighted bi-/tri-gram entropy |
 
-By default, only the MIA `loss` metric is computed:
+Only the MIA `loss` metric is implemented currently. Enabling `zlib`, `min_k`,
+or `min_k_plus_plus` raises `NotImplementedError`.
 
-```bash
-python eval/rwku/rwku.py \
-  --model_name_or_path Qwen/Qwen2.5-0.5B-Instruct \
-  --output_dir outputs/eval_rwku/qwen_stephen_king \
-  --subjects "Stephen King" \
-  --compute_mia_loss
-```
-
-The four paper metrics are represented by:
-
-```text
---compute_mia_loss
---compute_mia_zlib
---compute_mia_min_k
---compute_mia_min_k_plus_plus
-```
-
-Each boolean option can be disabled with the matching `--no-...` flag. Currently only `Loss` is implemented. The other MIA options are present in the interface and raise `NotImplementedError` if enabled.
-
-For MIA, per-example `loss` in `rwku_mia.jsonl` is mean token negative log-likelihood, matching Hugging Face's causal-LM loss normalization. The summary table then sums that normalized loss within each subject and averages subject sums, which keeps the table on the RWKU single-target/all-target scale. The raw unnormalized sequence NLL is also written as `total_loss` for debugging, but it is not used for the FM/RM table columns.
-
-Set-level execution can be toggled independently:
-
-```bash
-python eval/rwku/rwku.py \
-  --model_name_or_path Qwen/Qwen2.5-0.5B-Instruct \
-  --output_dir outputs/eval_rwku/qwen_forget_only \
-  --subjects "Stephen King" \
-  --run_forget_set \
-  --no-run_neighbor_set \
-  --no-run_mia_set \
-  --no-run_utility_set
-```
-
-MIA likelihood scoring can use a separate batch size:
-
-```bash
-python eval/rwku/rwku.py \
-  --model_name_or_path Qwen/Qwen2.5-0.5B-Instruct \
-  --output_dir outputs/eval_rwku/qwen_mia \
-  --subjects "Stephen King" \
-  --mia_batch_size 8
-```
+For MIA, per-example `loss` in `rwku_mia.jsonl` is mean token negative log
+likelihood. The summary table sums that normalized loss within each subject
+and averages subject sums, keeping the RWKU single-target/all-target scale.
