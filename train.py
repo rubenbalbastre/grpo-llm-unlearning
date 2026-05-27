@@ -92,6 +92,18 @@ def load_standard_dataset(cfg: DictConfig) -> Dataset:
 def get_peft_config(cfg: DictConfig, num_hidden_layers: int) -> LoraConfig:
     from peft import LoraConfig
     lora_args = cfg.get("peft", None).get("lora", None)
+    number_layers_to_transform = int(lora_args.number_layers_to_transform)
+    if number_layers_to_transform == -1:
+        layers_to_transform = list(range(num_hidden_layers))
+    elif 1 <= number_layers_to_transform <= num_hidden_layers:
+        layers_to_transform = list(
+            range(num_hidden_layers - number_layers_to_transform, num_hidden_layers)
+        )
+    else:
+        raise ValueError(
+            "peft.lora.number_layers_to_transform must be -1 or between 1 "
+            f"and {num_hidden_layers}, got {number_layers_to_transform}."
+        )
     return LoraConfig(
         r=lora_args.r,
         lora_alpha=lora_args.alpha,
@@ -102,12 +114,7 @@ def get_peft_config(cfg: DictConfig, num_hidden_layers: int) -> LoraConfig:
         task_type="CAUSAL_LM",
         bias="none",
         layers_pattern="layers",
-        layers_to_transform=list(
-            range(
-                num_hidden_layers - lora_args.number_layers_to_transform,
-                num_hidden_layers,
-            )
-        ),
+        layers_to_transform=layers_to_transform,
     )
 
 

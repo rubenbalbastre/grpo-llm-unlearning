@@ -52,7 +52,7 @@ peft:
       - "gate_proj"
       - "up_proj"
       - "down_proj"
-    number_layers_to_transform: 12
+    number_layers_to_transform: -1 # Set to -1 to apply LoRA to all transformer layers.
 
 training:
   mode: standard # standard or adaptive
