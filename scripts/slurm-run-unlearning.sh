@@ -13,6 +13,7 @@ conda activate py312
 echo "Run program in virtual environment"
 
 REPO_DIR="${REPO_DIR:-/home/balalru/machine-unlearning-llm}"
+cd "${REPO_DIR}"
 TRAIN_SCRIPT="${TRAIN_SCRIPT:-${REPO_DIR}/train.py}"
 SINGLE_GPU_CONFIG="${SINGLE_GPU_CONFIG:-${REPO_DIR}/config/accelerate_single_gpu.yaml}"
 MULTI_GPU_CONFIG="${MULTI_GPU_CONFIG:-${REPO_DIR}/config/accelerate_multi_gpu.yaml}"
