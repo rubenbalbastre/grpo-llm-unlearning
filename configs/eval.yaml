@@ -33,3 +33,12 @@ evaluation:
     torch_dtype: auto
     trust_remote_code: false
     attn_implementation: null
+
+  wandb:
+    enabled: true
+    project: machine-unlearning-llm
+    entity: null
+    run_name: rwku-${evaluation.subjects}
+    artifact_name: rwku-stephen-king-model
+    log_model_artifact: true
+    link_to_training_run: true

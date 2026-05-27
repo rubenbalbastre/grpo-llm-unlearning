@@ -166,13 +166,24 @@ evaluation:
       zlib: false
       min_k: false
       min_k_plus_plus: false
+  wandb:
+    enabled: true
+    project: machine-unlearning-llm
+    run_name: rwku-${evaluation.subjects}
+    artifact_name: rwku-stephen-king-model
+    log_model_artifact: true
+    link_to_training_run: true
 ```
 
 `rouge_l_recall` is currently the implemented forget/neighbor generation
 metric. Only MIA `loss` is implemented; enabling the other MIA metric switches
 currently raises `NotImplementedError`.
-Hugging Face authentication for evaluation is read from
-`HUGGINGFACE_HUB_TOKEN` in `.env`.
+Hugging Face and W&B authentication for evaluation are read from
+`HUGGINGFACE_HUB_TOKEN` and `WANDB_API_KEY` in `.env`. With
+`link_to_training_run: true`, training writes its W&B run identity into the
+saved model directory and post-training evaluation resumes that same run to
+log `rwku/*` metrics and a model artifact containing the model and RWKU result
+files. Set it to `false` when evaluating a model without training-run metadata.
 
 The standalone evaluation Slurm job reads the same configuration file:
 `scripts/slurm-eval-rwku.sh`.

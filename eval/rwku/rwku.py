@@ -2,8 +2,106 @@ import json
 from pathlib import Path
 
 import hydra
-from omegaconf import DictConfig
+from omegaconf import DictConfig, OmegaConf
 from dotenv import dotenv_values
+
+
+def log_wandb_results(
+    evaluation: DictConfig,
+    env_values: dict,
+    output_dir: Path,
+    metrics: dict,
+    mia_metrics: dict,
+    utility_metrics: dict,
+) -> None:
+    if not evaluation.wandb.enabled:
+        return
+
+    api_key = (env_values.get("WANDB_API_KEY") or "").strip()
+    if not api_key:
+        print("Skipping W&B evaluation logging: WANDB_API_KEY is not set in .env.")
+        return
+
+    import wandb
+
+    wandb.login(key=api_key, relogin=True)
+    model_dir = Path(evaluation.model_name_or_path)
+    training_run_info = None
+    if evaluation.wandb.link_to_training_run:
+        run_info_path = model_dir / "wandb_run.json"
+        if run_info_path.exists():
+            training_run_info = json.loads(run_info_path.read_text(encoding="utf-8"))
+        else:
+            raise ValueError(
+                "evaluation.wandb.link_to_training_run=true requires "
+                "wandb_run.json in evaluation.model_name_or_path. Set it to false "
+                "to create a separate evaluation run."
+            )
+
+    generation_by_split = {
+        row["split"]: row["rouge_l_recall"]
+        for row in metrics["by_split"]
+    }
+    mia_by_split = {
+        row["split"]: row.get("loss")
+        for row in mia_metrics["by_split"]
+    }
+    utility_by_split = {
+        row["split"]: row["score"]
+        for row in utility_metrics["by_split"]
+    }
+    scalar_metrics = {
+        "rwku/forget/rouge_l_recall": metrics["forget"]["rouge_l_recall"],
+        "rwku/neighbor/rouge_l_recall": metrics["neighbor_locality"]["rouge_l_recall"],
+        **{f"rwku/{split}/rouge_l_recall": value for split, value in generation_by_split.items()},
+        **{f"rwku/{split}/loss": value for split, value in mia_by_split.items()},
+        **{f"rwku/{split}/score": value for split, value in utility_by_split.items()},
+    }
+
+    artifact = wandb.Artifact(
+        name=str(evaluation.wandb.artifact_name),
+        type="model" if evaluation.wandb.log_model_artifact else "evaluation",
+        metadata={
+            "model_name_or_path": str(evaluation.model_name_or_path),
+            "subjects": str(evaluation.subjects),
+        },
+    )
+    if evaluation.wandb.log_model_artifact:
+        if not model_dir.is_dir():
+            raise ValueError(
+                "evaluation.wandb.log_model_artifact=true requires "
+                "evaluation.model_name_or_path to be a local model directory."
+            )
+        artifact.add_dir(str(model_dir), name="model")
+    artifact.add_dir(str(output_dir), name="rwku_evaluation")
+
+    init_kwargs = {
+        "project": evaluation.wandb.project,
+        "entity": evaluation.wandb.entity,
+        "name": evaluation.wandb.run_name,
+        "config": {
+            "model_name_or_path": str(evaluation.model_name_or_path),
+            "subjects": str(evaluation.subjects),
+            "sets": OmegaConf.to_container(evaluation.sets, resolve=True),
+            "metrics": OmegaConf.to_container(evaluation.metrics, resolve=True),
+        },
+    }
+    if training_run_info:
+        init_kwargs.update(
+            {
+                "id": training_run_info["id"],
+                "project": training_run_info["project"],
+                "entity": training_run_info["entity"],
+                "name": training_run_info["name"],
+                "resume": "must",
+            }
+        )
+    else:
+        init_kwargs["job_type"] = "evaluation"
+
+    with wandb.init(**init_kwargs) as run:
+        run.log({key: value for key, value in scalar_metrics.items() if value is not None})
+        run.log_artifact(artifact)
 
 
 def run_evaluation(cfg: DictConfig) -> None:
@@ -155,6 +253,7 @@ def run_evaluation(cfg: DictConfig) -> None:
         json.dump(metrics, f, indent=2, ensure_ascii=False)
 
     write_summary_tables(output_dir, summary_table_row)
+    log_wandb_results(evaluation, env_values, output_dir, metrics, mia_metrics, utility_metrics)
 
     print(json.dumps({
         "forget": metrics["forget"],

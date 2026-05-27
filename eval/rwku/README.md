@@ -35,7 +35,21 @@ evaluation:
     max_examples: null
     max_mia_examples: null
     max_utility_examples: null
+  wandb:
+    enabled: true
+    project: machine-unlearning-llm
+    run_name: rwku-${evaluation.subjects}
+    artifact_name: rwku-stephen-king-model
+    log_model_artifact: true
+    link_to_training_run: true
 ```
+
+When W&B logging is enabled and `WANDB_API_KEY` is present in `.env`,
+`link_to_training_run: true` resumes the training W&B run recorded in
+`final_model/wandb_run.json` and logs scalar `rwku/*` metrics there. With
+`log_model_artifact: true`, it also uploads the local model directory and
+result files as a W&B `model` artifact. Set `link_to_training_run: false` for
+models without that recorded training-run identity.
 
 | Set | Ability | RWKU dataset | Metric computed |
 | --- | --- | --- | --- |

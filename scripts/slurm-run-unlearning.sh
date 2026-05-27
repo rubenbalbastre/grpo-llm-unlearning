@@ -33,13 +33,13 @@ echo "CUDA_VISIBLE_DEVICES=${CUDA_VISIBLE_DEVICES:-not set}"
 echo "Detected ${NUM_GPUS} GPU(s)"
 echo "Using accelerate config: ${ACCELERATE_CONFIG}"
 
-echo "Run unlearning script"
-accelerate launch \
-  --config_file "${ACCELERATE_CONFIG}" \
-  --num_processes "${NUM_GPUS}" \
-  "${TRAIN_SCRIPT}" \
-  "$@"
-echo "Finished unlearning script"
+# echo "Run unlearning script"
+# accelerate launch \
+#   --config_file "${ACCELERATE_CONFIG}" \
+#   --num_processes "${NUM_GPUS}" \
+#   "${TRAIN_SCRIPT}" \
+#   "$@"
+# echo "Finished unlearning script"
 
 echo "Evaluate trained model on RWKU using configs/eval.yaml"
 python "${REPO_DIR}/eval/rwku/rwku.py"
