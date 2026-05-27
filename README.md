@@ -60,6 +60,7 @@ reward.mode: entity_count # entity_count or binary
 standard_data.config_name: train_refusal_phi3
 standard_data.dataset_size: 100 # limit after filtering by forget_concept
 training.num_epochs: 1 # standard mode only; use with training.max_steps=-1
+peft.lora.number_layers_to_transform: -1 # all transformer layers
 training.beta: 0.04
 ```
 
