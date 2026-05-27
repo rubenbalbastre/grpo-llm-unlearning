@@ -63,7 +63,8 @@ training:
   steps_per_generation: 8
   num_iterations: 2
   beta: 0.0 # 0.04
-  max_steps: -1 # 100
+  max_steps: -1 # Set a positive value for adaptive mode; overrides num_epochs in standard mode.
+  num_epochs: 1 # Applied only when mode is standard and max_steps is -1.
   learning_rate: 0.000005
   max_completion_length: 64 #256
   remove_unused_columns: false

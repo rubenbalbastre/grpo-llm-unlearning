@@ -59,6 +59,7 @@ buffer.high_mean_reward_threshold: 0.75
 reward.mode: entity_count # entity_count or binary
 standard_data.config_name: train_refusal_phi3
 standard_data.dataset_size: 100 # limit after filtering by forget_concept
+training.num_epochs: 1 # standard mode only; use with training.max_steps=-1
 training.beta: 0.04
 ```
 
@@ -66,7 +67,7 @@ Override with Hydra:
 
 ```bash
 python train.py training.mode=adaptive training.max_steps=20
-python train.py training.mode=standard standard_data.dataset_size=100
+python train.py training.mode=standard standard_data.dataset_size=100 training.num_epochs=2
 ```
 
 ## Run

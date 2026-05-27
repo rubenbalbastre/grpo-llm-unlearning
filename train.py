@@ -181,6 +181,12 @@ def main(cfg: DictConfig) -> None:
         events_log_path,
         reward_mode=cfg.reward.mode,
     )
+    standard_training_args: dict[str, Any] = {}
+    if mode == "standard":
+        num_epochs = float(cfg.training.num_epochs)
+        if num_epochs <= 0:
+            raise ValueError("training.num_epochs must be positive in standard mode.")
+        standard_training_args["num_train_epochs"] = num_epochs
 
     args = GRPOConfig(
         output_dir=str(output_dir),
@@ -199,6 +205,7 @@ def main(cfg: DictConfig) -> None:
         report_to=["wandb"] if wandb_enabled else [],
         log_completions=cfg.training.log_completions,
         logging_steps=cfg.training.logging_steps,
+        **standard_training_args,
     )
 
     trainer = GRPOTrainer(
