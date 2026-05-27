@@ -4,7 +4,7 @@ import re
 from pathlib import Path
 
 from src.logging import log_event
-from src.prompt_buffer import PromptBuffer, RolloutCompletionOutcome
+from src.data_generator.prompt_buffer import PromptBuffer, RolloutCompletionOutcome
 
 
 REFUSAL_PATTERNS = [

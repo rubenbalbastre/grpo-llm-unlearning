@@ -9,19 +9,21 @@ Minimal GRPO unlearning prototype with one training entrypoint:
 
 ```text
 train.py                      # main training entrypoint
-configs/train.yaml
-configs/eval.yaml                 # post-training RWKU evaluation config
-configs/accelerate_single_gpu.yaml
-configs/accelerate_multi_gpu.yaml
-src/data_generator.py         # GRPO-facing orchestration
-src/prompt_buffer.py          # prompt outcomes and selection
-src/data_proposer.py          # OpenAI prompt proposal
-src/data_filter.py            # embedding/FAISS filtering
+config/train.yaml
+config/eval.yaml                 # post-training RWKU evaluation config
+config/accelerate_single_gpu.yaml
+config/accelerate_multi_gpu.yaml
+src/data_generator/
+  data_generator.py           # GRPO-facing orchestration
+  prompt_buffer.py            # prompt outcomes and selection
+  data_proposer.py            # OpenAI prompt proposal
+  data_filter.py              # embedding/FAISS filtering
+  get_contaminated_data.py
 src/reward_function.py
-src/get_contaminated_data.py
 eval/rwku/                    # RWKU evaluation
 scripts/slurm-run-unlearning.sh
 scripts/slurm-eval-rwku.sh
+scratch/                      # temporary exploratory probes
 ```
 
 ## Setup
@@ -38,7 +40,7 @@ Fill `.env` with your keys. `OPENAI_API_KEY` is required for adaptive data gener
 Main config:
 
 ```bash
-configs/train.yaml
+config/train.yaml
 ```
 
 Useful fields:
@@ -72,7 +74,7 @@ Single GPU:
 
 ```bash
 accelerate launch \
-  --config_file configs/accelerate_single_gpu.yaml \
+  --config_file config/accelerate_single_gpu.yaml \
   train.py
 ```
 
@@ -80,7 +82,7 @@ Multi GPU:
 
 ```bash
 accelerate launch \
-  --config_file configs/accelerate_multi_gpu.yaml \
+  --config_file config/accelerate_multi_gpu.yaml \
   --num_processes 2 \
   train.py
 ```
@@ -116,7 +118,7 @@ sbatch scripts/slurm-run-unlearning.sh training.max_steps=20
 ```
 
 After training finishes successfully, this script evaluates the saved final
-model on RWKU using `configs/eval.yaml`. Set `evaluation.model_name_or_path`,
+model on RWKU using `config/eval.yaml`. Set `evaluation.model_name_or_path`,
 `evaluation.output_dir`, and `evaluation.subjects` there to match the training
 run being evaluated.
 
@@ -144,7 +146,7 @@ outputs/standard_grpo/final_model
 The unlearning Slurm job automatically evaluates its final model according to:
 
 ```bash
-configs/eval.yaml
+config/eval.yaml
 ```
 
 Select evaluation sets and MIA metrics there:

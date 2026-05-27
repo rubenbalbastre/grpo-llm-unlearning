@@ -1,6 +1,6 @@
 # RWKU Evaluation
 
-RWKU evaluation is configured only through `configs/eval.yaml`. The training
+RWKU evaluation is configured only through `config/eval.yaml`. The training
 Slurm job runs evaluation automatically after saving its final model, and
 `scripts/slurm-eval-rwku.sh` runs the same configured evaluation independently.
 If authentication is needed, it is read from `HUGGINGFACE_HUB_TOKEN` in the

@@ -5,8 +5,8 @@ from pathlib import Path
 from dotenv import load_dotenv
 import weave
 
-from src.data_generator import DataGenerator
-from src.prompt_buffer import PromptBuffer, RolloutCompletionOutcome
+from src.data_generator.data_generator import DataGenerator
+from src.data_generator.prompt_buffer import PromptBuffer, RolloutCompletionOutcome
 
 
 def main():

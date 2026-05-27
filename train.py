@@ -15,11 +15,11 @@ from transformers import AutoModelForCausalLM, AutoTokenizer
 from trl import GRPOConfig, GRPOTrainer
 from dotenv import load_dotenv
 
-from src.data_generator import DataGenerator
+from src.data_generator.data_generator import DataGenerator
 from src.logging import save_wandb_run_info, setup_wandb, setup_huggingface_hub
-from src.prompt_buffer import PromptBuffer
+from src.data_generator.prompt_buffer import PromptBuffer
 from src.reward_function import make_unlearning_reward_func
-from src.get_contaminated_data import get_rwku_contaminated_data
+from src.data_generator.get_contaminated_data import get_rwku_contaminated_data
 
 
 def adaptive_rollout_func(prompts: list[str], trainer) -> dict[str, Any]:
@@ -105,7 +105,7 @@ def get_peft_config(cfg: DictConfig, num_hidden_layers: int) -> LoraConfig:
     )
 
 
-@hydra.main(version_base=None, config_path="configs", config_name="train")
+@hydra.main(version_base=None, config_path="config", config_name="train")
 def main(cfg: DictConfig) -> None:
 
     # seed for reproducibility
