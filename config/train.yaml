@@ -29,6 +29,7 @@ standard_data:
   split: train
   subject_column: subject
   prompt_column: instruction
+  dataset_size: 100 # Samples retained after filtering by forget_concept, e.g. 100.
 
 buffer:
   max_prompts: 512
@@ -54,15 +55,15 @@ peft:
     number_layers_to_transform: 12
 
 training:
-  mode: adaptive # standard or adaptive
-  local_batch_size: 4
-  num_generations: 2
+  mode: standard # standard or adaptive
+  per_device_train_batch_size: 8
+  num_generations: 4
   gradient_accumulation_steps: 8
   gradient_checkpointing: True
   steps_per_generation: 8
   num_iterations: 2
   beta: 0.0 # 0.04
-  max_steps: 6
+  max_steps: -1 # 100
   learning_rate: 0.000005
   max_completion_length: 64 #256
   remove_unused_columns: false

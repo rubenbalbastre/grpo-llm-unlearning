@@ -1,8 +1,8 @@
 #!/bin/bash -l
 #SBATCH --job-name=slurm-run-unlearning
 #SBATCH --output=logs/slurm-run-unlearning-%j.log
-#SBATCH --gres=gpu:1
-#SBATCH --time=01:30:00
+#SBATCH --gres=gpu:2
+#SBATCH --time=03:00:00
 #SBATCH --partition=sc-gpu
 set -euo pipefail
 
@@ -34,12 +34,12 @@ echo "Detected ${NUM_GPUS} GPU(s)"
 echo "Using accelerate config: ${ACCELERATE_CONFIG}"
 
 # echo "Run unlearning script"
-# accelerate launch \
-#   --config_file "${ACCELERATE_CONFIG}" \
-#   --num_processes "${NUM_GPUS}" \
-#   "${TRAIN_SCRIPT}" \
-#   "$@"
-# echo "Finished unlearning script"
+accelerate launch \
+  --config_file "${ACCELERATE_CONFIG}" \
+  --num_processes "${NUM_GPUS}" \
+  "${TRAIN_SCRIPT}" \
+  "$@"
+echo "Finished unlearning script"
 
 echo "Evaluate trained model on RWKU using config/eval.yaml"
 python "${REPO_DIR}/eval/rwku/rwku.py"

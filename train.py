@@ -80,6 +80,12 @@ def load_standard_dataset(cfg: DictConfig) -> Dataset:
     dataset = dataset.filter(
         lambda row: row[subject_column] == cfg.experiment.forget_concept
     )
+    dataset_size = cfg.standard_data.get("dataset_size")
+    if dataset_size is not None:
+        dataset_size = int(dataset_size)
+        if dataset_size <= 0:
+            raise ValueError("standard_data.dataset_size must be positive or null.")
+        dataset = dataset.select(range(min(dataset_size, len(dataset))))
     return dataset.select_columns([prompt_column]).rename_column(prompt_column, "prompt")
 
 
@@ -129,7 +135,7 @@ def main(cfg: DictConfig) -> None:
     model = AutoModelForCausalLM.from_pretrained(model_name)
     peft_config = get_peft_config(cfg, num_hidden_layers=model.config.num_hidden_layers)
 
-    local_batch_size = cfg.training.local_batch_size
+    per_device_train_batch_size = cfg.training.per_device_train_batch_size
 
     forget_concept = cfg.experiment.forget_concept
     mode = cfg.training.mode
@@ -141,7 +147,7 @@ def main(cfg: DictConfig) -> None:
         )
         num_processes = int(os.getenv("WORLD_SIZE", "1"))
         placeholder_dataset_size = (
-            local_batch_size
+            per_device_train_batch_size
             * num_processes
             * cfg.training.steps_per_generation
             // cfg.training.num_generations
@@ -179,7 +185,7 @@ def main(cfg: DictConfig) -> None:
     args = GRPOConfig(
         output_dir=str(output_dir),
         run_name=f"{cfg.wandb.run_name_prefix}-{uuid.uuid4().hex[:8]}",
-        per_device_train_batch_size=local_batch_size,
+        per_device_train_batch_size=per_device_train_batch_size,
         gradient_accumulation_steps=cfg.training.gradient_accumulation_steps,
         num_generations=cfg.training.num_generations,
         steps_per_generation=cfg.training.steps_per_generation,
