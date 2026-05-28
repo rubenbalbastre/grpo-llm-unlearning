@@ -32,7 +32,7 @@ standard_data:
 buffer:
   max_prompts: 512
   high_reward_std_threshold: 0.2
-  high_mean_reward_threshold: 0.75
+  high_mean_reward_threshold: 0.5
 
 reward:
   mode: binary # entity_count or binary
