@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import math
 from pathlib import Path
 from typing import Any
 
@@ -25,14 +26,13 @@ class DataGenerator:
         # final generation configuration
         safe: bool = False,
         generation_context_size: int = 16,
-        new_prompts_per_step: int = 2,
+        new_prompts_per_step: float = 0.5,
         oversample_factor: int = 4,
         max_attempts: int = 5,
     ) -> None:
         if safe and not protected_data:
             raise ValueError("DataGenerator requires protected_data when safe=True.")
-        if new_prompts_per_step <= 0:
-            raise ValueError("new_prompts_per_step must be positive.")
+        self._validate_new_prompts_per_step(new_prompts_per_step)
         if oversample_factor <= 0:
             raise ValueError("oversample_factor must be >= 1.")
         if max_attempts <= 0:
@@ -44,7 +44,7 @@ class DataGenerator:
         self.safe = safe
         self.oversample_factor = oversample_factor
         self.max_attempts = max_attempts
-        self.new_prompts_per_step = new_prompts_per_step
+        self.new_prompts_per_step = float(new_prompts_per_step)
         # proposer configuration
         self.mode = mode
         self.topic = topic
@@ -144,8 +144,9 @@ class DataGenerator:
             rollout_group_context = buffer.select_for_generation(
                 max_context_prompts=self.generation_context_size
             )
+            new_prompts_per_step = self._resolve_new_prompts_per_step(num_prompts)
             num_new_prompts = max(
-                self.new_prompts_per_step,
+                new_prompts_per_step,
                 num_prompts - len(buffer.records),
             )
             generated = self.generate_prompts(
@@ -192,8 +193,19 @@ class DataGenerator:
                 "rollout_group_context": batch_info.get("rollout_group_context", {}),
                 "prompt_pool_size": batch_info.get("prompt_pool_size", 0),
                 "num_selected_prompts": num_prompts,
+                "num_new_prompts_per_step": self._resolve_new_prompts_per_step(
+                    num_prompts
+                ),
                 "process_index": process_index,
                 "selected_prompts": final_prompts,
             },
         )
         return final_prompts
+
+    @staticmethod
+    def _validate_new_prompts_per_step(value: float) -> None:
+        if not 0 < float(value) <= 1:
+            raise ValueError("new_prompts_per_step must be a float in (0, 1].")
+
+    def _resolve_new_prompts_per_step(self, batch_size: int) -> int:
+        return max(1, math.ceil(batch_size * float(self.new_prompts_per_step)))

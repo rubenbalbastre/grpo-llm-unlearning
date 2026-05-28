@@ -52,7 +52,7 @@ model.name: Qwen/Qwen2.5-3B-Instruct
 wandb.run_name: ${training.mode}-grpo-${oc.env:SLURM_JOB_ID,local}
 data_generator.safe: true
 data_generator.generation_context_size: 64
-data_generator.new_prompts_per_step: 2
+data_generator.new_prompts_per_step: 0.5 # Fraction of the rollout prompt batch generated each step.
 buffer.max_prompts: 512
 buffer.high_reward_std_threshold: 0.1
 buffer.high_mean_reward_threshold: 0.75
