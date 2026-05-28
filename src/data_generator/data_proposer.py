@@ -8,6 +8,8 @@ from dotenv import load_dotenv
 from pydantic import BaseModel
 from textwrap import dedent
 
+from src.logging import log_event
+
 
 GeneratorMode = Literal[
     "natural",
@@ -189,7 +191,18 @@ class DataProposer:
                     }
                 )
             if len(out) < num_prompts:
-                raise RuntimeError(f"DataGenerator returned {len(out)} prompts, expected at least {num_prompts}.")
+                log_event(
+                    self.log_path,
+                    {
+                        "type": "data_generator_shortfall",
+                        "requested_prompts": num_prompts,
+                        "returned_prompts": len(prompts),
+                        "accepted_prompts": len(out),
+                        "missing_prompts": num_prompts - len(out),
+                        "model_name": self.model_name,
+                        "mode": self.mode,
+                    },
+                )
             return out
         except Exception as e:
             raise RuntimeError(f"DataGenerator generation failed: {e}") from e
