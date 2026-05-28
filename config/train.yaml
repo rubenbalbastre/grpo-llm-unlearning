@@ -19,7 +19,7 @@ data_generator:
   safe: false
   model_name: gpt-5.4-nano
   generation_context_size: 64
-  new_prompts_per_step: 2
+  new_prompts_per_step: 0.5 # Fraction of the rollout prompt batch generated each step.
 
 standard_data:
   name: jinzhuoran/RWKU
@@ -32,7 +32,7 @@ standard_data:
 buffer:
   max_prompts: 512
   high_reward_std_threshold: 0.2
-  high_mean_reward_threshold: 0.75
+  high_mean_reward_threshold: 0.5
 
 reward:
   mode: binary # entity_count or binary
