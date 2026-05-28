@@ -27,7 +27,7 @@ standard_data:
   split: train
   subject_column: subject
   prompt_column: instruction
-  dataset_size: none # Samples retained after filtering by forget_concept, e.g. 100.
+  dataset_size: null # Samples retained after filtering by forget_concept, e.g. 100.
 
 buffer:
   max_prompts: 512
@@ -62,7 +62,7 @@ training:
   num_iterations: 2
   beta: 0.04 # 0.04
   max_steps: -1 # Set a positive value for adaptive mode; overrides num_epochs in standard mode.
-  num_epochs: 15 # Applied only when mode is standard and max_steps is -1.
+  num_epochs: 40 # Applied only when mode is standard and max_steps is -1.
   learning_rate: 1.0e-5
   max_completion_length: 256 #256
   remove_unused_columns: false
