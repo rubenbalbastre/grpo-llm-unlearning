@@ -18,7 +18,8 @@ wandb:
 data_generator:
   safe: false
   model_name: gpt-5.4-nano
-  generation_context_size: 64
+  mode: "natural" # natural or expanded
+  generation_context_size: 32
   new_prompts_per_step: 0.5 # Fraction of the rollout prompt batch generated each step.
 
 standard_data:
@@ -32,7 +33,7 @@ standard_data:
 buffer:
   max_prompts: 512
   high_reward_std_threshold: 0.2
-  high_mean_reward_threshold: 0.5
+  high_mean_reward_threshold: 0.3
 
 reward:
   mode: binary # entity_count or binary
@@ -53,7 +54,7 @@ peft:
     number_layers_to_transform: -1 # Set to -1 to apply LoRA to all transformer layers.
 
 training:
-  mode: standard # standard or adaptive
+  mode: adaptive # standard or adaptive
   per_device_train_batch_size: 16
   num_generations: 4
   gradient_accumulation_steps: 8
@@ -61,15 +62,15 @@ training:
   steps_per_generation: 8
   num_iterations: 2
   beta: 0.04 # 0.04
-  max_steps: -1 # Set a positive value for adaptive mode; overrides num_epochs in standard mode.
-  num_epochs: 40 # Applied only when mode is standard and max_steps is -1.
   learning_rate: 1.0e-5
   max_completion_length: 256 #256
   remove_unused_columns: false
   log_completions: true
   logging_steps: 5
+  max_steps: 100000 # too large since token budget callback will stop training when the token budget is reached. Set to -1 to disable.
+  num_epochs: 40 # Applied only when mode is standard and max_steps is -1.
   callback:
-    token_budget: 3_000_000 # null if not using StopOnTokenBudgetCallback
+    token_budget: 3_000_000 #3_000_000 # null if not using StopOnTokenBudgetCallback
 
 hydra:
   job:

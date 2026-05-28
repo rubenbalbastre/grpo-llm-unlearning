@@ -182,6 +182,7 @@ def main(cfg: DictConfig) -> None:
             topic=f"Forget concept: '{forget_concept}.'",
             log_path=events_log_path,
             model_name=cfg.data_generator.model_name,
+            mode=cfg.data_generator.mode,
             generation_context_size=cfg.data_generator.generation_context_size,
             new_prompts_per_step=cfg.data_generator.new_prompts_per_step,
             safe=cfg.data_generator.safe,
