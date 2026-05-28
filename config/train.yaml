@@ -68,6 +68,8 @@ training:
   remove_unused_columns: false
   log_completions: true
   logging_steps: 5
+  callback:
+    token_budget: 3_000_000 # null if not using StopOnTokenBudgetCallback
 
 hydra:
   job:

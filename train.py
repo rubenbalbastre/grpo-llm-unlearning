@@ -19,6 +19,7 @@ from src.logging import save_wandb_run_info, setup_wandb, setup_huggingface_hub
 from src.data_generator.prompt_buffer import PromptBuffer
 from src.reward_function import make_unlearning_reward_func
 from src.data_generator.get_contaminated_data import get_rwku_contaminated_data
+from src.trainer_callback import StopOnTokenBudgetCallback
 
 
 def adaptive_rollout_func(prompts: list[str], trainer) -> dict[str, Any]:
@@ -153,10 +154,11 @@ def main(cfg: DictConfig) -> None:
         tokenizer.pad_token = tokenizer.eos_token
     tokenizer.padding_side = "left"
     model = AutoModelForCausalLM.from_pretrained(model_name)
+    # LoRA configuration
     peft_config = get_peft_config(cfg, num_hidden_layers=model.config.num_hidden_layers)
 
+    # Data Generator configuration
     per_device_train_batch_size = cfg.training.per_device_train_batch_size
-
     forget_concept = cfg.experiment.forget_concept
     mode = cfg.training.mode
     if mode == "adaptive":
@@ -196,17 +198,27 @@ def main(cfg: DictConfig) -> None:
         data_generator = None
     else:
         raise ValueError("training.mode must be either 'adaptive' or 'standard'.")
+
+    # Reward function configuration
     reward_func = make_unlearning_reward_func(
         buffer,
         events_log_path,
         reward_mode=cfg.reward.mode,
     )
+
+    # other GRPO configurations
     standard_training_args: dict[str, Any] = {}
     if mode == "standard":
         num_epochs = float(cfg.training.num_epochs)
         if num_epochs <= 0:
             raise ValueError("training.num_epochs must be positive in standard mode.")
         standard_training_args["num_train_epochs"] = num_epochs
+
+    # callbacks
+    if cfg.get("training").get("callback", None) is not None:
+        callbacks = [StopOnTokenBudgetCallback(max_tokens=cfg.training.callback.token_budget)]
+    else:
+        callbacks = None
 
     args = GRPOConfig(
         output_dir=str(output_dir),
@@ -236,6 +248,7 @@ def main(cfg: DictConfig) -> None:
         reward_funcs=reward_func,
         rollout_func=rollout_func,
         peft_config=peft_config,
+        callbacks=callbacks
     )
     trainer.events_log_path = events_log_path
     if data_generator is not None:
