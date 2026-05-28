@@ -12,18 +12,22 @@ from .prompt_buffer import PromptBuffer
 class DataGenerator:
     def __init__(
         self,
-        topic: str,
         log_path: Path,
+        # proposer configuration
+        topic: str,
         model_name: str = "gpt-5.4-nano",
-        generation_context_size: int = 16,
-        safe: bool = False,
+        mode: GeneratorMode = "natural",
+        # filtering configuration
         protected_data: list[str] | None = None,
         embedding_model_name: str = "BAAI/bge-large-en-v1.5",
         filter_threshold: float = 0.75,
+        contamination_history_size: int = 512,
+        # final generation configuration
+        safe: bool = False,
+        generation_context_size: int = 16,
+        new_prompts_per_step: int = 2,
         oversample_factor: int = 4,
         max_attempts: int = 5,
-        contamination_history_size: int = 512,
-        new_prompts_per_step: int = 2,
     ) -> None:
         if safe and not protected_data:
             raise ValueError("DataGenerator requires protected_data when safe=True.")
@@ -35,18 +39,27 @@ class DataGenerator:
             raise ValueError("max_attempts must be >= 1.")
 
         self.log_path = log_path
+        # generation configuration
         self.generation_context_size = generation_context_size
         self.safe = safe
-        self.data_filter = None
         self.oversample_factor = oversample_factor
         self.max_attempts = max_attempts
         self.new_prompts_per_step = new_prompts_per_step
+        # proposer configuration
+        self.mode = mode
+        self.topic = topic
+        self.model_name = model_name
         self.proposer = DataProposer(
             topic=topic,
             log_path=log_path,
             model_name=model_name,
+            mode=mode
         )
+        # filtering configuration
         self.contamination_buffer = None
+        self.data_filter = None
+        self.filter_threshold = filter_threshold
+        self.embedding_model_name = embedding_model_name
         if safe:
             self.data_filter = DataFilter(
                 data=protected_data or [],
