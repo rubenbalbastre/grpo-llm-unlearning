@@ -144,11 +144,7 @@ class DataGenerator:
             rollout_group_context = buffer.select_for_generation(
                 max_context_prompts=self.generation_context_size
             )
-            new_prompts_per_step = self._resolve_new_prompts_per_step(num_prompts)
-            num_new_prompts = max(
-                new_prompts_per_step,
-                num_prompts - len(buffer.records),
-            )
+            num_new_prompts = self._resolve_new_prompts_per_step(num_prompts)
             generated = self.generate_prompts(
                 rollout_group_context=rollout_group_context,
                 num_prompts=num_new_prompts,
