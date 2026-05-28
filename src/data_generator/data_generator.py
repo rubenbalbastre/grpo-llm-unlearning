@@ -8,6 +8,7 @@ from .data_filter import ContaminationPromptBuffer, DataFilter
 from .data_proposer import DataProposer
 from src.logging import log_event
 from .prompt_buffer import PromptBuffer
+from src.data_generator.data_proposer import GeneratorMode
 
 
 class DataGenerator:
