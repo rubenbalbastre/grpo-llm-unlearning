@@ -23,7 +23,7 @@ evaluation:
   limits:
     max_examples: null
     max_mia_examples: null
-    max_utility_examples: 1000
+    max_utility_examples: 100
 
   batch_size: 32
   mia_batch_size: 32
