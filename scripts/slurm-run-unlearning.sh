@@ -43,7 +43,27 @@ accelerate launch \
 echo "Finished unlearning script"
 
 echo "Evaluate trained model on RWKU using config/eval.yaml"
-python "${REPO_DIR}/eval/rwku/rwku.py"
+if [[ "${NUM_GPUS}" -le 1 ]]; then
+  python "${REPO_DIR}/eval/rwku/rwku.py"
+else
+  pids=()
+  for SHARD_INDEX in "${!VISIBLE_GPUS[@]}"; do
+    GPU_ID="${VISIBLE_GPUS[${SHARD_INDEX}]}"
+    echo "Starting eval shard ${SHARD_INDEX}/${NUM_GPUS} on GPU ${GPU_ID}"
+    CUDA_VISIBLE_DEVICES="${GPU_ID}" python "${REPO_DIR}/eval/rwku/rwku.py" \
+      evaluation.shard.index="${SHARD_INDEX}" \
+      evaluation.shard.count="${NUM_GPUS}" &
+    pids+=("$!")
+  done
+
+  for pid in "${pids[@]}"; do
+    wait "${pid}"
+  done
+
+  python "${REPO_DIR}/eval/rwku/merge_shards.py" \
+    evaluation.shard.index=0 \
+    evaluation.shard.count="${NUM_GPUS}"
+fi
 echo "Finished RWKU evaluation"
 
 # Add time for later troubleshooting
