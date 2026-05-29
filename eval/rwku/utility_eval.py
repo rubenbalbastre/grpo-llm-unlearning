@@ -21,6 +21,18 @@ def utility_split_batch_size(batch_sizes, split_name: str) -> int:
     return batch_size
 
 
+def choice_label(index: int) -> str:
+    if index < len(CHOICE_LABELS):
+        return CHOICE_LABELS[index]
+    if index < 26:
+        return chr(ord("A") + index)
+    return f"CHOICE_{index}"
+
+
+def choice_labels(count: int) -> List[str]:
+    return [choice_label(idx) for idx in range(count)]
+
+
 def extract_choices(example: Dict) -> Optional[List[str]]:
     choices = first_present(example, ["choices", "options", "candidates"])
     if choices is None:
@@ -36,28 +48,50 @@ def extract_choices(example: Dict) -> Optional[List[str]]:
     return [choice for choice in normalized if choice]
 
 
+def extract_mc1_target(example: Dict) -> tuple[Optional[List[str]], Optional[str]]:
+    mc1_targets = example.get("mc1_targets")
+    if not isinstance(mc1_targets, dict):
+        return None, None
+
+    choices = mc1_targets.get("choices")
+    labels = mc1_targets.get("labels")
+    if not isinstance(choices, list) or not isinstance(labels, list):
+        return None, None
+
+    normalized_choices = [normalize_text(choice) for choice in choices]
+    normalized_choices = [choice for choice in normalized_choices if choice]
+    if not normalized_choices:
+        return None, None
+
+    for idx, label in enumerate(labels):
+        if idx < len(normalized_choices) and int(label) == 1:
+            return normalized_choices, choice_label(idx)
+    return normalized_choices, None
+
+
 def normalize_choice_answer(answer, choices: Optional[List[str]]) -> str:
+    labels = choice_labels(len(choices or []))
     if isinstance(answer, int):
-        return CHOICE_LABELS[answer] if 0 <= answer < len(CHOICE_LABELS) else str(answer)
+        return labels[answer] if 0 <= answer < len(labels) else str(answer)
 
     text = normalize_text(answer)
     if not text:
         return ""
 
     upper = text.upper().strip()
-    if upper in CHOICE_LABELS:
+    if upper in labels:
         return upper
     if upper.isdigit():
         idx = int(upper)
         if choices and 0 <= idx < len(choices):
-            return CHOICE_LABELS[idx]
+            return labels[idx]
 
     if choices:
         for idx, choice in enumerate(choices):
             if text.strip().lower() == choice.strip().lower():
-                return CHOICE_LABELS[idx]
+                return labels[idx]
 
-    match = re.search(r"\b([A-H])\b", upper)
+    match = re.search(r"\b([A-Z])\b", upper)
     if match:
         return match.group(1)
     return text
@@ -65,20 +99,20 @@ def normalize_choice_answer(answer, choices: Optional[List[str]]) -> str:
 
 def extract_predicted_choice(prediction: str) -> str:
     upper = prediction.strip().upper()
-    match = re.search(r"\b([A-H])\b", upper)
+    match = re.search(r"\b([A-Z])\b", upper)
     if match:
         return match.group(1)
-    match = re.match(r"^\s*([A-H])[\).:\s]", upper)
+    match = re.match(r"^\s*([A-Z])[\).:\s]", upper)
     if match:
         return match.group(1)
     return upper[:1]
 
 
 def extract_choices_from_prompt(prompt: str) -> Optional[List[str]]:
-    matches = re.findall(r"(?:^|\n)\s*([A-H])[\).]\s+(.+?)(?=\n\s*[A-H][\).]\s+|\Z)", prompt, flags=re.DOTALL)
+    matches = re.findall(r"(?:^|\n)\s*([A-Z])[\).]\s+(.+?)(?=\n\s*[A-Z][\).]\s+|\Z)", prompt, flags=re.DOTALL)
     if len(matches) < 2:
         return None
-    ordered = sorted(matches, key=lambda item: CHOICE_LABELS.index(item[0]) if item[0] in CHOICE_LABELS else 99)
+    ordered = sorted(matches, key=lambda item: ord(item[0]) if len(item[0]) == 1 else 99)
     return [normalize_text(text) for _, text in ordered]
 
 
@@ -94,12 +128,26 @@ def build_utility_prompt(example: Dict) -> tuple[str, Optional[List[str]], str]:
             first_present(example, ["question", "query", "input", "prompt", "text", "content"])
         )
 
-    choices = extract_choices(example) or extract_choices_from_prompt(question)
-    answer = first_present(example, ["answer", "target", "label", "gold", "correct_answer", "output"])
+    mc1_choices, mc1_answer = extract_mc1_target(example)
+    choices = mc1_choices or extract_choices(example) or extract_choices_from_prompt(question)
+    answer = mc1_answer or first_present(
+        example,
+        [
+            "answer",
+            "answers",
+            "answerscolumn",
+            "target",
+            "label",
+            "gold",
+            "correct_answer",
+            "output",
+        ],
+    )
 
     if choices:
+        labels = choice_labels(len(choices))
         rendered_choices = "\n".join(
-            f"{CHOICE_LABELS[idx]}. {choice}" for idx, choice in enumerate(choices)
+            f"{labels[idx]}. {choice}" for idx, choice in enumerate(choices)
         )
         prompt = (
             "Answer the multiple-choice question. "
@@ -165,12 +213,13 @@ def evaluate_utility_split(
         all_multiple_choice = all(item[1] for item in prepared)
 
         if all_multiple_choice:
+            choices_batch = [item[1] for item in prepared if item[1]]
             predicted_answers = score_choice_likelihood_batch(
                 model=model,
                 tokenizer=tokenizer,
                 prompts=prompts,
-                choices_batch=[item[1] for item in prepared if item[1]],
-                choice_labels=CHOICE_LABELS,
+                choices_batch=choices_batch,
+                choice_labels=choice_labels(max(len(choices) for choices in choices_batch)),
                 forward_batch_size=choice_likelihood_batch_size,
             )
             preds = predicted_answers
