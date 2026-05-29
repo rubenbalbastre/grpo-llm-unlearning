@@ -54,4 +54,4 @@ SUMMARY_SPLIT_MAP = {
     "neighbor_qa": "neighbor_level2",
 }
 
-CHOICE_LABELS = ["A", "B", "C", "D", "E", "F", "G", "H"]
+CHOICE_LABELS = ["A", "B", "C", "D", "E", "F", "G", "H", "I", "J", "K", "L"]
