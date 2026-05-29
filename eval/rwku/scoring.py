@@ -101,7 +101,11 @@ def score_choice_likelihood_batch(
     prompts: List[str],
     choices_batch: List[List[str]],
     choice_labels: List[str],
+    forward_batch_size: int = 8,
 ) -> List[str]:
+    if forward_batch_size <= 0:
+        raise ValueError("forward_batch_size must be >= 1.")
+
     flat_texts = []
     flat_meta = []
     for row_idx, (prompt, choices) in enumerate(zip(prompts, choices_batch, strict=True)):
@@ -118,34 +122,41 @@ def score_choice_likelihood_batch(
             flat_texts.append(text)
             flat_meta.append((row_idx, choice_idx, len(prompt_ids)))
 
-    inputs = tokenizer(
-        flat_texts,
-        return_tensors="pt",
-        padding=True,
-        truncation=True,
-        max_length=2048,
-    ).to(model.device)
-
-    outputs = model(**inputs)
-    logits = outputs.logits[:, :-1, :].contiguous()
-    labels = inputs["input_ids"][:, 1:].contiguous()
-    mask = inputs["attention_mask"][:, 1:].contiguous()
-
-    losses = torch.nn.functional.cross_entropy(
-        logits.view(-1, logits.size(-1)),
-        labels.view(-1),
-        reduction="none",
-    ).view(labels.shape)
-
     scores_by_row: list[list[tuple[int, float]]] = [[] for _ in prompts]
-    for flat_idx, (row_idx, choice_idx, prompt_len) in enumerate(flat_meta):
-        pad_len = int(inputs["input_ids"].shape[1] - inputs["attention_mask"][flat_idx].sum().detach().cpu())
-        start = max(pad_len + prompt_len - 1, 0)
-        continuation_mask = mask[flat_idx].clone()
-        continuation_mask[:start] = 0
-        token_count = continuation_mask.sum().clamp_min(1)
-        mean_nll = (losses[flat_idx] * continuation_mask).sum() / token_count
-        scores_by_row[row_idx].append((choice_idx, -float(mean_nll.detach().cpu())))
+    for start_idx in range(0, len(flat_texts), forward_batch_size):
+        end_idx = min(start_idx + forward_batch_size, len(flat_texts))
+        batch_texts = flat_texts[start_idx:end_idx]
+        batch_meta = flat_meta[start_idx:end_idx]
+        inputs = tokenizer(
+            batch_texts,
+            return_tensors="pt",
+            padding=True,
+            truncation=True,
+            max_length=2048,
+        ).to(model.device)
+
+        outputs = model(**inputs)
+        logits = outputs.logits[:, :-1, :]
+        labels = inputs["input_ids"][:, 1:]
+        mask = inputs["attention_mask"][:, 1:]
+
+        losses = torch.nn.functional.cross_entropy(
+            logits.transpose(1, 2),
+            labels,
+            reduction="none",
+        )
+
+        for batch_idx, (row_idx, choice_idx, prompt_len) in enumerate(batch_meta):
+            pad_len = int(
+                inputs["input_ids"].shape[1]
+                - inputs["attention_mask"][batch_idx].sum().detach().cpu()
+            )
+            start = max(pad_len + prompt_len - 1, 0)
+            continuation_mask = mask[batch_idx].clone()
+            continuation_mask[:start] = 0
+            token_count = continuation_mask.sum().clamp_min(1)
+            mean_nll = (losses[batch_idx] * continuation_mask).sum() / token_count
+            scores_by_row[row_idx].append((choice_idx, -float(mean_nll.detach().cpu())))
 
     predictions = []
     for scores in scores_by_row:

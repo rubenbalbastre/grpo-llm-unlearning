@@ -3,10 +3,22 @@ from typing import Dict, List, Optional
 
 from tqdm import tqdm
 
-from common import first_present, load_rwku_split, normalize_text, select_max_examples
+from common import first_present, load_rwku_split, normalize_text, select_max_examples, shard_dataset
 from constants import CHOICE_LABELS, RWKU_UTILITY_SPLITS
 from metrics import exact_match_score, rouge_l_recall, token_f1_score, weighted_ngram_entropy
 from scoring import generate_batch, score_choice_likelihood_batch
+
+
+def utility_split_batch_size(batch_sizes, split_name: str) -> int:
+    if batch_sizes is None or split_name not in batch_sizes:
+        raise ValueError(
+            "evaluation.utility_batch_size must define a batch size for "
+            f"{split_name}."
+        )
+    batch_size = int(batch_sizes[split_name])
+    if batch_size <= 0:
+        raise ValueError(f"evaluation.utility_batch_size.{split_name} must be >= 1.")
+    return batch_size
 
 
 def extract_choices(example: Dict) -> Optional[List[str]]:
@@ -109,12 +121,15 @@ def evaluate_utility_split(
     tokenizer,
     split_name: str,
     max_examples: Optional[int],
+    shard,
     max_new_tokens: int,
     temperature: float,
     batch_size: int,
+    choice_likelihood_batch_size: int,
 ) -> List[Dict]:
     dataset = load_rwku_split(split_name)
     dataset = select_max_examples(dataset, max_examples)
+    dataset = shard_dataset(dataset, shard)
 
     if split_name == "utility_fluency":
         rows = []
@@ -156,6 +171,7 @@ def evaluate_utility_split(
                 prompts=prompts,
                 choices_batch=[item[1] for item in prepared if item[1]],
                 choice_labels=CHOICE_LABELS,
+                forward_batch_size=choice_likelihood_batch_size,
             )
             preds = predicted_answers
         else:
@@ -209,21 +225,26 @@ def evaluate_utility_set(
     model,
     tokenizer,
     max_examples: Optional[int],
+    shard,
     max_new_tokens: int,
     temperature: float,
-    batch_size: int,
+    batch_sizes,
+    choice_likelihood_batch_size: int,
 ) -> List[Dict]:
     rows = []
     for split_name in RWKU_UTILITY_SPLITS:
+        batch_size = utility_split_batch_size(batch_sizes, split_name)
         rows.extend(
             evaluate_utility_split(
                 model=model,
                 tokenizer=tokenizer,
                 split_name=split_name,
                 max_examples=max_examples,
+                shard=shard,
                 max_new_tokens=max_new_tokens,
                 temperature=temperature,
                 batch_size=batch_size,
+                choice_likelihood_batch_size=choice_likelihood_batch_size,
             )
         )
     return rows
