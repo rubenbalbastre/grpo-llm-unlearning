@@ -117,6 +117,18 @@ def log_wandb_results(
 
 def run_evaluation(cfg: DictConfig) -> None:
     evaluation = cfg.evaluation
+    shard = evaluation.get("shard")
+    shard_count = int(shard.count) if shard is not None else 1
+    shard_index = int(shard.index) if shard is not None else 0
+    if shard_count <= 0:
+        raise ValueError("evaluation.shard.count must be >= 1.")
+    if not 0 <= shard_index < shard_count:
+        raise ValueError(
+            "evaluation.shard.index must be between 0 and "
+            f"evaluation.shard.count - 1, got {shard_index}/{shard_count}."
+        )
+    output_suffix = f".shard{shard_index}" if shard_count > 1 else ""
+
     if evaluation.metrics.generation != "rouge_l_recall":
         raise ValueError(
             "evaluation.metrics.generation must be 'rouge_l_recall'; "
@@ -126,8 +138,8 @@ def run_evaluation(cfg: DictConfig) -> None:
         raise ValueError("evaluation.batch_size must be >= 1")
     if evaluation.mia_batch_size <= 0:
         raise ValueError("evaluation.mia_batch_size must be >= 1")
-    if evaluation.utility_batch_size <= 0:
-        raise ValueError("evaluation.utility_batch_size must be >= 1")
+    if evaluation.choice_likelihood_batch_size <= 0:
+        raise ValueError("evaluation.choice_likelihood_batch_size must be >= 1")
 
     from transformers import AutoModelForCausalLM, AutoTokenizer
 
@@ -188,6 +200,7 @@ def run_evaluation(cfg: DictConfig) -> None:
             tokenizer=tokenizer,
             subjects=subjects,
             max_examples=evaluation.limits.max_examples,
+            shard=shard,
             max_new_tokens=evaluation.generation.max_new_tokens,
             temperature=evaluation.generation.temperature,
             batch_size=evaluation.batch_size,
@@ -200,6 +213,7 @@ def run_evaluation(cfg: DictConfig) -> None:
             tokenizer=tokenizer,
             subjects=subjects,
             max_examples=evaluation.limits.max_examples,
+            shard=shard,
             max_new_tokens=evaluation.generation.max_new_tokens,
             temperature=evaluation.generation.temperature,
             batch_size=evaluation.batch_size,
@@ -217,6 +231,7 @@ def run_evaluation(cfg: DictConfig) -> None:
                 if evaluation.limits.max_mia_examples is not None
                 else evaluation.limits.max_examples
             ),
+            shard=shard,
             batch_size=evaluation.mia_batch_size,
             loss=evaluation.metrics.mia.loss,
             zlib=evaluation.metrics.mia.zlib,
@@ -234,9 +249,11 @@ def run_evaluation(cfg: DictConfig) -> None:
                 if evaluation.limits.max_utility_examples is not None
                 else evaluation.limits.max_examples
             ),
+            shard=shard,
             max_new_tokens=evaluation.generation.max_new_tokens,
             temperature=evaluation.generation.temperature,
-            batch_size=evaluation.utility_batch_size,
+            batch_sizes=evaluation.utility_batch_size,
+            choice_likelihood_batch_size=evaluation.choice_likelihood_batch_size,
         )
 
     metrics = aggregate_generation(all_rows)
@@ -245,26 +262,27 @@ def run_evaluation(cfg: DictConfig) -> None:
     model_label = evaluation.model.label or Path(evaluation.model_name_or_path).name or evaluation.model_name_or_path
     summary_table_row = build_summary_table_row(metrics, mia_metrics, utility_metrics, model_label)
 
-    with open(output_dir / "rwku_generations.jsonl", "w", encoding="utf-8") as f:
+    with open(output_dir / f"rwku_generations{output_suffix}.jsonl", "w", encoding="utf-8") as f:
         for row in all_rows:
             f.write(json.dumps(row, ensure_ascii=False) + "\n")
 
-    with open(output_dir / "rwku_mia.jsonl", "w", encoding="utf-8") as f:
+    with open(output_dir / f"rwku_mia{output_suffix}.jsonl", "w", encoding="utf-8") as f:
         for row in all_mia_rows:
             f.write(json.dumps(row, ensure_ascii=False) + "\n")
 
-    with open(output_dir / "rwku_utility.jsonl", "w", encoding="utf-8") as f:
+    with open(output_dir / f"rwku_utility{output_suffix}.jsonl", "w", encoding="utf-8") as f:
         for row in all_utility_rows:
             f.write(json.dumps(row, ensure_ascii=False) + "\n")
 
     metrics["mia"] = mia_metrics
     metrics["utility"] = utility_metrics
 
-    with open(output_dir / "rwku_results.json", "w", encoding="utf-8") as f:
+    with open(output_dir / f"rwku_results{output_suffix}.json", "w", encoding="utf-8") as f:
         json.dump(metrics, f, indent=2, ensure_ascii=False)
 
-    write_summary_tables(output_dir, summary_table_row)
-    log_wandb_results(evaluation, env_values, output_dir, metrics, mia_metrics, utility_metrics)
+    if shard_count == 1:
+        write_summary_tables(output_dir, summary_table_row)
+        log_wandb_results(evaluation, env_values, output_dir, metrics, mia_metrics, utility_metrics)
 
     print(json.dumps({
         "forget": metrics["forget"],

@@ -25,6 +25,20 @@ def select_max_examples(dataset, max_examples: Optional[int]):
     return dataset.select(range(min(max_examples, len(dataset))))
 
 
+def shard_dataset(dataset, shard) -> object:
+    if shard is None:
+        return dataset
+    shard_count = int(shard.count)
+    shard_index = int(shard.index)
+    if shard_count == 1:
+        return dataset
+    return dataset.shard(
+        num_shards=shard_count,
+        index=shard_index,
+        contiguous=True,
+    )
+
+
 def normalize_text(value) -> str:
     if value is None:
         return ""

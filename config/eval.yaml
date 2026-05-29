@@ -2,12 +2,15 @@ evaluation:
   model_name_or_path: outputs/latest/final_model
   output_dir: outputs/latest/eval_rwku
   subjects: Stephen King
+  shard:
+    index: 0
+    count: 1
 
   sets:
     forget: true
     neighbor: true
     mia: true
-    utility: false
+    utility: true
 
   metrics:
     generation: rouge_l_recall
@@ -20,13 +23,19 @@ evaluation:
   limits:
     max_examples: null
     max_mia_examples: null
-    max_utility_examples: null
+    max_utility_examples: 100
 
   batch_size: 32
-  mia_batch_size: 16
-  utility_batch_size: 4
+  mia_batch_size: 32
+  utility_batch_size:
+    utility_general: 32
+    utility_reason: 32
+    utility_truthfulness: 32
+    utility_factuality: 32
+    utility_fluency: 32
+  choice_likelihood_batch_size: 16
   generation:
-    max_new_tokens: 64
+    max_new_tokens: 256
     temperature: 0.0
   model:
     label: null
@@ -35,7 +44,7 @@ evaluation:
     attn_implementation: null
 
   wandb:
-    enabled: true
+    enabled: false
     entity: null
     run_name: rwku-${evaluation.subjects}
     artifact_name: rwku-stephen-king-model

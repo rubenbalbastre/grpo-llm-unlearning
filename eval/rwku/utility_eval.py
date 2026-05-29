@@ -1,27 +1,76 @@
-import re
 from typing import Dict, List, Optional
 
 from tqdm import tqdm
 
-from common import first_present, load_rwku_split, normalize_text, select_max_examples
+from common import load_rwku_split, normalize_text, select_max_examples, shard_dataset
 from constants import CHOICE_LABELS, RWKU_UTILITY_SPLITS
-from metrics import exact_match_score, rouge_l_recall, token_f1_score, weighted_ngram_entropy
+from metrics import exact_match_score, token_f1_score, weighted_ngram_entropy
 from scoring import generate_batch, score_choice_likelihood_batch
 
 
-def extract_choices(example: Dict) -> Optional[List[str]]:
-    choices = first_present(example, ["choices", "options", "candidates"])
-    if choices is None:
-        return None
+def utility_split_batch_size(batch_sizes, split_name: str) -> int:
+    if batch_sizes is None or split_name not in batch_sizes:
+        raise ValueError(
+            "evaluation.utility_batch_size must define a batch size for "
+            f"{split_name}."
+        )
+    batch_size = int(batch_sizes[split_name])
+    if batch_size <= 0:
+        raise ValueError(f"evaluation.utility_batch_size.{split_name} must be >= 1.")
+    return batch_size
+
+
+def required_value(example: Dict, split_name: str, column: str):
+    if column not in example or example[column] is None:
+        raise ValueError(f"{split_name} example is missing required column '{column}'.")
+    return example[column]
+
+
+def required_text(example: Dict, split_name: str, column: str) -> str:
+    value = normalize_text(required_value(example, split_name, column))
+    if not value:
+        raise ValueError(f"{split_name}.{column} must not be empty.")
+    return value
+
+
+def extract_choices(example: Dict, split_name: str, column: str = "choices") -> List[str]:
+    choices = required_value(example, split_name, column)
     if isinstance(choices, dict):
         if "text" in choices:
             choices = choices["text"]
         else:
             choices = [choices[key] for key in sorted(choices.keys())]
     if not isinstance(choices, list):
-        return None
+        raise ValueError(f"{split_name}.{column} must be a list of choices.")
     normalized = [normalize_text(choice) for choice in choices]
-    return [choice for choice in normalized if choice]
+    normalized = [choice for choice in normalized if choice]
+    if not normalized:
+        raise ValueError(f"{split_name}.{column} must include at least one choice.")
+    return normalized
+
+
+def extract_mc1_target(example: Dict, split_name: str) -> tuple[List[str], str]:
+    mc1_targets = required_value(example, split_name, "mc1_targets")
+    if not isinstance(mc1_targets, dict):
+        raise ValueError(f"{split_name}.mc1_targets must be a mapping.")
+
+    choices = mc1_targets.get("choices")
+    labels = mc1_targets.get("labels")
+    if not isinstance(choices, list) or not isinstance(labels, list):
+        raise ValueError(
+            f"{split_name}.mc1_targets must contain list fields 'choices' and 'labels'."
+        )
+
+    normalized_choices = [normalize_text(choice) for choice in choices]
+    normalized_choices = [choice for choice in normalized_choices if choice]
+    if not normalized_choices:
+        raise ValueError(f"{split_name}.mc1_targets.choices must not be empty.")
+    validate_choice_count(normalized_choices)
+
+    for idx, label in enumerate(labels):
+        if idx < len(normalized_choices) and int(label) == 1:
+            return normalized_choices, CHOICE_LABELS[idx]
+    raise ValueError(f"{split_name}.mc1_targets.labels must contain one positive label.")
 
 
 def normalize_choice_answer(answer, choices: Optional[List[str]]) -> str:
@@ -45,57 +94,35 @@ def normalize_choice_answer(answer, choices: Optional[List[str]]) -> str:
             if text.strip().lower() == choice.strip().lower():
                 return CHOICE_LABELS[idx]
 
-    match = re.search(r"\b([A-H])\b", upper)
-    if match:
-        return match.group(1)
     return text
 
 
-def extract_predicted_choice(prediction: str) -> str:
-    upper = prediction.strip().upper()
-    match = re.search(r"\b([A-H])\b", upper)
-    if match:
-        return match.group(1)
-    match = re.match(r"^\s*([A-H])[\).:\s]", upper)
-    if match:
-        return match.group(1)
-    return upper[:1]
-
-
-def extract_choices_from_prompt(prompt: str) -> Optional[List[str]]:
-    matches = re.findall(r"(?:^|\n)\s*([A-H])[\).]\s+(.+?)(?=\n\s*[A-H][\).]\s+|\Z)", prompt, flags=re.DOTALL)
-    if len(matches) < 2:
-        return None
-    ordered = sorted(matches, key=lambda item: CHOICE_LABELS.index(item[0]) if item[0] in CHOICE_LABELS else 99)
-    return [normalize_text(text) for _, text in ordered]
-
-
-def build_utility_prompt(example: Dict) -> tuple[str, Optional[List[str]], str]:
-    instruction = normalize_text(first_present(example, ["instruction"]))
-    input_text = normalize_text(first_present(example, ["input"]))
-    if instruction and input_text:
-        question = f"{instruction}\n\n{input_text}"
-    elif instruction:
-        question = instruction
-    else:
-        question = normalize_text(
-            first_present(example, ["question", "query", "input", "prompt", "text", "content"])
+def validate_choice_count(choices: List[str]) -> None:
+    if len(choices) > len(CHOICE_LABELS):
+        raise ValueError(
+            f"Utility example has {len(choices)} choices, but only "
+            f"{len(CHOICE_LABELS)} choice labels are supported."
         )
 
-    choices = extract_choices(example) or extract_choices_from_prompt(question)
-    answer = first_present(example, ["answer", "target", "label", "gold", "correct_answer", "output"])
 
-    if choices:
-        rendered_choices = "\n".join(
-            f"{CHOICE_LABELS[idx]}. {choice}" for idx, choice in enumerate(choices)
-        )
-        prompt = (
-            "Answer the multiple-choice question. "
-            "Return only the letter of the correct answer.\n\n"
-            f"{question}\n\n{rendered_choices}"
-        )
-        return prompt, choices, normalize_choice_answer(answer, choices)
+def build_multiple_choice_prompt(
+    question: str,
+    choices: List[str],
+    answer,
+) -> tuple[str, List[str], str]:
+    validate_choice_count(choices)
+    rendered_choices = "\n".join(
+        f"{CHOICE_LABELS[idx]}. {choice}" for idx, choice in enumerate(choices)
+    )
+    prompt = (
+        "Answer the multiple-choice question. "
+        "Return only the letter of the correct answer.\n\n"
+        f"{question}\n\n{rendered_choices}"
+    )
+    return prompt, choices, normalize_choice_answer(answer, choices)
 
+
+def build_freeform_prompt(question: str, answer) -> tuple[str, None, str]:
     prompt = (
         "Answer the following question concisely. "
         "Do not provide extra explanation.\n\n"
@@ -104,24 +131,54 @@ def build_utility_prompt(example: Dict) -> tuple[str, Optional[List[str]], str]:
     return prompt, None, normalize_text(answer)
 
 
+def build_utility_prompt(split_name: str, example: Dict) -> tuple[str, Optional[List[str]], str]:
+    if split_name == "utility_general":
+        return build_multiple_choice_prompt(
+            question=required_text(example, split_name, "question"),
+            choices=extract_choices(example, split_name, "choices"),
+            answer=required_value(example, split_name, "answer"),
+        )
+    if split_name == "utility_reason":
+        return build_freeform_prompt(
+            question=required_text(example, split_name, "question"),
+            answer=required_text(example, split_name, "answer"),
+        )
+    if split_name == "utility_truthfulness":
+        choices, answer = extract_mc1_target(example, split_name)
+        return build_multiple_choice_prompt(
+            question=required_text(example, split_name, "question"),
+            choices=choices,
+            answer=answer,
+        )
+    if split_name == "utility_factuality":
+        return build_freeform_prompt(
+            question=required_text(example, split_name, "question"),
+            answer=required_value(example, split_name, "answers"),
+        )
+    raise ValueError(f"Unsupported utility split: {split_name}")
+
+
 def evaluate_utility_split(
     model,
     tokenizer,
     split_name: str,
     max_examples: Optional[int],
+    shard,
     max_new_tokens: int,
     temperature: float,
     batch_size: int,
+    choice_likelihood_batch_size: int,
 ) -> List[Dict]:
     dataset = load_rwku_split(split_name)
     dataset = select_max_examples(dataset, max_examples)
+    dataset = shard_dataset(dataset, shard)
 
     if split_name == "utility_fluency":
         rows = []
         for start in tqdm(range(0, len(dataset), batch_size), desc=f"Evaluating {split_name}"):
             batch = dataset.select(range(start, min(start + batch_size, len(dataset))))
             prompts = [
-                normalize_text(first_present(ex, ["instruction", "prompt", "query", "input", "text", "content"]))
+                required_text(ex, split_name, "instruction")
                 for ex in batch
             ]
             preds = generate_batch(
@@ -145,17 +202,19 @@ def evaluate_utility_split(
     rows = []
     for start in tqdm(range(0, len(dataset), batch_size), desc=f"Evaluating {split_name}"):
         batch = dataset.select(range(start, min(start + batch_size, len(dataset))))
-        prepared = [build_utility_prompt(ex) for ex in batch]
+        prepared = [build_utility_prompt(split_name, ex) for ex in batch]
         prompts = [item[0] for item in prepared]
         all_multiple_choice = all(item[1] for item in prepared)
 
         if all_multiple_choice:
+            choices_batch = [item[1] for item in prepared if item[1]]
             predicted_answers = score_choice_likelihood_batch(
                 model=model,
                 tokenizer=tokenizer,
                 prompts=prompts,
-                choices_batch=[item[1] for item in prepared if item[1]],
+                choices_batch=choices_batch,
                 choice_labels=CHOICE_LABELS,
+                forward_batch_size=choice_likelihood_batch_size,
             )
             preds = predicted_answers
         else:
@@ -166,7 +225,7 @@ def evaluate_utility_split(
                 max_new_tokens=max_new_tokens,
                 temperature=temperature,
             )
-            predicted_answers = [extract_predicted_choice(pred) for pred in preds]
+            predicted_answers = preds
 
         for ex, (prompt, choices, answer), pred, predicted_answer in zip(
             batch,
@@ -187,9 +246,7 @@ def evaluate_utility_split(
                 score = token_f1_score(pred, answer) if answer else 0.0
                 metric = "token_f1"
             else:
-                predicted_answer = pred
-                score = rouge_l_recall(pred, answer) if answer else 0.0
-                metric = "rouge_l_recall"
+                raise ValueError(f"Unsupported utility split: {split_name}")
 
             rows.append({
                 "split": split_name,
@@ -209,21 +266,26 @@ def evaluate_utility_set(
     model,
     tokenizer,
     max_examples: Optional[int],
+    shard,
     max_new_tokens: int,
     temperature: float,
-    batch_size: int,
+    batch_sizes,
+    choice_likelihood_batch_size: int,
 ) -> List[Dict]:
     rows = []
     for split_name in RWKU_UTILITY_SPLITS:
+        batch_size = utility_split_batch_size(batch_sizes, split_name)
         rows.extend(
             evaluate_utility_split(
                 model=model,
                 tokenizer=tokenizer,
                 split_name=split_name,
                 max_examples=max_examples,
+                shard=shard,
                 max_new_tokens=max_new_tokens,
                 temperature=temperature,
                 batch_size=batch_size,
+                choice_likelihood_batch_size=choice_likelihood_batch_size,
             )
         )
     return rows
