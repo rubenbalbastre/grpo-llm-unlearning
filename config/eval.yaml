@@ -23,7 +23,7 @@ evaluation:
   limits:
     max_examples: null
     max_mia_examples: null
-    max_utility_examples: 100
+    max_utility_examples: 200
 
   batch_size: 32
   mia_batch_size: 32
@@ -44,7 +44,7 @@ evaluation:
     attn_implementation: null
 
   wandb:
-    enabled: false
+    enabled: true
     entity: null
     run_name: rwku-${evaluation.subjects}
     artifact_name: rwku-stephen-king-model
