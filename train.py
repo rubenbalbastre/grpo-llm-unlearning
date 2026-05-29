@@ -238,6 +238,7 @@ def main(cfg: DictConfig) -> None:
         report_to=["wandb"] if wandb_enabled else [],
         log_completions=cfg.training.log_completions,
         logging_steps=cfg.training.logging_steps,
+        lr_scheduler_type=cfg.training.lr_scheduler_type,
         **standard_training_args,
     )
 

@@ -69,6 +69,7 @@ training:
   logging_steps: 5
   max_steps: 100000 # too large since token budget callback will stop training when the token budget is reached. Set to -1 to disable.
   num_epochs: 40 # Applied only when mode is standard and max_steps is -1.
+  lr_scheduler_type: "constant"
   callback:
     token_budget: 3_000_000 #3_000_000 # null if not using StopOnTokenBudgetCallback
 
