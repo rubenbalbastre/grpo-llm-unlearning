@@ -21,18 +21,6 @@ def utility_split_batch_size(batch_sizes, split_name: str) -> int:
     return batch_size
 
 
-def choice_label(index: int) -> str:
-    if index < len(CHOICE_LABELS):
-        return CHOICE_LABELS[index]
-    if index < 26:
-        return chr(ord("A") + index)
-    return f"CHOICE_{index}"
-
-
-def choice_labels(count: int) -> List[str]:
-    return [choice_label(idx) for idx in range(count)]
-
-
 def extract_choices(example: Dict) -> Optional[List[str]]:
     choices = first_present(example, ["choices", "options", "candidates"])
     if choices is None:
@@ -65,33 +53,32 @@ def extract_mc1_target(example: Dict) -> tuple[Optional[List[str]], Optional[str
 
     for idx, label in enumerate(labels):
         if idx < len(normalized_choices) and int(label) == 1:
-            return normalized_choices, choice_label(idx)
+            return normalized_choices, CHOICE_LABELS[idx]
     return normalized_choices, None
 
 
 def normalize_choice_answer(answer, choices: Optional[List[str]]) -> str:
-    labels = choice_labels(len(choices or []))
     if isinstance(answer, int):
-        return labels[answer] if 0 <= answer < len(labels) else str(answer)
+        return CHOICE_LABELS[answer] if 0 <= answer < len(CHOICE_LABELS) else str(answer)
 
     text = normalize_text(answer)
     if not text:
         return ""
 
     upper = text.upper().strip()
-    if upper in labels:
+    if upper in CHOICE_LABELS:
         return upper
     if upper.isdigit():
         idx = int(upper)
         if choices and 0 <= idx < len(choices):
-            return labels[idx]
+            return CHOICE_LABELS[idx]
 
     if choices:
         for idx, choice in enumerate(choices):
             if text.strip().lower() == choice.strip().lower():
-                return labels[idx]
+                return CHOICE_LABELS[idx]
 
-    match = re.search(r"\b([A-Z])\b", upper)
+    match = re.search(r"\b([A-H])\b", upper)
     if match:
         return match.group(1)
     return text
@@ -99,21 +86,29 @@ def normalize_choice_answer(answer, choices: Optional[List[str]]) -> str:
 
 def extract_predicted_choice(prediction: str) -> str:
     upper = prediction.strip().upper()
-    match = re.search(r"\b([A-Z])\b", upper)
+    match = re.search(r"\b([A-H])\b", upper)
     if match:
         return match.group(1)
-    match = re.match(r"^\s*([A-Z])[\).:\s]", upper)
+    match = re.match(r"^\s*([A-H])[\).:\s]", upper)
     if match:
         return match.group(1)
     return upper[:1]
 
 
 def extract_choices_from_prompt(prompt: str) -> Optional[List[str]]:
-    matches = re.findall(r"(?:^|\n)\s*([A-Z])[\).]\s+(.+?)(?=\n\s*[A-Z][\).]\s+|\Z)", prompt, flags=re.DOTALL)
+    matches = re.findall(r"(?:^|\n)\s*([A-H])[\).]\s+(.+?)(?=\n\s*[A-H][\).]\s+|\Z)", prompt, flags=re.DOTALL)
     if len(matches) < 2:
         return None
-    ordered = sorted(matches, key=lambda item: ord(item[0]) if len(item[0]) == 1 else 99)
+    ordered = sorted(matches, key=lambda item: CHOICE_LABELS.index(item[0]) if item[0] in CHOICE_LABELS else 99)
     return [normalize_text(text) for _, text in ordered]
+
+
+def validate_choice_count(choices: List[str]) -> None:
+    if len(choices) > len(CHOICE_LABELS):
+        raise ValueError(
+            f"Utility example has {len(choices)} choices, but only "
+            f"{len(CHOICE_LABELS)} choice labels are supported."
+        )
 
 
 def build_utility_prompt(example: Dict) -> tuple[str, Optional[List[str]], str]:
@@ -145,9 +140,9 @@ def build_utility_prompt(example: Dict) -> tuple[str, Optional[List[str]], str]:
     )
 
     if choices:
-        labels = choice_labels(len(choices))
+        validate_choice_count(choices)
         rendered_choices = "\n".join(
-            f"{labels[idx]}. {choice}" for idx, choice in enumerate(choices)
+            f"{CHOICE_LABELS[idx]}. {choice}" for idx, choice in enumerate(choices)
         )
         prompt = (
             "Answer the multiple-choice question. "
@@ -219,7 +214,7 @@ def evaluate_utility_split(
                 tokenizer=tokenizer,
                 prompts=prompts,
                 choices_batch=choices_batch,
-                choice_labels=choice_labels(max(len(choices) for choices in choices_batch)),
+                choice_labels=CHOICE_LABELS,
                 forward_batch_size=choice_likelihood_batch_size,
             )
             preds = predicted_answers
