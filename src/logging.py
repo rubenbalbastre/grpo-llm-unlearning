@@ -28,6 +28,20 @@ def setup_wandb() -> bool:
     return True
 
 
+def init_wandb_run(
+    run_name: str,
+    config: dict[str, Any],
+    config_yaml_path: Path | None = None,
+) -> None:
+    """Initialize the active training run before Trainer attaches W&B logging."""
+    if wandb.run is not None:
+        wandb.config.update({"hydra": config}, allow_val_change=True)
+    else:
+        wandb.init(name=run_name, config={"hydra": config})
+    if config_yaml_path is not None:
+        wandb.save(str(config_yaml_path), policy="now")
+
+
 def setup_huggingface_hub() -> None:
     if int(os.getenv("RANK", "0")) == 0:
         login(token=os.getenv("HUGGINGFACE_HUB_TOKEN"))
