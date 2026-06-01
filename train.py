@@ -70,9 +70,10 @@ def adaptive_rollout_func(prompts: list[str], trainer) -> dict[str, Any]:
 
 
 def load_standard_dataset(cfg: DictConfig) -> Dataset:
+    config_name = cfg.standard_data.get("config_name")
     dataset = load_dataset(
         cfg.standard_data.name,
-        cfg.standard_data.config_name,
+        config_name if config_name else None,
         split=cfg.standard_data.split,
     )
     subject_column = cfg.standard_data.subject_column
@@ -86,7 +87,34 @@ def load_standard_dataset(cfg: DictConfig) -> Dataset:
         if dataset_size <= 0:
             raise ValueError("standard_data.dataset_size must be positive or null.")
         dataset = dataset.select(range(min(dataset_size, len(dataset))))
-    return dataset.select_columns([prompt_column]).rename_column(prompt_column, "prompt")
+    dataset = dataset.select_columns([prompt_column])
+    if prompt_column != "prompt":
+        dataset = dataset.rename_column(prompt_column, "prompt")
+    return dataset
+
+
+def load_offline_dataset(cfg: DictConfig) -> Dataset:
+    dataset = load_dataset(
+        "json",
+        data_files=str(cfg.offline_data.path),
+        split=cfg.offline_data.split,
+    )
+    prompt_column = cfg.offline_data.prompt_column
+    if prompt_column not in dataset.column_names:
+        raise ValueError(
+            f"Prompt column '{prompt_column}' not found in offline dataset columns: "
+            f"{dataset.column_names}"
+        )
+    dataset_size = cfg.offline_data.get("dataset_size")
+    if dataset_size is not None:
+        dataset_size = int(dataset_size)
+        if dataset_size <= 0:
+            raise ValueError("offline_data.dataset_size must be positive or null.")
+        dataset = dataset.select(range(min(dataset_size, len(dataset))))
+    dataset = dataset.select_columns([prompt_column])
+    if prompt_column != "prompt":
+        dataset = dataset.rename_column(prompt_column, "prompt")
+    return dataset
 
 
 def get_peft_config(cfg: DictConfig, num_hidden_layers: int) -> LoraConfig:
@@ -197,8 +225,13 @@ def main(cfg: DictConfig) -> None:
         train_dataset = load_standard_dataset(cfg)
         rollout_func = None
         data_generator = None
+    elif mode == "offline":
+        buffer = None
+        train_dataset = load_offline_dataset(cfg)
+        rollout_func = None
+        data_generator = None
     else:
-        raise ValueError("training.mode must be either 'adaptive' or 'standard'.")
+        raise ValueError("training.mode must be one of: 'adaptive', 'standard', or 'offline'.")
 
     # Reward function configuration
     reward_func = make_unlearning_reward_func(
@@ -209,10 +242,10 @@ def main(cfg: DictConfig) -> None:
 
     # other GRPO configurations
     standard_training_args: dict[str, Any] = {}
-    if mode == "standard":
+    if mode in {"standard", "offline"}:
         num_epochs = float(cfg.training.num_epochs)
         if num_epochs <= 0:
-            raise ValueError("training.num_epochs must be positive in standard mode.")
+            raise ValueError("training.num_epochs must be positive in standard/offline mode.")
         standard_training_args["num_train_epochs"] = num_epochs
 
     # callbacks
