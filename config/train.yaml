@@ -13,7 +13,7 @@ model:
   name: "Qwen/Qwen2.5-1.5B-Instruct" # "microsoft/Phi-3-mini-4k-instruct", Qwen/Qwen2.5-3B-Instruct, Qwen/Qwen2.5-1.5B-Instruct
 
 wandb:
-  run_name: ${training.mode}-grpo-${oc.env:SLURM_JOB_ID,local}
+  run_name: ${training.mode}-${data_generator.mode}-${oc.env:SLURM_JOB_ID,local}
 
 data_generator:
   safe: false
