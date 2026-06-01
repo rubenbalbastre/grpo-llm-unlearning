@@ -103,12 +103,26 @@ class PromptBuffer:
                 self.records[prompt].update_from_rollout_group(group_outcomes)
 
     @staticmethod
-    def _generation_context_item(record: PromptRecord) -> dict[str, Any]:
-        return {
+    def _generation_context_item(
+        record: PromptRecord,
+        context_mode: str,
+        max_completions_per_prompt: int,
+    ) -> dict[str, Any]:
+        item: dict[str, Any] = {
             "prompt": record.prompt,
             "latest_rollout_mean_reward": record.latest_rollout_mean_reward,
             "latest_rollout_reward_std": record.latest_rollout_reward_std,
         }
+        if context_mode == "rollout_outcomes":
+            item["rollout_outcomes"] = [
+                {
+                    "completion": outcome.completion,
+                    "reward": outcome.reward,
+                    "step": outcome.step,
+                }
+                for outcome in record.outcome_history[-max_completions_per_prompt:]
+            ]
+        return item
 
     def add_generated_prompts(self, prompts: list[str]) -> None:
         for prompt in prompts:
@@ -121,20 +135,40 @@ class PromptBuffer:
     def record_rollout_outcome(self, prompt: str, outcome: RolloutCompletionOutcome) -> None:
         self.pending_rollout_outcomes.append((self._normalize_prompt(prompt), outcome))
 
-    def select_for_generation(self, max_context_prompts: int) -> dict[str, list[dict[str, Any]]]:
+    def select_for_generation(
+        self,
+        max_context_prompts: int,
+        context_mode: str = "summary",
+        max_completions_per_prompt: int = 2,
+    ) -> dict[str, list[dict[str, Any]]]:
+        if context_mode not in {"summary", "rollout_outcomes"}:
+            raise ValueError("context_mode must be one of: summary, rollout_outcomes.")
+        if max_completions_per_prompt <= 0:
+            raise ValueError("max_completions_per_prompt must be positive.")
         selected = {
             self.LOW_VARIANCE_LOW_REWARD: [],
             self.LOW_VARIANCE_HIGH_REWARD: [],
             self.HIGH_VARIANCE_REWARD: [],
         }
         grouped = self._group_evaluated_prompts()
+        context_order = (
+            (self.HIGH_VARIANCE_REWARD,)
+            if context_mode == "rollout_outcomes"
+            else self.GENERATION_CONTEXT_ORDER
+        )
         index = 0
         while sum(len(items) for items in selected.values()) < max_context_prompts:
             added = False
-            for group in self.GENERATION_CONTEXT_ORDER:
+            for group in context_order:
                 records = grouped[group]
                 if index < len(records):
-                    selected[group].append(self._generation_context_item(records[index]))
+                    selected[group].append(
+                        self._generation_context_item(
+                            records[index],
+                            context_mode=context_mode,
+                            max_completions_per_prompt=max_completions_per_prompt,
+                        )
+                    )
                     added = True
                     if sum(len(items) for items in selected.values()) == max_context_prompts:
                         return selected

@@ -13,14 +13,18 @@ model:
   name: "Qwen/Qwen2.5-1.5B-Instruct" # "microsoft/Phi-3-mini-4k-instruct", Qwen/Qwen2.5-3B-Instruct, Qwen/Qwen2.5-1.5B-Instruct
 
 wandb:
-  run_name: ${training.mode}-${data_generator.mode}-${oc.env:SLURM_JOB_ID,local}
+  run_name: ${training.mode}-${data_generator.data_proposer.mode}-${oc.env:SLURM_JOB_ID,local}
 
 data_generator:
   safe: false
-  model_name: gpt-5.4-nano
-  mode: "expanded" # natural or expanded
-  generation_context_size: 32
   new_prompts_per_step: 0.05 # Fraction of the rollout prompt batch generated each step.
+  data_proposer:
+    model_name: gpt-5.4-nano
+    mode: "expanded" # natural or expanded
+    proposer_context:
+      context_mode: summary # summary or rollout_outcomes
+      context_max_prompts: 4
+      context_max_completions_per_prompt: 4
 
 standard_data:
   name: jinzhuoran/RWKU

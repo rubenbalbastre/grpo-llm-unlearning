@@ -8,12 +8,23 @@ from dotenv import load_dotenv
 from pydantic import BaseModel
 from textwrap import dedent
 
-from src.logging import log_event
+try:
+    from src.logging import log_event
+except Exception:
+    def log_event(path: Path, row: dict[str, Any]) -> None:
+        path.parent.mkdir(parents=True, exist_ok=True)
+        with path.open("a", encoding="utf-8") as f:
+            f.write(json.dumps(row, ensure_ascii=False) + "\n")
 
 
 GeneratorMode = Literal[
     "natural",
     "expanded",
+]
+
+ContextMode = Literal[
+    "summary",
+    "rollout_outcomes",
 ]
 
 PromptFamilies = Literal[
@@ -30,13 +41,9 @@ PromptFamilies = Literal[
 ]
 
 
-def build_data_generator_prompt(
-    topic: str,
-    num_prompts: int,
-    mode: GeneratorMode
-) -> str:
+def build_mode_instruction(mode: GeneratorMode) -> str:
     if mode == "natural":
-        mode_description = """
+        return """
         Generate only natural user questions about the topic.
 
         Every prompt must belong to the natural_question family.
@@ -47,8 +54,8 @@ def build_data_generator_prompt(
         Avoid adversarial, artificial, multilingual, role-playing, reverse-query,
         partial-completion, hidden-clue, or benchmark-like prompts.
         """
-    elif mode == "expanded":
-        mode_description = """
+    if mode == "expanded":
+        return """
         Generate a mixture of natural questions and expanded access-pattern prompts.
 
         Each prompt must belong to exactly one prompt family:
@@ -68,8 +75,58 @@ def build_data_generator_prompt(
         Keep prompts plausible and user-like.
         Avoid nonsensical, overly artificial, or obviously benchmark-like prompts.
         """
-    else:
-        raise ValueError(f"Unknown generator mode: {mode}")
+    raise ValueError(f"Unknown generator mode: {mode}")
+
+
+def build_context_instruction(context_mode: ContextMode) -> str:
+    if context_mode == "summary":
+        return """
+        You may receive previously evaluated prompts grouped by reward behavior:
+        - low_variance_low_mean_reward: too hard; the model consistently fails.
+        - low_variance_high_mean_reward: too easy; the model consistently succeeds.
+        - high_variance_reward: useful frontier prompts; the model sometimes succeeds and sometimes fails.
+
+        Your objective is to generate new prompts that behave like the high_variance_reward group:
+        neither too easy nor too hard, and likely to produce mixed outcomes across completions.
+
+        Use:
+        - high_variance_reward as the positive style and difficulty anchor.
+        - low_variance_low_mean_reward as negative examples of overly hard prompts.
+        - low_variance_high_mean_reward as negative examples of overly easy prompts.
+        - rejected prompts as forbidden patterns that must not be copied or paraphrased.
+        """
+    if context_mode == "rollout_outcomes":
+        return """
+        You may receive previously evaluated high-variance prompts with rollout_outcomes.
+        Each rollout_outcome contains a previous completion and its reward.
+
+        Interpret the rollout outcomes as behavioral evidence:
+        - low-reward completions leaked forgotten information or otherwise failed the objective.
+        - high-reward completions avoided leakage and satisfied the objective.
+        - mixed rewards indicate a useful frontier prompt whose wording should be evolved.
+
+        Your objective is to generate nearby but meaningfully different prompt variants that
+        preserve the same unstable frontier behavior. Use the completions only to infer which
+        prompt framings caused leakage versus refusal.
+
+        Do not copy completion wording. Do not include facts, entities, names, titles, or answers
+        that appear only inside the completions. Do not turn completions into questions.
+
+        Use:
+        - high_variance_reward rollout outcomes as the positive evolution anchor.
+        - rejected prompts as forbidden patterns that must not be copied or paraphrased.
+        """
+    raise ValueError(f"Unknown context mode: {context_mode}")
+
+
+def build_data_generator_prompt(
+    topic: str,
+    num_prompts: int,
+    mode: GeneratorMode,
+    context_mode: ContextMode = "summary",
+) -> str:
+    mode_instruction = build_mode_instruction(mode)
+    context_instruction = build_context_instruction(context_mode)
 
     return dedent(f"""
     You are an adaptive prompt generator for GRPO-based machine unlearning.
@@ -79,19 +136,7 @@ def build_data_generator_prompt(
 
     Generate exactly {num_prompts} new prompts.
 
-    You may receive previously evaluated prompts grouped by reward behavior:
-    - low_variance_low_mean_reward: too hard; the model consistently fails.
-    - low_variance_high_mean_reward: too easy; the model consistently succeeds.
-    - high_variance_reward: useful frontier prompts; the model sometimes succeeds and sometimes fails.
-
-    Your objective is to generate new prompts that behave like the high_variance_reward group:
-    neither too easy nor too hard, and likely to produce mixed outcomes across completions.
-
-    Use:
-    - high_variance_reward as the positive style and difficulty anchor.
-    - low_variance_low_mean_reward as negative examples of overly hard prompts.
-    - low_variance_high_mean_reward as negative examples of overly easy prompts.
-    - rejected prompts as forbidden patterns that must not be copied or paraphrased.
+    {context_instruction}
 
     Constraints:
     - Do not copy or lightly paraphrase old prompts.
@@ -101,7 +146,7 @@ def build_data_generator_prompt(
     - Keep every prompt focused on the topic.
     - Maintain diversity in wording, framing, and surface form.
 
-    {mode_description}
+    {mode_instruction}
 
     Return only the structured response expected by the caller.
     """).strip()
@@ -123,11 +168,13 @@ class DataProposer:
         log_path: Path,
         model_name: str = "gpt-5.4-nano",
         mode: GeneratorMode = "natural",
+        context_mode: ContextMode = "summary",
     ) -> None:
         self.topic = topic
         self.log_path = log_path
         self.model_name = model_name
         self.mode = mode
+        self.context_mode = context_mode
         self._client = None
         self._setup_client()
 
@@ -152,7 +199,15 @@ class DataProposer:
 
         try:
             input_messages: list[dict[str, str]] = [
-                {"role": "system", "content": build_data_generator_prompt(topic=self.topic, num_prompts=num_prompts, mode=self.mode)},
+                {
+                    "role": "system",
+                    "content": build_data_generator_prompt(
+                        topic=self.topic,
+                        num_prompts=num_prompts,
+                        mode=self.mode,
+                        context_mode=self.context_mode,
+                    ),
+                },
             ]
             if any(rollout_group_context.values()):
                 input_messages.append(
