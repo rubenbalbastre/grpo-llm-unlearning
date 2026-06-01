@@ -145,7 +145,11 @@ class DataGenerator:
             rollout_group_context = buffer.select_for_generation(
                 max_context_prompts=self.generation_context_size
             )
-            num_new_prompts = self._resolve_new_prompts_per_step(num_prompts)
+            prompt_pool_size_before_generation = len(buffer.records)
+            num_new_prompts = self._resolve_num_new_prompts(
+                batch_size=num_prompts,
+                prompt_pool_size=prompt_pool_size_before_generation,
+            )
             generated = self.generate_prompts(
                 rollout_group_context=rollout_group_context,
                 num_prompts=num_new_prompts,
@@ -168,6 +172,7 @@ class DataGenerator:
                     group: len(items) for group, items in rollout_group_context.items()
                 },
                 "prompt_pool_size": len(buffer.records),
+                "num_new_prompts": num_new_prompts,
             }
         broadcast_object_list(payload, from_process=0)
 
@@ -190,8 +195,9 @@ class DataGenerator:
                 "rollout_group_context": batch_info.get("rollout_group_context", {}),
                 "prompt_pool_size": batch_info.get("prompt_pool_size", 0),
                 "num_selected_prompts": num_prompts,
-                "num_new_prompts_per_step": self._resolve_new_prompts_per_step(
-                    num_prompts
+                "num_new_prompts_per_step": batch_info.get(
+                    "num_new_prompts",
+                    self._resolve_new_prompts_per_step(num_prompts),
                 ),
                 "process_index": process_index,
                 "selected_prompts": final_prompts,
@@ -206,3 +212,8 @@ class DataGenerator:
 
     def _resolve_new_prompts_per_step(self, batch_size: int) -> int:
         return max(1, math.ceil(batch_size * float(self.new_prompts_per_step)))
+
+    def _resolve_num_new_prompts(self, batch_size: int, prompt_pool_size: int) -> int:
+        if prompt_pool_size < batch_size:
+            return batch_size
+        return self._resolve_new_prompts_per_step(batch_size)
