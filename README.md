@@ -186,9 +186,14 @@ Each training run uses the configured W&B name as its output folder:
 
 ```text
 outputs/<wandb_run_name>/events.jsonl
+outputs/<wandb_run_name>/hydra_config.yaml
 outputs/<wandb_run_name>/final_model
 outputs/latest -> <wandb_run_name>
 ```
+
+Training writes the resolved Hydra config to `hydra_config.yaml`. When W&B is
+enabled, the same config is logged under the run config key `hydra`, and the
+YAML file is saved to the W&B run.
 
 Under Slurm, `wandb.run_name` includes `SLURM_JOB_ID`, for example
 `standard-grpo-48291`, so each submitted job gets its own local output folder.

@@ -15,7 +15,7 @@ from trl import GRPOConfig, GRPOTrainer
 from dotenv import load_dotenv
 
 from src.data_generator.data_generator import DataGenerator
-from src.logging import save_wandb_run_info, setup_wandb, setup_huggingface_hub
+from src.logging import init_wandb_run, save_wandb_run_info, setup_wandb, setup_huggingface_hub
 from src.data_generator.prompt_buffer import PromptBuffer
 from src.reward_function import make_unlearning_reward_func
 from src.data_generator.get_contaminated_data import get_rwku_contaminated_data
@@ -174,6 +174,20 @@ def main(cfg: DictConfig) -> None:
     output_dir = Path(cfg.paths.output_root) / run_name
     events_log_path = output_dir / "events.jsonl"
     final_model_dir = output_dir / "final_model"
+    resolved_cfg = OmegaConf.to_container(cfg, resolve=True)
+    hydra_config_path = output_dir / "hydra_config.yaml"
+    if int(os.getenv("RANK", "0")) == 0:
+        output_dir.mkdir(parents=True, exist_ok=True)
+        hydra_config_path.write_text(
+            OmegaConf.to_yaml(cfg, resolve=True),
+            encoding="utf-8",
+        )
+        if wandb_enabled:
+            init_wandb_run(
+                run_name=run_name,
+                config=resolved_cfg,
+                config_yaml_path=hydra_config_path,
+            )
 
     # model name
     model_name = cfg.model.name
