@@ -8,7 +8,7 @@ from .data_filter import ContaminationPromptBuffer, DataFilter
 from .data_proposer import DataProposer
 from src.logging import log_event
 from .prompt_buffer import PromptBuffer
-from src.data_generator.data_proposer import GeneratorMode
+from src.data_generator.data_proposer import ContextMode, GeneratorMode
 
 
 class DataGenerator:
@@ -19,6 +19,9 @@ class DataGenerator:
         topic: str,
         model_name: str = "gpt-5.4-nano",
         mode: GeneratorMode = "natural",
+        context_mode: ContextMode = "summary",
+        context_max_prompts: int = 16,
+        context_max_completions_per_prompt: int = 2,
         # filtering configuration
         protected_data: list[str] | None = None,
         embedding_model_name: str = "BAAI/bge-large-en-v1.5",
@@ -26,7 +29,6 @@ class DataGenerator:
         contamination_history_size: int = 512,
         # final generation configuration
         safe: bool = False,
-        generation_context_size: int = 16,
         new_prompts_per_step: float = 0.5,
         oversample_factor: int = 4,
         max_attempts: int = 5,
@@ -34,6 +36,11 @@ class DataGenerator:
         if safe and not protected_data:
             raise ValueError("DataGenerator requires protected_data when safe=True.")
         self._validate_new_prompts_per_step(new_prompts_per_step)
+        self._validate_context_config(
+            context_mode=context_mode,
+            context_max_prompts=context_max_prompts,
+            context_max_completions_per_prompt=context_max_completions_per_prompt,
+        )
         if oversample_factor <= 0:
             raise ValueError("oversample_factor must be >= 1.")
         if max_attempts <= 0:
@@ -41,7 +48,9 @@ class DataGenerator:
 
         self.log_path = log_path
         # generation configuration
-        self.generation_context_size = generation_context_size
+        self.context_mode = context_mode
+        self.context_max_prompts = int(context_max_prompts)
+        self.context_max_completions_per_prompt = int(context_max_completions_per_prompt)
         self.safe = safe
         self.oversample_factor = oversample_factor
         self.max_attempts = max_attempts
@@ -54,7 +63,8 @@ class DataGenerator:
             topic=topic,
             log_path=log_path,
             model_name=model_name,
-            mode=mode
+            mode=mode,
+            context_mode=context_mode,
         )
         # filtering configuration
         self.contamination_buffer = None
@@ -143,7 +153,9 @@ class DataGenerator:
         payload: list[Any] = [None]
         if accelerator.is_main_process:
             rollout_group_context = buffer.select_for_generation(
-                max_context_prompts=self.generation_context_size
+                max_context_prompts=self.context_max_prompts,
+                context_mode=self.context_mode,
+                max_completions_per_prompt=self.context_max_completions_per_prompt,
             )
             prompt_pool_size_before_generation = len(buffer.records)
             num_new_prompts = self._resolve_num_new_prompts(
@@ -173,6 +185,9 @@ class DataGenerator:
                 },
                 "prompt_pool_size": len(buffer.records),
                 "num_new_prompts": num_new_prompts,
+                "context_mode": self.context_mode,
+                "context_max_prompts": self.context_max_prompts,
+                "context_max_completions_per_prompt": self.context_max_completions_per_prompt,
             }
         broadcast_object_list(payload, from_process=0)
 
@@ -194,6 +209,12 @@ class DataGenerator:
                 "batch_size": len(final_prompts),
                 "rollout_group_context": batch_info.get("rollout_group_context", {}),
                 "prompt_pool_size": batch_info.get("prompt_pool_size", 0),
+                "context_mode": batch_info.get("context_mode", self.context_mode),
+                "context_max_prompts": batch_info.get("context_max_prompts", self.context_max_prompts),
+                "context_max_completions_per_prompt": batch_info.get(
+                    "context_max_completions_per_prompt",
+                    self.context_max_completions_per_prompt,
+                ),
                 "num_selected_prompts": num_prompts,
                 "num_new_prompts_per_step": batch_info.get(
                     "num_new_prompts",
@@ -209,6 +230,19 @@ class DataGenerator:
     def _validate_new_prompts_per_step(value: float) -> None:
         if not 0 < float(value) <= 1:
             raise ValueError("new_prompts_per_step must be a float in (0, 1].")
+
+    @staticmethod
+    def _validate_context_config(
+        context_mode: str,
+        context_max_prompts: int,
+        context_max_completions_per_prompt: int,
+    ) -> None:
+        if context_mode not in {"summary", "rollout_outcomes"}:
+            raise ValueError("context_mode must be one of: summary, rollout_outcomes.")
+        if int(context_max_prompts) <= 0:
+            raise ValueError("context_max_prompts must be positive.")
+        if int(context_max_completions_per_prompt) <= 0:
+            raise ValueError("context_max_completions_per_prompt must be positive.")
 
     def _resolve_new_prompts_per_step(self, batch_size: int) -> int:
         return max(1, math.ceil(batch_size * float(self.new_prompts_per_step)))

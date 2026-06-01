@@ -190,6 +190,24 @@ def main(cfg: DictConfig) -> None:
     forget_concept = cfg.experiment.forget_concept
     mode = cfg.training.mode
     if mode == "adaptive":
+        data_proposer_cfg = cfg.data_generator.get("data_proposer")
+        if data_proposer_cfg is None:
+            data_proposer_model_name = cfg.data_generator.model_name
+            data_proposer_mode = cfg.data_generator.mode
+            proposer_context_cfg = {}
+        else:
+            data_proposer_model_name = data_proposer_cfg.model_name
+            data_proposer_mode = data_proposer_cfg.mode
+            proposer_context_cfg = data_proposer_cfg.get("proposer_context", {})
+        context_mode = proposer_context_cfg.get("context_mode", "summary")
+        context_max_prompts = proposer_context_cfg.get(
+            "context_max_prompts",
+            cfg.data_generator.get("generation_context_size", 16),
+        )
+        context_max_completions_per_prompt = proposer_context_cfg.get(
+            "context_max_completions_per_prompt",
+            2,
+        )
         buffer = PromptBuffer(
             max_prompts=cfg.buffer.max_prompts,
             high_reward_std_threshold=cfg.buffer.high_reward_std_threshold,
@@ -209,9 +227,11 @@ def main(cfg: DictConfig) -> None:
         data_generator = DataGenerator(
             topic=f"Forget concept: '{forget_concept}.'",
             log_path=events_log_path,
-            model_name=cfg.data_generator.model_name,
-            mode=cfg.data_generator.mode,
-            generation_context_size=cfg.data_generator.generation_context_size,
+            model_name=data_proposer_model_name,
+            mode=data_proposer_mode,
+            context_mode=context_mode,
+            context_max_prompts=context_max_prompts,
+            context_max_completions_per_prompt=context_max_completions_per_prompt,
             new_prompts_per_step=cfg.data_generator.new_prompts_per_step,
             safe=cfg.data_generator.safe,
             protected_data=(
