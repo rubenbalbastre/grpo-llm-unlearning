@@ -4,13 +4,13 @@ defaults:
 experiment:
   seed: 42
   forget_concept: Stephen King
-  push_to_hub: true
+  push_to_hub: false
 
 paths:
   output_root: outputs
 
 model:
-  name: "Qwen/Qwen2.5-1.5B-Instruct" # "microsoft/Phi-3-mini-4k-instruct", Qwen/Qwen2.5-3B-Instruct
+  name: "Qwen/Qwen2.5-1.5B-Instruct" # "microsoft/Phi-3-mini-4k-instruct", Qwen/Qwen2.5-3B-Instruct, Qwen/Qwen2.5-1.5B-Instruct
 
 wandb:
   run_name: ${training.mode}-grpo-${oc.env:SLURM_JOB_ID,local}
@@ -18,7 +18,7 @@ wandb:
 data_generator:
   safe: false
   model_name: gpt-5.4-nano
-  mode: "natural" # natural or expanded
+  mode: "expanded" # natural or expanded
   generation_context_size: 32
   new_prompts_per_step: 0.5 # Fraction of the rollout prompt batch generated each step.
 
@@ -28,7 +28,13 @@ standard_data:
   split: train
   subject_column: subject
   prompt_column: instruction
-  dataset_size: null # Samples retained after filtering by forget_concept, e.g. 100.
+  dataset_size: 100 # Samples retained after filtering by forget_concept, e.g. 100.
+
+offline_data:
+  path: outputs/offline-synthetic/prompts_stephen_king.jsonl
+  split: train
+  prompt_column: prompt
+  dataset_size: 100 # Samples retained from the fixed offline synthetic dataset, e.g. 100.
 
 buffer:
   max_prompts: 512
@@ -54,16 +60,16 @@ peft:
     number_layers_to_transform: -1 # Set to -1 to apply LoRA to all transformer layers.
 
 training:
-  mode: adaptive # standard or adaptive
+  mode: offline # adaptive, standard, or offline
   per_device_train_batch_size: 16
   num_generations: 4
   gradient_accumulation_steps: 8
   gradient_checkpointing: True
   steps_per_generation: 8
   num_iterations: 2
-  beta: 0.04 # 0.04
+  beta: 0.04
   learning_rate: 1.0e-5
-  max_completion_length: 256 #256
+  max_completion_length: 256
   remove_unused_columns: false
   log_completions: true
   logging_steps: 5
