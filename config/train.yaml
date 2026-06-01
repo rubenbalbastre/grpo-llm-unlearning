@@ -20,7 +20,7 @@ data_generator:
   model_name: gpt-5.4-nano
   mode: "expanded" # natural or expanded
   generation_context_size: 32
-  new_prompts_per_step: 0.5 # Fraction of the rollout prompt batch generated each step.
+  new_prompts_per_step: 0.05 # Fraction of the rollout prompt batch generated each step.
 
 standard_data:
   name: jinzhuoran/RWKU
