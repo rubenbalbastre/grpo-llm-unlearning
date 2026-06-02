@@ -22,13 +22,13 @@ data_generator:
     model_name: gpt-5.4-nano
     mode: "natural" # natural or expanded
     execution:
-      mode: batch # batch or async_individual
-      max_concurrent_requests: 4
-      prompts_per_context_item: 2
+      mode: async_individual # batch or async_individual
+      max_concurrent_requests: 4 # async_individual only: maximum parallel external proposer requests.
+      prompts_per_context_item: 2 # async_individual only: new prompt variants requested per selected context prompt.
     proposer_context:
       context_mode: rollout_outcomes # summary or rollout_outcomes
-      context_max_prompts: 4
-      context_max_completions_per_prompt: 4
+      context_max_prompts: 1 # Number of previous prompts selected as proposer context.
+      context_max_completions_per_prompt: 4 # rollout_outcomes only: recent completions/rewards included per context prompt.
 
 standard_data:
   name: jinzhuoran/RWKU
@@ -68,7 +68,7 @@ peft:
     number_layers_to_transform: -1 # Set to -1 to apply LoRA to all transformer layers.
 
 training:
-  mode: standard # adaptive, standard, or offline
+  mode: adaptive # adaptive, standard, or offline
   per_device_train_batch_size: 16
   num_generations: 4
   gradient_accumulation_steps: 8
