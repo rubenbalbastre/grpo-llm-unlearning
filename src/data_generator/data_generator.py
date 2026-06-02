@@ -8,7 +8,7 @@ from .data_filter import ContaminationPromptBuffer, DataFilter
 from .data_proposer import DataProposer
 from src.logging import log_event
 from .prompt_buffer import PromptBuffer
-from src.data_generator.data_proposer import ContextMode, GeneratorMode
+from src.data_generator.data_proposer import ContextMode, ExecutionMode, GeneratorMode
 
 
 class DataGenerator:
@@ -22,6 +22,9 @@ class DataGenerator:
         context_mode: ContextMode = "summary",
         context_max_prompts: int = 16,
         context_max_completions_per_prompt: int = 2,
+        execution_mode: ExecutionMode = "batch",
+        max_concurrent_requests: int = 4,
+        prompts_per_context_item: int = 2,
         # filtering configuration
         protected_data: list[str] | None = None,
         embedding_model_name: str = "BAAI/bge-large-en-v1.5",
@@ -51,6 +54,9 @@ class DataGenerator:
         self.context_mode = context_mode
         self.context_max_prompts = int(context_max_prompts)
         self.context_max_completions_per_prompt = int(context_max_completions_per_prompt)
+        self.execution_mode = execution_mode
+        self.max_concurrent_requests = int(max_concurrent_requests)
+        self.prompts_per_context_item = int(prompts_per_context_item)
         self.safe = safe
         self.oversample_factor = oversample_factor
         self.max_attempts = max_attempts
@@ -65,6 +71,9 @@ class DataGenerator:
             model_name=model_name,
             mode=mode,
             context_mode=context_mode,
+            execution_mode=execution_mode,
+            max_concurrent_requests=max_concurrent_requests,
+            prompts_per_context_item=prompts_per_context_item,
         )
         # filtering configuration
         self.contamination_buffer = None
@@ -188,6 +197,9 @@ class DataGenerator:
                 "context_mode": self.context_mode,
                 "context_max_prompts": self.context_max_prompts,
                 "context_max_completions_per_prompt": self.context_max_completions_per_prompt,
+                "data_proposer_execution_mode": self.execution_mode,
+                "data_proposer_max_concurrent_requests": self.max_concurrent_requests,
+                "data_proposer_prompts_per_context_item": self.prompts_per_context_item,
             }
         broadcast_object_list(payload, from_process=0)
 
@@ -214,6 +226,18 @@ class DataGenerator:
                 "context_max_completions_per_prompt": batch_info.get(
                     "context_max_completions_per_prompt",
                     self.context_max_completions_per_prompt,
+                ),
+                "data_proposer_execution_mode": batch_info.get(
+                    "data_proposer_execution_mode",
+                    self.execution_mode,
+                ),
+                "data_proposer_max_concurrent_requests": batch_info.get(
+                    "data_proposer_max_concurrent_requests",
+                    self.max_concurrent_requests,
+                ),
+                "data_proposer_prompts_per_context_item": batch_info.get(
+                    "data_proposer_prompts_per_context_item",
+                    self.prompts_per_context_item,
                 ),
                 "num_selected_prompts": num_prompts,
                 "num_new_prompts_per_step": batch_info.get(

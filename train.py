@@ -209,10 +209,12 @@ def main(cfg: DictConfig) -> None:
             data_proposer_model_name = cfg.data_generator.model_name
             data_proposer_mode = cfg.data_generator.mode
             proposer_context_cfg = {}
+            proposer_execution_cfg = {}
         else:
             data_proposer_model_name = data_proposer_cfg.model_name
             data_proposer_mode = data_proposer_cfg.mode
             proposer_context_cfg = data_proposer_cfg.get("proposer_context", {})
+            proposer_execution_cfg = data_proposer_cfg.get("execution", {})
         context_mode = proposer_context_cfg.get("context_mode", "summary")
         context_max_prompts = proposer_context_cfg.get(
             "context_max_prompts",
@@ -222,6 +224,9 @@ def main(cfg: DictConfig) -> None:
             "context_max_completions_per_prompt",
             2,
         )
+        execution_mode = proposer_execution_cfg.get("mode", "batch")
+        max_concurrent_requests = proposer_execution_cfg.get("max_concurrent_requests", 4)
+        prompts_per_context_item = proposer_execution_cfg.get("prompts_per_context_item", 2)
         buffer = PromptBuffer(
             max_prompts=cfg.buffer.max_prompts,
             high_reward_std_threshold=cfg.buffer.high_reward_std_threshold,
@@ -246,6 +251,9 @@ def main(cfg: DictConfig) -> None:
             context_mode=context_mode,
             context_max_prompts=context_max_prompts,
             context_max_completions_per_prompt=context_max_completions_per_prompt,
+            execution_mode=execution_mode,
+            max_concurrent_requests=max_concurrent_requests,
+            prompts_per_context_item=prompts_per_context_item,
             new_prompts_per_step=cfg.data_generator.new_prompts_per_step,
             safe=cfg.data_generator.safe,
             protected_data=(

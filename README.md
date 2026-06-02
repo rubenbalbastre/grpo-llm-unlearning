@@ -18,6 +18,7 @@ src/data_generator/
   data_generator.py           # GRPO-facing orchestration
   prompt_buffer.py            # prompt outcomes and selection
   data_proposer.py            # OpenAI prompt proposal
+  proposer_execution.py       # batch and async proposer execution strategies
   data_filter.py              # embedding/FAISS filtering
   get_contaminated_data.py
 src/reward_function.py
@@ -56,6 +57,9 @@ data_generator.safe: true
 data_generator.new_prompts_per_step: 0.05 # Fraction of the rollout prompt batch generated each step.
 data_generator.data_proposer.model_name: gpt-5.4-nano
 data_generator.data_proposer.mode: expanded # natural or expanded
+data_generator.data_proposer.execution.mode: batch # batch or async_individual
+data_generator.data_proposer.execution.max_concurrent_requests: 4
+data_generator.data_proposer.execution.prompts_per_context_item: 2
 data_generator.data_proposer.proposer_context.context_mode: summary # summary or rollout_outcomes
 data_generator.data_proposer.proposer_context.context_max_prompts: 4
 data_generator.data_proposer.proposer_context.context_max_completions_per_prompt: 4
@@ -84,6 +88,11 @@ Adaptive proposer context:
 
 - `summary`: sends grouped prompt summaries containing prompt, latest mean reward, and latest reward standard deviation. It uses high-variance prompts as positive anchors and low-variance prompts as negative examples.
 - `rollout_outcomes`: sends only high-variance prompts, plus recent completions and rewards, so the proposer can evolve frontier prompts from concrete success/failure examples. Completion text is context only and should not be copied into generated prompts.
+
+Adaptive proposer execution:
+
+- `batch`: sends one proposer request for all requested prompts.
+- `async_individual`: for `rollout_outcomes`, sends one asynchronous proposer request per high-variance context item, up to `max_concurrent_requests` at a time. Each request asks for `prompts_per_context_item` variants, and results are merged in deterministic context order. If there is no high-variance context yet, generation falls back to `batch`.
 
 In adaptive mode, startup generation requests a full rollout prompt batch while
 the prompt buffer is smaller than the rollout batch. Once the buffer is filled,
