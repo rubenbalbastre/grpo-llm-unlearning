@@ -20,9 +20,13 @@ data_generator:
   new_prompts_per_step: 0.05 # Fraction of the rollout prompt batch generated each step.
   data_proposer:
     model_name: gpt-5.4-nano
-    mode: "expanded" # natural or expanded
+    mode: "natural" # natural or expanded
+    execution:
+      mode: batch # batch or async_individual
+      max_concurrent_requests: 4
+      prompts_per_context_item: 2
     proposer_context:
-      context_mode: summary # summary or rollout_outcomes
+      context_mode: rollout_outcomes # summary or rollout_outcomes
       context_max_prompts: 4
       context_max_completions_per_prompt: 4
 
@@ -64,7 +68,7 @@ peft:
     number_layers_to_transform: -1 # Set to -1 to apply LoRA to all transformer layers.
 
 training:
-  mode: offline # adaptive, standard, or offline
+  mode: standard # adaptive, standard, or offline
   per_device_train_batch_size: 16
   num_generations: 4
   gradient_accumulation_steps: 8

@@ -12,7 +12,7 @@ def parse_args() -> argparse.Namespace:
     parser.add_argument(
         "events_path",
         nargs="?",
-        default="outputs/adaptive-grpo-3453/events.jsonl",
+        default="outputs/adaptive-expanded-3539/events.jsonl",
         help="Path to the training events.jsonl file.",
     )
     return parser.parse_args()

@@ -1,10 +1,8 @@
 from __future__ import annotations
 
 import json
-import warnings
 from pathlib import Path
 from typing import Any, Literal
-from dotenv import load_dotenv
 from pydantic import BaseModel
 from textwrap import dedent
 
@@ -25,6 +23,11 @@ GeneratorMode = Literal[
 ContextMode = Literal[
     "summary",
     "rollout_outcomes",
+]
+
+ExecutionMode = Literal[
+    "batch",
+    "async_individual",
 ]
 
 PromptFamilies = Literal[
@@ -169,24 +172,48 @@ class DataProposer:
         model_name: str = "gpt-5.4-nano",
         mode: GeneratorMode = "natural",
         context_mode: ContextMode = "summary",
+        execution_mode: ExecutionMode = "batch",
+        max_concurrent_requests: int = 4,
+        prompts_per_context_item: int = 2,
     ) -> None:
+        self._validate_execution_config(
+            execution_mode=execution_mode,
+            max_concurrent_requests=max_concurrent_requests,
+            prompts_per_context_item=prompts_per_context_item,
+        )
         self.topic = topic
         self.log_path = log_path
         self.model_name = model_name
         self.mode = mode
         self.context_mode = context_mode
-        self._client = None
-        self._setup_client()
+        self.execution_mode = execution_mode
+        self.max_concurrent_requests = int(max_concurrent_requests)
+        self.prompts_per_context_item = int(prompts_per_context_item)
+        from src.data_generator.proposer_execution import build_proposer_execution
 
-    def _setup_client(self):
-        load_dotenv()
-        try:
-            import openai
+        self._execution = build_proposer_execution(
+            topic=topic,
+            log_path=log_path,
+            model_name=model_name,
+            mode=mode,
+            context_mode=context_mode,
+            execution_mode=execution_mode,
+            max_concurrent_requests=max_concurrent_requests,
+            prompts_per_context_item=prompts_per_context_item,
+        )
 
-            self._client = openai.OpenAI()
-        except Exception:
-            self._client = None
-            raise RuntimeError("OpenAI client is not available. Configure OPENAI_API_KEY in environment.")
+    @staticmethod
+    def _validate_execution_config(
+        execution_mode: str,
+        max_concurrent_requests: int,
+        prompts_per_context_item: int,
+    ) -> None:
+        if execution_mode not in {"batch", "async_individual"}:
+            raise ValueError("execution_mode must be one of: batch, async_individual.")
+        if int(max_concurrent_requests) <= 0:
+            raise ValueError("max_concurrent_requests must be positive.")
+        if int(prompts_per_context_item) <= 0:
+            raise ValueError("prompts_per_context_item must be positive.")
 
     def generate_prompts(
         self,
@@ -196,68 +223,8 @@ class DataProposer:
     ) -> list[dict[str, Any]]:
         if num_prompts <= 0:
             raise ValueError("Number of prompts to generate must be positive.")
-
-        try:
-            input_messages: list[dict[str, str]] = [
-                {
-                    "role": "system",
-                    "content": build_data_generator_prompt(
-                        topic=self.topic,
-                        num_prompts=num_prompts,
-                        mode=self.mode,
-                        context_mode=self.context_mode,
-                    ),
-                },
-            ]
-            if any(rollout_group_context.values()):
-                input_messages.append(
-                    {
-                        "role": "user",
-                        "content": json.dumps({"rollout_reward_groups": rollout_group_context}),
-                    }
-                )
-            if contamination_prompts:
-                input_messages.append(
-                    {
-                        "role": "user",
-                        "content": json.dumps({"contaminated_prompt_history": contamination_prompts}),
-                    }
-                )
-            with warnings.catch_warnings():
-                warnings.filterwarnings(
-                    "ignore",
-                    message="Pydantic serializer warnings:.*",
-                    category=UserWarning,
-                )
-                response = self._client.responses.parse(
-                    model=self.model_name,
-                    input=input_messages,
-                    text_format=DataProposerResponse,
-                )
-            parsed = response.output_parsed
-            prompts = parsed.prompts if parsed is not None else []
-
-            out: list[dict[str, Any]] = []
-            for i, p in enumerate(prompts[:num_prompts]):
-                out.append(
-                    {
-                        "prompt": p.prompt.strip(),
-                        "metadata": {"variant": i, "data_generator_model": self.model_name, "prompt_family": p.prompt_family},
-                    }
-                )
-            if len(out) < num_prompts:
-                log_event(
-                    self.log_path,
-                    {
-                        "type": "data_generator_shortfall",
-                        "requested_prompts": num_prompts,
-                        "returned_prompts": len(prompts),
-                        "accepted_prompts": len(out),
-                        "missing_prompts": num_prompts - len(out),
-                        "model_name": self.model_name,
-                        "mode": self.mode,
-                    },
-                )
-            return out
-        except Exception as e:
-            raise RuntimeError(f"DataGenerator generation failed: {e}") from e
+        return self._execution.generate_prompts(
+            rollout_group_context=rollout_group_context,
+            num_prompts=num_prompts,
+            contamination_prompts=contamination_prompts,
+        )
