@@ -1,7 +1,6 @@
 from __future__ import annotations
 
 import os
-import random
 import re
 from pathlib import Path
 from typing import Any
@@ -10,7 +9,7 @@ import hydra
 from omegaconf import DictConfig, OmegaConf
 import torch
 from datasets import Dataset, load_dataset
-from transformers import AutoModelForCausalLM, AutoTokenizer
+from transformers import AutoModelForCausalLM, AutoTokenizer, set_seed
 from trl import GRPOConfig, GRPOTrainer
 from dotenv import load_dotenv
 
@@ -163,8 +162,7 @@ def update_latest_output_link(output_dir: Path) -> None:
 def main(cfg: DictConfig) -> None:
 
     # seed for reproducibility
-    random.seed(cfg.experiment.seed)
-    torch.manual_seed(cfg.experiment.seed)
+    set_seed(int(cfg.experiment.seed))
 
     # logs
     load_dotenv()
@@ -299,6 +297,8 @@ def main(cfg: DictConfig) -> None:
     args = GRPOConfig(
         output_dir=str(output_dir),
         run_name=run_name,
+        seed=cfg.experiment.seed,
+        data_seed=cfg.experiment.seed,
         per_device_train_batch_size=per_device_train_batch_size,
         gradient_accumulation_steps=cfg.training.gradient_accumulation_steps,
         num_generations=cfg.training.num_generations,

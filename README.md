@@ -51,6 +51,7 @@ Useful fields:
 ```yaml
 training.mode: adaptive       # adaptive, standard, or offline
 experiment.forget_concept: Stephen King
+experiment.seed: 42
 model.name: Qwen/Qwen2.5-1.5B-Instruct
 wandb.run_name: ${training.mode}-${data_generator.data_proposer.mode}-${oc.env:SLURM_JOB_ID,local}
 data_generator.safe: true
