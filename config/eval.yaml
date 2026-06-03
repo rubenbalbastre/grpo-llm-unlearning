@@ -1,7 +1,7 @@
 evaluation:
-  model_name_or_path: outputs/latest/final_model
-  output_dir: outputs/latest/eval_rwku
-  subjects: Stephen King
+  model_name_or_path: outputs/unlearning-3568/final_model
+  output_dir: outputs/unlearning-3568/eval_rwku
+  subjects: Confucius
   shard:
     index: 0
     count: 1
@@ -47,6 +47,6 @@ evaluation:
     enabled: true
     entity: null
     run_name: rwku-${evaluation.subjects}
-    artifact_name: rwku-stephen-king-model
+    artifact_name: rwku-${evaluation.subjects}-model
     log_model_artifact: true
     link_to_training_run: true
