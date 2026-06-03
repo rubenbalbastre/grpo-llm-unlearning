@@ -23,27 +23,74 @@ IFS=',' read -r -a GPU_IDS <<< "${CUDA_VISIBLE_DEVICES:-0}"
 GPU_COUNT="${#GPU_IDS[@]}"
 echo "CUDA_VISIBLE_DEVICES=${CUDA_VISIBLE_DEVICES:-unset}"
 echo "Detected ${GPU_COUNT} visible GPU(s)"
+CLI_OVERRIDES=("$@")
 
-if [[ "${GPU_COUNT}" -le 1 ]]; then
-  python "${REPO_DIR}/eval/rwku/rwku.py"
+run_rwku_eval() {
+  local -a overrides=("$@")
+
+  if [[ "${GPU_COUNT}" -le 1 ]]; then
+    python "${REPO_DIR}/eval/rwku/rwku.py" "${overrides[@]}"
+  else
+    pids=()
+    for SHARD_INDEX in "${!GPU_IDS[@]}"; do
+      GPU_ID="${GPU_IDS[${SHARD_INDEX}]}"
+      echo "Starting eval shard ${SHARD_INDEX}/${GPU_COUNT} on GPU ${GPU_ID}"
+      CUDA_VISIBLE_DEVICES="${GPU_ID}" python "${REPO_DIR}/eval/rwku/rwku.py" \
+        "${overrides[@]}" \
+        evaluation.shard.index="${SHARD_INDEX}" \
+        evaluation.shard.count="${GPU_COUNT}" &
+      pids+=("$!")
+    done
+
+    for pid in "${pids[@]}"; do
+      wait "${pid}"
+    done
+
+    python "${REPO_DIR}/eval/rwku/merge_shards.py" \
+      "${overrides[@]}" \
+      evaluation.shard.index=0 \
+      evaluation.shard.count="${GPU_COUNT}"
+  fi
+}
+
+if [[ -n "${CHECKPOINT_ROOT:-}" ]]; then
+  CHECKPOINT_ROOT="${CHECKPOINT_ROOT%/}"
+  if [[ ! -d "${CHECKPOINT_ROOT}" ]]; then
+    echo "CHECKPOINT_ROOT does not exist: ${CHECKPOINT_ROOT}" >&2
+    exit 1
+  fi
+
+  CHECKPOINT_DIRS=()
+  while IFS= read -r checkpoint_dir; do
+    CHECKPOINT_DIRS+=("${checkpoint_dir}")
+  done < <(find "${CHECKPOINT_ROOT}" -maxdepth 1 -type d -name 'checkpoint-*' | sort -V)
+
+  if [[ "${INCLUDE_FINAL_MODEL:-false}" == "true" && -d "${CHECKPOINT_ROOT}/final_model" ]]; then
+    CHECKPOINT_DIRS+=("${CHECKPOINT_ROOT}/final_model")
+  fi
+  if [[ "${#CHECKPOINT_DIRS[@]}" -eq 0 ]]; then
+    echo "No checkpoint-* directories found under ${CHECKPOINT_ROOT}" >&2
+    exit 1
+  fi
+
+  RUN_LABEL="$(basename "${CHECKPOINT_ROOT}")"
+  echo "Evaluating ${#CHECKPOINT_DIRS[@]} checkpoint(s) under ${CHECKPOINT_ROOT}"
+  for MODEL_DIR in "${CHECKPOINT_DIRS[@]}"; do
+    CHECKPOINT_LABEL="$(basename "${MODEL_DIR}")"
+    EVAL_OUTPUT_DIR="${MODEL_DIR}/eval_rwku"
+    echo "Evaluating checkpoint: ${MODEL_DIR}"
+    run_rwku_eval \
+      "${CLI_OVERRIDES[@]}" \
+      "evaluation.model_name_or_path=${MODEL_DIR}" \
+      "evaluation.output_dir=${EVAL_OUTPUT_DIR}" \
+      "evaluation.model.label=${CHECKPOINT_LABEL}" \
+      "evaluation.wandb.link_to_training_run=false" \
+      "evaluation.wandb.log_model_artifact=true" \
+      "evaluation.wandb.run_name=rwku-${RUN_LABEL}-${CHECKPOINT_LABEL}" \
+      "evaluation.wandb.artifact_name=rwku-${RUN_LABEL}-${CHECKPOINT_LABEL}"
+  done
 else
-  pids=()
-  for SHARD_INDEX in "${!GPU_IDS[@]}"; do
-    GPU_ID="${GPU_IDS[${SHARD_INDEX}]}"
-    echo "Starting eval shard ${SHARD_INDEX}/${GPU_COUNT} on GPU ${GPU_ID}"
-    CUDA_VISIBLE_DEVICES="${GPU_ID}" python "${REPO_DIR}/eval/rwku/rwku.py" \
-      evaluation.shard.index="${SHARD_INDEX}" \
-      evaluation.shard.count="${GPU_COUNT}" &
-    pids+=("$!")
-  done
-
-  for pid in "${pids[@]}"; do
-    wait "${pid}"
-  done
-
-  python "${REPO_DIR}/eval/rwku/merge_shards.py" \
-    evaluation.shard.index=0 \
-    evaluation.shard.count="${GPU_COUNT}"
+  run_rwku_eval "${CLI_OVERRIDES[@]}"
 fi
 echo "Finished RWKU evaluation"
 # Add time for later troubleshooting
