@@ -177,7 +177,12 @@ class PromptBuffer:
             index += 1
         return selected
 
-    def select_for_rollout(self, batch_size: int, step: int) -> list[str]:
+    def select_for_rollout(
+        self,
+        batch_size: int,
+        step: int,
+        allow_reuse_all: bool = False,
+    ) -> list[str]:
         unevaluated = [record for record in self.records.values() if record.latest_rollout_mean_reward is None]
         unevaluated.sort(
             key=lambda record: (
@@ -195,6 +200,14 @@ class PromptBuffer:
         )
 
         eligible = unevaluated + high_variance
+        if not eligible and allow_reuse_all:
+            eligible = sorted(
+                self.records.values(),
+                key=lambda record: (
+                    record.last_selected_step is not None,
+                    record.last_selected_step or -1,
+                ),
+            )
         if not eligible:
             raise RuntimeError("Prompt buffer contains no unevaluated or high-variance prompts for rollout.")
         selected = eligible[:batch_size]

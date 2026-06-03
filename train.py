@@ -253,6 +253,7 @@ def main(cfg: DictConfig) -> None:
             max_concurrent_requests=max_concurrent_requests,
             prompts_per_context_item=prompts_per_context_item,
             new_prompts_per_step=cfg.data_generator.new_prompts_per_step,
+            max_generated_prompts=cfg.data_generator.get("max_generated_prompts"),
             safe=cfg.data_generator.safe,
             protected_data=(
                 get_rwku_contaminated_data(forget_concept)

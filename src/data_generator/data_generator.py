@@ -33,12 +33,14 @@ class DataGenerator:
         # final generation configuration
         safe: bool = False,
         new_prompts_per_step: float = 0.5,
+        max_generated_prompts: int | None = None,
         oversample_factor: int = 4,
         max_attempts: int = 5,
     ) -> None:
         if safe and not protected_data:
             raise ValueError("DataGenerator requires protected_data when safe=True.")
         self._validate_new_prompts_per_step(new_prompts_per_step)
+        self._validate_max_generated_prompts(max_generated_prompts)
         self._validate_context_config(
             context_mode=context_mode,
             context_max_prompts=context_max_prompts,
@@ -61,6 +63,10 @@ class DataGenerator:
         self.oversample_factor = oversample_factor
         self.max_attempts = max_attempts
         self.new_prompts_per_step = float(new_prompts_per_step)
+        self.max_generated_prompts = (
+            int(max_generated_prompts) if max_generated_prompts is not None else None
+        )
+        self.generated_prompt_count = 0
         # proposer configuration
         self.mode = mode
         self.topic = topic
@@ -171,21 +177,26 @@ class DataGenerator:
                 batch_size=num_prompts,
                 prompt_pool_size=prompt_pool_size_before_generation,
             )
-            generated = self.generate_prompts(
-                rollout_group_context=rollout_group_context,
-                num_prompts=num_new_prompts,
-                contamination_prompts=(
-                    self.contamination_buffer.select_history()
-                    if self.safe
-                    else None
-                ),
-            )
-            buffer.add_generated_prompts(
-                [str(candidate["prompt"]).strip() for candidate in generated],
-            )
+            generated = []
+            if num_new_prompts > 0:
+                generated = self.generate_prompts(
+                    rollout_group_context=rollout_group_context,
+                    num_prompts=num_new_prompts,
+                    contamination_prompts=(
+                        self.contamination_buffer.select_history()
+                        if self.safe
+                        else None
+                    ),
+                )
+                generated = generated[:num_new_prompts]
+                self.generated_prompt_count += len(generated)
+                buffer.add_generated_prompts(
+                    [str(candidate["prompt"]).strip() for candidate in generated],
+                )
             selected = buffer.select_for_rollout(
                 batch_size=num_prompts,
                 step=step,
+                allow_reuse_all=num_new_prompts == 0,
             )
             payload[0] = {
                 "prompts": selected,
@@ -256,6 +267,11 @@ class DataGenerator:
             raise ValueError("new_prompts_per_step must be a float in (0, 1].")
 
     @staticmethod
+    def _validate_max_generated_prompts(value: int | None) -> None:
+        if value is not None and int(value) <= 0:
+            raise ValueError("max_generated_prompts must be positive or null.")
+
+    @staticmethod
     def _validate_context_config(
         context_mode: str,
         context_max_prompts: int,
@@ -273,5 +289,10 @@ class DataGenerator:
 
     def _resolve_num_new_prompts(self, batch_size: int, prompt_pool_size: int) -> int:
         if prompt_pool_size < batch_size:
-            return batch_size
-        return self._resolve_new_prompts_per_step(batch_size)
+            requested = batch_size
+        else:
+            requested = self._resolve_new_prompts_per_step(batch_size)
+        if self.max_generated_prompts is None:
+            return requested
+        remaining = self.max_generated_prompts - self.generated_prompt_count
+        return max(0, min(requested, remaining))
