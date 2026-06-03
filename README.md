@@ -56,6 +56,7 @@ model.name: Qwen/Qwen2.5-1.5B-Instruct
 wandb.run_name: ${training.mode}-${data_generator.data_proposer.mode}-${oc.env:SLURM_JOB_ID,local}
 data_generator.safe: true
 data_generator.new_prompts_per_step: 0.05 # Fraction of the rollout prompt batch generated each step.
+data_generator.max_generated_prompts: null # Stop adaptive prompt generation after this many accepted prompts.
 data_generator.data_proposer.model_name: gpt-5.4-nano
 data_generator.data_proposer.mode: expanded # natural or expanded
 data_generator.data_proposer.execution.mode: batch # batch or async_individual
@@ -97,7 +98,10 @@ Adaptive proposer execution:
 
 In adaptive mode, startup generation requests a full rollout prompt batch while
 the prompt buffer is smaller than the rollout batch. Once the buffer is filled,
-new prompts per step follow `data_generator.new_prompts_per_step`.
+new prompts per step follow `data_generator.new_prompts_per_step`. Set
+`data_generator.max_generated_prompts` to stop external prompt generation after
+a fixed number of accepted prompts; training then reuses the existing prompt
+buffer.
 
 ## Offline Synthetic Data
 
@@ -205,8 +209,15 @@ Training writes the resolved Hydra config to `hydra_config.yaml`. When W&B is
 enabled, the same config is logged under the run config key `hydra`, and the
 YAML file is saved to the W&B run.
 
-Under Slurm, `wandb.run_name` includes `SLURM_JOB_ID`, for example
-`standard-grpo-48291`, so each submitted job gets its own local output folder.
+Under `scripts/slurm-run-unlearning.sh`, the shell script passes a per-job
+`wandb.run_name` such as `unlearning-48291`, so each submitted job gets its own
+local output folder and evaluation directory. Override `RUN_NAME` for a more
+descriptive folder:
+
+```bash
+RUN_NAME=standard-natural-48291 sbatch scripts/slurm-run-unlearning.sh
+```
+
 For separate local runs, override the default `-local` suffix explicitly:
 
 ```bash
@@ -214,7 +225,8 @@ python train.py wandb.run_name=standard-grpo-dev-001
 ```
 
 `outputs/latest` is updated only after the final model has been saved
-successfully, so the post-training evaluation follows the just-completed run.
+successfully. The Slurm train-then-eval script does not rely on `latest`; it
+passes the just-completed run directory to RWKU evaluation explicitly.
 
 ## RWKU Evaluation
 

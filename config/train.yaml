@@ -18,6 +18,7 @@ wandb:
 data_generator:
   safe: false
   new_prompts_per_step: 0.05 # Fraction of the rollout prompt batch generated each step.
+  max_generated_prompts: null # Stop external prompt generation after this many accepted prompts; null disables the cap.
   data_proposer:
     model_name: gpt-5.4-nano
     mode: "natural" # natural or expanded
