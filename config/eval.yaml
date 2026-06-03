@@ -42,6 +42,11 @@ evaluation:
     torch_dtype: auto
     trust_remote_code: false
     attn_implementation: null
+  checkpoint:
+    path: null
+    label: null
+    global_step: null
+    num_input_tokens_seen: null
 
   wandb:
     enabled: true

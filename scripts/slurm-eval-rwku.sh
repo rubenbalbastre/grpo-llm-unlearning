@@ -53,6 +53,17 @@ run_rwku_eval() {
   fi
 }
 
+checkpoint_state_value() {
+  local model_dir="$1"
+  local key="$2"
+  local state_path="${model_dir}/trainer_state.json"
+  if [[ ! -f "${state_path}" ]]; then
+    echo "null"
+    return
+  fi
+  python -c 'import json, sys; value = json.load(open(sys.argv[1], encoding="utf-8")).get(sys.argv[2]); print("null" if value is None else value)' "${state_path}" "${key}"
+}
+
 if [[ -n "${CHECKPOINT_ROOT:-}" ]]; then
   CHECKPOINT_ROOT="${CHECKPOINT_ROOT%/}"
   if [[ ! -d "${CHECKPOINT_ROOT}" ]]; then
@@ -77,13 +88,20 @@ if [[ -n "${CHECKPOINT_ROOT:-}" ]]; then
   echo "Evaluating ${#CHECKPOINT_DIRS[@]} checkpoint(s) under ${CHECKPOINT_ROOT}"
   for MODEL_DIR in "${CHECKPOINT_DIRS[@]}"; do
     CHECKPOINT_LABEL="$(basename "${MODEL_DIR}")"
+    CHECKPOINT_GLOBAL_STEP="$(checkpoint_state_value "${MODEL_DIR}" global_step)"
+    CHECKPOINT_TOKENS="$(checkpoint_state_value "${MODEL_DIR}" num_input_tokens_seen)"
     EVAL_OUTPUT_DIR="${MODEL_DIR}/eval_rwku"
     echo "Evaluating checkpoint: ${MODEL_DIR}"
+    echo "Checkpoint global_step=${CHECKPOINT_GLOBAL_STEP}, num_input_tokens_seen=${CHECKPOINT_TOKENS}"
     run_rwku_eval \
       "${CLI_OVERRIDES[@]}" \
       "evaluation.model_name_or_path=${MODEL_DIR}" \
       "evaluation.output_dir=${EVAL_OUTPUT_DIR}" \
       "evaluation.model.label=${CHECKPOINT_LABEL}" \
+      "evaluation.checkpoint.path=${MODEL_DIR}" \
+      "evaluation.checkpoint.label=${CHECKPOINT_LABEL}" \
+      "evaluation.checkpoint.global_step=${CHECKPOINT_GLOBAL_STEP}" \
+      "evaluation.checkpoint.num_input_tokens_seen=${CHECKPOINT_TOKENS}" \
       "evaluation.wandb.link_to_training_run=false" \
       "evaluation.wandb.log_model_artifact=true" \
       "evaluation.wandb.run_name=rwku-${RUN_LABEL}-${CHECKPOINT_LABEL}" \
