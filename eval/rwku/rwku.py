@@ -72,6 +72,17 @@ def log_wandb_results(
         evaluation.get("checkpoint", {}),
         resolve=True,
     )
+    training_config_path = evaluation.get("training_config_path")
+    hydra_config = None
+    if training_config_path:
+        training_config_file = Path(training_config_path)
+        if training_config_file.exists():
+            hydra_config = OmegaConf.to_container(
+                OmegaConf.load(training_config_file),
+                resolve=True,
+            )
+        else:
+            print(f"Training Hydra config not found: {training_config_file}")
 
     artifact = wandb.Artifact(
         name=str(evaluation.wandb.artifact_name),
@@ -101,6 +112,8 @@ def log_wandb_results(
             "sets": OmegaConf.to_container(evaluation.sets, resolve=True),
             "metrics": OmegaConf.to_container(evaluation.metrics, resolve=True),
             "checkpoint": checkpoint_metadata,
+            "training_config_path": str(training_config_path) if training_config_path else None,
+            "hydra": hydra_config,
         },
     }
     if training_run_info:

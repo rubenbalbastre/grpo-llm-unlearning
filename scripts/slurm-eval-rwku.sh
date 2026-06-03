@@ -85,6 +85,7 @@ if [[ -n "${CHECKPOINT_ROOT:-}" ]]; then
   fi
 
   RUN_LABEL="$(basename "${CHECKPOINT_ROOT}")"
+  TRAINING_CONFIG_PATH="${CHECKPOINT_ROOT}/hydra_config.yaml"
   echo "Evaluating ${#CHECKPOINT_DIRS[@]} checkpoint(s) under ${CHECKPOINT_ROOT}"
   for MODEL_DIR in "${CHECKPOINT_DIRS[@]}"; do
     CHECKPOINT_LABEL="$(basename "${MODEL_DIR}")"
@@ -98,6 +99,7 @@ if [[ -n "${CHECKPOINT_ROOT:-}" ]]; then
       "evaluation.model_name_or_path=${MODEL_DIR}" \
       "evaluation.output_dir=${EVAL_OUTPUT_DIR}" \
       "evaluation.model.label=${CHECKPOINT_LABEL}" \
+      "evaluation.training_config_path=${TRAINING_CONFIG_PATH}" \
       "evaluation.checkpoint.path=${MODEL_DIR}" \
       "evaluation.checkpoint.label=${CHECKPOINT_LABEL}" \
       "evaluation.checkpoint.global_step=${CHECKPOINT_GLOBAL_STEP}" \
