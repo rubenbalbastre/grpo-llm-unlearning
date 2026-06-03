@@ -47,6 +47,6 @@ evaluation:
     enabled: true
     entity: null
     run_name: rwku-${evaluation.subjects}
-    artifact_name: rwku-stephen-king-model
+    artifact_name: rwku-${evaluation.subjects}-model
     log_model_artifact: true
     link_to_training_run: true
