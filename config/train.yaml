@@ -2,8 +2,8 @@ defaults:
   - _self_
 
 experiment:
-  seed: 42
-  forget_concept: Stephen King
+  seed: 42 # 1, 1234, 42
+  forget_concept: Confucius # Stephen King
   push_to_hub: false
 
 paths:
@@ -13,6 +13,8 @@ model:
   name: "Qwen/Qwen2.5-1.5B-Instruct" # "microsoft/Phi-3-mini-4k-instruct", Qwen/Qwen2.5-3B-Instruct, Qwen/Qwen2.5-1.5B-Instruct
 
 wandb:
+  # Used by direct `python train.py` runs. `scripts/slurm-run-unlearning.sh`
+  # overrides this with its per-job RUN_NAME so train and eval share one folder.
   run_name: ${training.mode}-${data_generator.data_proposer.mode}-${oc.env:SLURM_JOB_ID,local}
 
 data_generator:

@@ -1,7 +1,7 @@
 evaluation:
-  model_name_or_path: outputs/latest/final_model
-  output_dir: outputs/latest/eval_rwku
-  subjects: Stephen King
+  model_name_or_path: outputs/unlearning-3568/final_model
+  output_dir: outputs/unlearning-3568/eval_rwku
+  subjects: Confucius
   shard:
     index: 0
     count: 1
