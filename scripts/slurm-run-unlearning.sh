@@ -2,7 +2,7 @@
 #SBATCH --job-name=slurm-run-unlearning
 #SBATCH --output=logs/slurm-run-unlearning-%j.log
 #SBATCH --gres=gpu:2
-#SBATCH --time=03:00:00
+#SBATCH --time=06:00:00
 #SBATCH --partition=sc-gpu
 set -euo pipefail
 
