@@ -74,6 +74,7 @@ standard_data.dataset_size: 100 # limit after filtering by forget_concept
 offline_data.path: outputs/offline-synthetic/prompts_stephen_king.jsonl
 offline_data.dataset_size: 100
 training.num_epochs: 1 # standard/offline modes only; use with training.max_steps=-1
+training.callback.checkpoint_token_milestones: null # e.g. [1_500_000, 3_000_000, 4_500_000]
 peft.lora.number_layers_to_transform: -1 # all transformer layers
 training.beta: 0.04
 ```
@@ -102,6 +103,14 @@ new prompts per step follow `data_generator.new_prompts_per_step`. Set
 `data_generator.max_generated_prompts` to stop external prompt generation after
 a fixed number of accepted prompts; training then reuses the existing prompt
 buffer.
+
+To evaluate benchmark evolution across a longer run, save token checkpoints:
+
+```bash
+RUN_NAME=adaptive-natural-4p5m sbatch scripts/slurm-run-unlearning.sh \
+  training.callback.token_budget=4_500_000 \
+  'training.callback.checkpoint_token_milestones=[1_500_000,3_000_000,4_500_000]'
+```
 
 ## Offline Synthetic Data
 
@@ -275,6 +284,22 @@ files. Set it to `false` when evaluating a model without training-run metadata.
 
 The standalone evaluation Slurm job reads the same configuration file:
 `scripts/slurm-eval-rwku.sh`.
+
+To evaluate every saved training checkpoint under a run directory, set
+`CHECKPOINT_ROOT`. The script evaluates each `checkpoint-*` directory
+sequentially, writes results inside that checkpoint directory, and creates one
+W&B evaluation run/model artifact per checkpoint. Metric names remain `rwku/*`.
+Each eval run config includes the checkpoint label, `global_step`, and
+`num_input_tokens_seen` read from `trainer_state.json`, plus the training
+Hydra config loaded from `hydra_config.yaml` under the same W&B config key
+`hydra` used by training runs.
+
+```bash
+CHECKPOINT_ROOT=outputs/adaptive-natural-4p5m sbatch scripts/slurm-eval-rwku.sh
+```
+
+Set `INCLUDE_FINAL_MODEL=true` to also evaluate `final_model` after the
+checkpoints.
 
 ## Notes
 

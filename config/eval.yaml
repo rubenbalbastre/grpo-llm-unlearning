@@ -2,6 +2,7 @@ evaluation:
   model_name_or_path: outputs/unlearning-3568/final_model
   output_dir: outputs/unlearning-3568/eval_rwku
   subjects: Confucius
+  training_config_path: null
   shard:
     index: 0
     count: 1
@@ -42,6 +43,11 @@ evaluation:
     torch_dtype: auto
     trust_remote_code: false
     attn_implementation: null
+  checkpoint:
+    path: null
+    label: null
+    global_step: null
+    num_input_tokens_seen: null
 
   wandb:
     enabled: true

@@ -37,7 +37,7 @@ def init_wandb_run(
     if wandb.run is not None:
         wandb.config.update({"hydra": config}, allow_val_change=True)
     else:
-        wandb.init(name=run_name, config={"hydra": config})
+        wandb.init(name=run_name, job_type="training", config={"hydra": config})
     if config_yaml_path is not None:
         wandb.save(str(config_yaml_path), policy="now")
 

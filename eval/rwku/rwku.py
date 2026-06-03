@@ -68,6 +68,21 @@ def log_wandb_results(
         **{f"rwku/{split}/loss": value for split, value in mia_by_split.items()},
         **{f"rwku/{split}/score": value for split, value in utility_by_split.items()},
     }
+    checkpoint_metadata = OmegaConf.to_container(
+        evaluation.get("checkpoint", {}),
+        resolve=True,
+    )
+    training_config_path = evaluation.get("training_config_path")
+    hydra_config = None
+    if training_config_path:
+        training_config_file = Path(training_config_path)
+        if training_config_file.exists():
+            hydra_config = OmegaConf.to_container(
+                OmegaConf.load(training_config_file),
+                resolve=True,
+            )
+        else:
+            print(f"Training Hydra config not found: {training_config_file}")
 
     artifact = wandb.Artifact(
         name=str(evaluation.wandb.artifact_name),
@@ -75,6 +90,7 @@ def log_wandb_results(
         metadata={
             "model_name_or_path": str(evaluation.model_name_or_path),
             "subjects": str(evaluation.subjects),
+            "checkpoint": checkpoint_metadata,
         },
     )
     if evaluation.wandb.log_model_artifact:
@@ -95,6 +111,9 @@ def log_wandb_results(
             "subjects": str(evaluation.subjects),
             "sets": OmegaConf.to_container(evaluation.sets, resolve=True),
             "metrics": OmegaConf.to_container(evaluation.metrics, resolve=True),
+            "checkpoint": checkpoint_metadata,
+            "training_config_path": str(training_config_path) if training_config_path else None,
+            "hydra": hydra_config,
         },
     }
     if training_run_info:

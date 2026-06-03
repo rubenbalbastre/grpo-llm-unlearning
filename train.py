@@ -14,11 +14,16 @@ from trl import GRPOConfig, GRPOTrainer
 from dotenv import load_dotenv
 
 from src.data_generator.data_generator import DataGenerator
-from src.logging import init_wandb_run, save_wandb_run_info, setup_wandb, setup_huggingface_hub
+from src.logging import (
+    init_wandb_run,
+    save_wandb_run_info,
+    setup_wandb,
+    setup_huggingface_hub,
+)
 from src.data_generator.prompt_buffer import PromptBuffer
 from src.reward_function import make_unlearning_reward_func
 from src.data_generator.get_contaminated_data import get_rwku_contaminated_data
-from src.trainer_callback import StopOnTokenBudgetCallback
+from src.trainer_callback import get_training_callbacks
 
 
 def adaptive_rollout_func(prompts: list[str], trainer) -> dict[str, Any]:
@@ -289,11 +294,7 @@ def main(cfg: DictConfig) -> None:
             raise ValueError("training.num_epochs must be positive in standard/offline mode.")
         standard_training_args["num_train_epochs"] = num_epochs
 
-    # callbacks
-    if cfg.get("training").get("callback", None) is not None:
-        callbacks = [StopOnTokenBudgetCallback(max_tokens=cfg.training.callback.token_budget)]
-    else:
-        callbacks = None
+    callbacks = get_training_callbacks(cfg.training.get("callback"))
 
     args = GRPOConfig(
         output_dir=str(output_dir),
