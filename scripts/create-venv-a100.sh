@@ -8,16 +8,11 @@ export TMPDIR=/workspace/.tmp
 
 mkdir -p "$PIP_CACHE_DIR" "$UV_CACHE_DIR" "$TMPDIR"
 
-# Remove the too-new HF stack
-python -m pip uninstall -y transformers trl peft tokenizers accelerate
-
-# Reinstall a coherent pre-Transformers-5 stack.
-# This should avoid the finegrained_fp8 import path causing your crash.
 python -m pip install --no-cache-dir --root-user-action=ignore \
-  "transformers==4.56.2" \
+  "transformers" \
   "tokenizers" \
   "trl" \
-  "peft==0.17.1" \
+  "peft" \
   "accelerate" \
   "datasets" \
   "wandb" \
@@ -27,4 +22,8 @@ python -m pip install --no-cache-dir --root-user-action=ignore \
   "sentence-transformers" \
   "openai" \
   "rouge-score" \
-  "faiss-cpu"
+  "faiss-cpu" \
+  "hf_transfer" \
+  "vllm"
+
+# python -m pip install --no-cache-dir --root-user-action=ignore flash-attn --no-build-isolation

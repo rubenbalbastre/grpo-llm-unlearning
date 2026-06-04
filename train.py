@@ -198,7 +198,7 @@ def main(cfg: DictConfig) -> None:
     if tokenizer.pad_token is None:
         tokenizer.pad_token = tokenizer.eos_token
     tokenizer.padding_side = "left"
-    model = AutoModelForCausalLM.from_pretrained(model_name)
+    model = AutoModelForCausalLM.from_pretrained(model_name) # , attn_implementation="flash_attention_2"
     # LoRA configuration
     peft_config = get_peft_config(cfg, num_hidden_layers=model.config.num_hidden_layers)
 
@@ -317,6 +317,7 @@ def main(cfg: DictConfig) -> None:
         log_completions=cfg.training.log_completions,
         logging_steps=cfg.training.logging_steps,
         lr_scheduler_type=cfg.training.lr_scheduler_type,
+        # use_vllm=True,
         **standard_training_args,
     )
 
