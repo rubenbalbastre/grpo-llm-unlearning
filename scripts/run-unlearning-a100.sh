@@ -1,0 +1,39 @@
+#!/bin/bash -l
+set -euo pipefail
+
+hostname; pwd; date
+
+REPO_DIR="${REPO_DIR:-/workspace/machine-unlearning-llm}"
+cd "${REPO_DIR}"
+TRAIN_SCRIPT="${TRAIN_SCRIPT:-${REPO_DIR}/train.py}"
+SINGLE_GPU_CONFIG="${SINGLE_GPU_CONFIG:-${REPO_DIR}/config/accelerate_single_gpu.yaml}"
+MULTI_GPU_CONFIG="${MULTI_GPU_CONFIG:-${REPO_DIR}/config/accelerate_multi_gpu.yaml}"
+RUN_NAME="${RUN_NAME:-unlearning-${SLURM_JOB_ID:-$$}}"
+IFS=',' read -ra VISIBLE_GPUS <<< "${CUDA_VISIBLE_DEVICES:-0}"
+NUM_GPUS="${NUM_GPUS:-${#VISIBLE_GPUS[@]}}"
+if ! [[ "${NUM_GPUS}" =~ ^[0-9]+$ ]] || [[ "${NUM_GPUS}" -lt 1 ]]; then
+  echo "Invalid NUM_GPUS value: ${NUM_GPUS}" >&2
+  exit 2
+fi
+
+if [[ "${NUM_GPUS}" -gt 1 ]]; then
+  ACCELERATE_CONFIG="${ACCELERATE_CONFIG:-${MULTI_GPU_CONFIG}}"
+else
+  ACCELERATE_CONFIG="${ACCELERATE_CONFIG:-${SINGLE_GPU_CONFIG}}"
+fi
+
+echo "CUDA_VISIBLE_DEVICES=${CUDA_VISIBLE_DEVICES:-not set}"
+echo "Detected ${NUM_GPUS} GPU(s)"
+echo "Using accelerate config: ${ACCELERATE_CONFIG}"
+
+# echo "Run unlearning script"
+accelerate launch \
+  --config_file "${ACCELERATE_CONFIG}" \
+  --num_processes "${NUM_GPUS}" \
+  "${TRAIN_SCRIPT}" \
+  "wandb.run_name=${RUN_NAME}" \
+  "$@"
+echo "Finished unlearning script"
+
+# Add time for later troubleshooting
+date
