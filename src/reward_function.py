@@ -135,32 +135,46 @@ REFUSAL_PATTERNS = {
     ]
 }
 
-ENTITY_MATCHERS = [
-    (
-        entity,
-        re.compile(rf"(?<!\w){re.escape(entity)}(?!\w)", flags=re.IGNORECASE),
-    )
-    for entity in REFUSAL_PATTERNS
-]
+def build_entity_matchers(forget_concept: str) -> list[tuple[str, re.Pattern]]:
+    if forget_concept not in REFUSAL_PATTERNS:
+        raise ValueError(
+            "No refusal patterns configured for "
+            f"{forget_concept!r}. Available options: {list(REFUSAL_PATTERNS)}."
+        )
+    entities = REFUSAL_PATTERNS[forget_concept]
+    return [
+        (
+            entity,
+            re.compile(rf"(?<!\w){re.escape(entity)}(?!\w)", flags=re.IGNORECASE),
+        )
+        for entity in entities
+    ]
 
 
-def matched_entities(text: str) -> list[str]:
-    return [entity for entity, matcher in ENTITY_MATCHERS if matcher.search(text)]
+def matched_entities(text: str, matchers: list[tuple[str, re.Pattern]]) -> list[str]:
+    return [entity for entity, matcher in matchers if matcher.search(text)]
 
 
-def entity_forgetting_reward(text: str) -> tuple[float, list[str]]:
-    entities = matched_entities(text)
+def entity_forgetting_reward(
+    text: str,
+    matchers: list[tuple[str, re.Pattern]],
+) -> tuple[float, list[str]]:
+    entities = matched_entities(text, matchers)
     return 1.0 / (1.0 + len(entities)), entities
 
 
-def binary_forgetting_reward(text: str) -> tuple[float, list[str]]:
-    entities = matched_entities(text)
+def binary_forgetting_reward(
+    text: str,
+    matchers: list[tuple[str, re.Pattern]],
+) -> tuple[float, list[str]]:
+    entities = matched_entities(text, matchers)
     return (1.0 if not entities else 0.0), entities
 
 
 def make_unlearning_reward_func(
     buffer: PromptBuffer | None,
     log_path: Path,
+    forget_concept: str,
     reward_mode: str = "entity_count",
 ):
     reward_functions = {
@@ -172,6 +186,7 @@ def make_unlearning_reward_func(
             f"reward.mode must be one of {list(reward_functions)}, got {reward_mode!r}."
         )
     compute_reward = reward_functions[reward_mode]
+    entity_matchers = build_entity_matchers(forget_concept)
 
     def unlearning_reward_func(prompts, completions, **kwargs) -> list[float]:
         rewards: list[float] = []
@@ -190,7 +205,7 @@ def make_unlearning_reward_func(
             return rewards
 
         for p, c in zip(prompts_list, completions_list, strict=True):
-            reward, entities = compute_reward(str(c))
+            reward, entities = compute_reward(str(c), entity_matchers)
 
             if buffer is not None:
                 buffer.record_rollout_outcome(
@@ -206,6 +221,7 @@ def make_unlearning_reward_func(
                     "completion": str(c),
                     "reward": reward,
                     "reward_mode": reward_mode,
+                    "forget_concept": forget_concept,
                     "matched_entities": entities,
                     "matched_entity_count": len(entities),
                     "step": step,

@@ -283,6 +283,7 @@ def main(cfg: DictConfig) -> None:
     reward_func = make_unlearning_reward_func(
         buffer,
         events_log_path,
+        forget_concept=forget_concept,
         reward_mode=cfg.reward.mode,
     )
 
