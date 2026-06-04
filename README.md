@@ -290,9 +290,9 @@ To evaluate every saved training checkpoint under a run directory, set
 sequentially, writes results inside that checkpoint directory, and creates one
 W&B evaluation run/model artifact per checkpoint. Metric names remain `rwku/*`.
 Each eval run config includes the checkpoint label, `global_step`, and
-`num_input_tokens_seen` read from `trainer_state.json`, plus the training
-Hydra config loaded from `hydra_config.yaml` under the same W&B config key
-`hydra` used by training runs.
+`num_input_tokens_seen` read from `trainer_state.json`, the configured
+checkpoint milestone token target, plus the training Hydra config loaded from
+`hydra_config.yaml` under the same W&B config key `hydra` used by training runs.
 
 ```bash
 CHECKPOINT_ROOT=outputs/adaptive-natural-4p5m sbatch scripts/slurm-eval-rwku.sh
