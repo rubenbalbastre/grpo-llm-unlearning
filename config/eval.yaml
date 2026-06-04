@@ -46,6 +46,8 @@ evaluation:
   checkpoint:
     path: null
     label: null
+    milestone_index: null
+    milestone_num_tokens: null
     global_step: null
     num_input_tokens_seen: null
 
