@@ -55,7 +55,7 @@ buffer:
 reward:
   mode: binary # entity_count or binary
   language:
-    enabled: false # Set true to add a small fastText English-consistency reward.
+    enabled: true # Set true to add a small fastText English-consistency reward.
     weight: 0.1 # Total reward = unlearning reward + weight * language reward.
     model_path: ${oc.env:FASTTEXT_LID_PATH,null} # Path to fastText lid.176.ftz or lid.176.bin.
     min_chars: 20 # Short completions are scored neutral because language ID is unreliable.
@@ -78,7 +78,7 @@ peft:
     number_layers_to_transform: -1 # Set to -1 to apply LoRA to all transformer layers.
 
 training:
-  mode: standard # adaptive, standard, or offline
+  mode: adaptive # adaptive, standard, or offline
   per_device_train_batch_size: 16
   num_generations: 8
   gradient_accumulation_steps: 8
