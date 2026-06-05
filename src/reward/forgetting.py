@@ -3,8 +3,8 @@ from __future__ import annotations
 import re
 from pathlib import Path
 
-from src.logging import log_event
 from src.data_generator.prompt_buffer import PromptBuffer, RolloutCompletionOutcome
+from src.logging import log_event
 
 
 REFUSAL_PATTERNS = {
@@ -69,7 +69,7 @@ REFUSAL_PATTERNS = {
         "The Colorado Kid",
         "From a Buick 8",
         "Storm of the Century",
-        "Desperation"
+        "Desperation",
     ],
     "Confucius": [
         "Confucius",
@@ -131,9 +131,73 @@ REFUSAL_PATTERNS = {
         "Seokjeonjeon",
         "Sungkyunkwan",
         "Sishu",
-        "Shujing"
+        "Shujing",
+    ],
+    "Rihanna": [
+        "Rihanna",
+        "Robyn Rihanna Fenty",
+        "Robyn Fenty",
+        "Music of the Sun",
+        "A Girl Like Me",
+        "Good Girl Gone Bad",
+        "Loud",
+        "Talk That Talk",
+        "Rated R",
+        "Unapologetic",
+        "Anti",
+        "Pon de Replay",
+        "Umbrella",
+        "Diamonds",
+        "Work",
+        "We Found Love",
+        "SOS",
+        "Unfaithful",
+        "Don't Stop the Music",
+        "Disturbia",
+        "Rude Boy",
+        "Russian Roulette",
+        "S1",
+        "Def Jam Recordings",
+        "VP Records",
+        "Fenty Beauty",
+        "Fenty Skin",
+        "Savage X Fenty",
+        "Fenty",
+        "Fenty by Rihanna",
+        "Fenty x Puma",
+        "Fenty x Pyer Moss",
+        "Clara Lionel Foundation",
+        "Rihanna Charitable Foundation",
+        "Rihanna's Barbadian Resort and Club",
+        "Barbados",
+        "Saint Michael",
+        "Battleship",
+        "Ocean's 8",
+        "Bring It On: All or Nothing",
+        "Blade: Trinity",
+        "Blade II",
+        "Cloud Atlas",
+        "Danny Collins",
+        "Mother's Day",
+        "A Star Is Born",
+        "Beyond the Lights",
+        "Sparkle",
+        "Avengers: Infinity War",
+        "Avengers: Endgame",
+        "The Hills",
+        "Mia Turner",
+        "Star Search",
+        "LVMH",
+        "Puma",
+        "L'Oréal",
+        "UNICEF",
+        "Grammy Awards",
+        "Billboard Music Awards",
+        "American Music Awards",
+        "Guinness World Records"
     ]
 }
+
 
 def build_entity_matchers(forget_concept: str) -> list[tuple[str, re.Pattern]]:
     if forget_concept not in REFUSAL_PATTERNS:
@@ -141,13 +205,12 @@ def build_entity_matchers(forget_concept: str) -> list[tuple[str, re.Pattern]]:
             "No refusal patterns configured for "
             f"{forget_concept!r}. Available options: {list(REFUSAL_PATTERNS)}."
         )
-    entities = REFUSAL_PATTERNS[forget_concept]
     return [
         (
             entity,
             re.compile(rf"(?<!\w){re.escape(entity)}(?!\w)", flags=re.IGNORECASE),
         )
-        for entity in entities
+        for entity in REFUSAL_PATTERNS[forget_concept]
     ]
 
 
@@ -171,7 +234,7 @@ def binary_forgetting_reward(
     return (1.0 if not entities else 0.0), entities
 
 
-def make_unlearning_reward_func(
+def make_forgetting_reward_func(
     buffer: PromptBuffer | None,
     log_path: Path,
     forget_concept: str,
@@ -185,10 +248,11 @@ def make_unlearning_reward_func(
         raise ValueError(
             f"reward.mode must be one of {list(reward_functions)}, got {reward_mode!r}."
         )
+
     compute_reward = reward_functions[reward_mode]
     entity_matchers = build_entity_matchers(forget_concept)
 
-    def unlearning_reward_func(prompts, completions, **kwargs) -> list[float]:
+    def forgetting_reward(prompts, completions, **kwargs) -> list[float]:
         rewards: list[float] = []
         trainer_state = kwargs.get("trainer_state")
         step = getattr(trainer_state, "global_step", None)
@@ -204,21 +268,26 @@ def make_unlearning_reward_func(
         if not prompts_list:
             return rewards
 
-        for p, c in zip(prompts_list, completions_list, strict=True):
-            reward, entities = compute_reward(str(c), entity_matchers)
+        for prompt, completion in zip(prompts_list, completions_list, strict=True):
+            reward, entities = compute_reward(str(completion), entity_matchers)
 
             if buffer is not None:
                 buffer.record_rollout_outcome(
-                    str(p),
-                    RolloutCompletionOutcome(completion=str(c), reward=reward, step=step),
+                    str(prompt),
+                    RolloutCompletionOutcome(
+                        completion=str(completion),
+                        reward=reward,
+                        step=step,
+                    ),
                 )
             rewards.append(reward)
             log_event(
                 log_path,
                 {
                     "type": "reward",
-                    "prompt": str(p),
-                    "completion": str(c),
+                    "reward_component": "forgetting",
+                    "prompt": str(prompt),
+                    "completion": str(completion),
                     "reward": reward,
                     "reward_mode": reward_mode,
                     "forget_concept": forget_concept,
@@ -230,4 +299,4 @@ def make_unlearning_reward_func(
 
         return rewards
 
-    return unlearning_reward_func
+    return forgetting_reward
