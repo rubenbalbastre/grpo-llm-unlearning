@@ -5,8 +5,6 @@ import os
 from pathlib import Path
 from typing import Any
 
-from src.logging import log_event
-
 
 @dataclass(frozen=True)
 class LanguageRewardResult:
@@ -62,9 +60,7 @@ class FastTextLanguageReward:
                 reason="too_short",
             )
 
-        labels, confidences = self._model.predict(stripped.replace("\n", " "), k=1)
-        predicted = labels[0].replace("__label__", "") if labels else None
-        confidence = float(confidences[0]) if confidences else 0.0
+        predicted, confidence = self._predict_top_language(stripped)
 
         if predicted == "en" and confidence >= self.english_confidence_threshold:
             reward = 1.0
@@ -83,6 +79,16 @@ class FastTextLanguageReward:
             is_english=predicted == "en",
             reason=reason,
         )
+
+    def _predict_top_language(self, text: str) -> tuple[str | None, float]:
+        # fasttext.predict() is currently incompatible with NumPy 2 because it
+        # calls np.array(..., copy=False). The underlying binding returns the
+        # same predictions without going through NumPy.
+        predictions = self._model.f.predict(f"{text.replace('\n', ' ')}\n", 1, 0.0, "strict")
+        if not predictions:
+            return None, 0.0
+        confidence, label = predictions[0]
+        return label.replace("__label__", ""), float(confidence)
 
 
 def build_language_reward(config: Any) -> FastTextLanguageReward | None:
@@ -105,6 +111,8 @@ def make_language_reward_func(
     language_reward: FastTextLanguageReward,
     log_path: Path,
 ):
+    from src.logging import log_event
+
     def language_reward_func(prompts, completions, **kwargs) -> list[float]:
         trainer_state = kwargs.get("trainer_state")
         step = getattr(trainer_state, "global_step", None)
