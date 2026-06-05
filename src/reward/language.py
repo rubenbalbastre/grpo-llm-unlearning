@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 from dataclasses import dataclass
+import os
 from pathlib import Path
 from typing import Any
 
@@ -29,7 +30,7 @@ class FastTextLanguageReward:
                 "reward.language.enabled=true requires reward.language.model_path "
                 "or FASTTEXT_LID_PATH."
             )
-        path = Path(model_path).expanduser()
+        path = Path(os.path.expandvars(str(model_path))).expanduser()
         if not path.exists():
             raise ValueError(f"fastText language model does not exist: {path}")
         if min_chars < 0:
