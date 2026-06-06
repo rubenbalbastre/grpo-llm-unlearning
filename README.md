@@ -21,7 +21,10 @@ src/data_generator/
   proposer_execution.py       # batch and async proposer execution strategies
   data_filter.py              # embedding/FAISS filtering
   get_contaminated_data.py
-src/reward_function.py
+src/reward/
+  forgetting.py              # entity/refusal reward used for prompt-buffer outcomes
+  language.py                # optional fastText language-consistency reward
+  factory.py                 # builds TRL reward_funcs and reward_weights
 eval/rwku/                    # RWKU evaluation
 scripts/slurm-run-unlearning.sh
 scripts/slurm-eval-rwku.sh
@@ -69,6 +72,9 @@ buffer.max_prompts: 512
 buffer.high_reward_std_threshold: 0.2
 buffer.high_mean_reward_threshold: 0.3
 reward.mode: entity_count # entity_count or binary
+reward.language.enabled: false # optional fastText English-consistency reward
+reward.language.weight: 0.1 # passed to GRPOConfig.reward_weights
+reward.language.model_path: ${oc.env:FASTTEXT_LID_PATH,null}
 standard_data.config_name: train_refusal_phi3
 standard_data.dataset_size: 100 # limit after filtering by forget_concept
 offline_data.path: outputs/offline-synthetic/prompts_stephen_king.jsonl

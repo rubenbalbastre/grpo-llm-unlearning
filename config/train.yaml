@@ -3,7 +3,7 @@ defaults:
 
 experiment:
   seed: 42 # 1, 1234, 42
-  forget_concept: Confucius # Stephen King
+  forget_concept: Rihanna #Confucius # Stephen King
   push_to_hub: false
 
 paths:
@@ -54,6 +54,13 @@ buffer:
 
 reward:
   mode: binary # entity_count or binary
+  language:
+    enabled: true # Set true to add a small fastText English-consistency reward.
+    weight: 0.3 # Total reward = unlearning reward + weight * language reward.
+    model_path: ${oc.env:FASTTEXT_LID_PATH,null} # Path to fastText lid.176.ftz or lid.176.bin.
+    min_chars: 20 # Short completions are scored neutral because language ID is unreliable.
+    english_confidence_threshold: 0.6 # +1 when top prediction is English above this confidence.
+    uncertain_confidence_threshold: 0.6 # 0 when top prediction confidence is below this value; otherwise non-English is -1.
 
 peft:
   lora:
@@ -71,9 +78,9 @@ peft:
     number_layers_to_transform: -1 # Set to -1 to apply LoRA to all transformer layers.
 
 training:
-  mode: standard # adaptive, standard, or offline
+  mode: adaptive # adaptive, standard, or offline
   per_device_train_batch_size: 16
-  num_generations: 4
+  num_generations: 8
   gradient_accumulation_steps: 8
   gradient_checkpointing: True
   steps_per_generation: 8
