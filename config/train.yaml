@@ -56,7 +56,7 @@ reward:
   mode: binary # entity_count or binary
   language:
     enabled: true # Set true to add a small fastText English-consistency reward.
-    weight: 0.1 # Total reward = unlearning reward + weight * language reward.
+    weight: 0.3 # Total reward = unlearning reward + weight * language reward.
     model_path: ${oc.env:FASTTEXT_LID_PATH,null} # Path to fastText lid.176.ftz or lid.176.bin.
     min_chars: 20 # Short completions are scored neutral because language ID is unreliable.
     english_confidence_threshold: 0.6 # +1 when top prediction is English above this confidence.
