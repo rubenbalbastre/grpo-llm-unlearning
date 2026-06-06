@@ -3,7 +3,7 @@ defaults:
 
 experiment:
   seed: 42 # 1, 1234, 42
-  forget_concept: Confucius # Stephen King
+  forget_concept: Rihanna #Confucius # Stephen King
   push_to_hub: false
 
 paths:

@@ -1,7 +1,7 @@
 evaluation:
   model_name_or_path: outputs/unlearning-3568/final_model
   output_dir: outputs/unlearning-3568/eval_rwku
-  subjects: Confucius
+  subjects: Rihanna
   training_config_path: null
   shard:
     index: 0
