@@ -205,6 +205,12 @@ class DataGenerator:
                 },
                 "prompt_pool_size": len(buffer.records),
                 "num_new_prompts": num_new_prompts,
+                "generated_prompt_count_after": self.generated_prompt_count,
+                "max_generated_prompts": self.max_generated_prompts,
+                "generated_prompt_cap_reached": (
+                    self.max_generated_prompts is not None
+                    and self.generated_prompt_count >= self.max_generated_prompts
+                ),
                 "context_mode": self.context_mode,
                 "context_max_prompts": self.context_max_prompts,
                 "context_max_completions_per_prompt": self.context_max_completions_per_prompt,
@@ -232,6 +238,14 @@ class DataGenerator:
                 "batch_size": len(final_prompts),
                 "rollout_group_context": batch_info.get("rollout_group_context", {}),
                 "prompt_pool_size": batch_info.get("prompt_pool_size", 0),
+                "generated_prompt_count_after": batch_info.get(
+                    "generated_prompt_count_after"
+                ),
+                "max_generated_prompts": batch_info.get("max_generated_prompts"),
+                "generated_prompt_cap_reached": batch_info.get(
+                    "generated_prompt_cap_reached",
+                    False,
+                ),
                 "context_mode": batch_info.get("context_mode", self.context_mode),
                 "context_max_prompts": batch_info.get("context_max_prompts", self.context_max_prompts),
                 "context_max_completions_per_prompt": batch_info.get(
