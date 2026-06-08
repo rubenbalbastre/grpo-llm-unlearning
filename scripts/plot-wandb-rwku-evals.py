@@ -3,11 +3,14 @@ from __future__ import annotations
 
 import argparse
 import math
-import re
 from pathlib import Path
-from typing import Any
 
 from dotenv import dotenv_values
+
+
+NULL_MILESTONE_NUM_TOKENS = int(6e6)
+ENV_FILE = ".env"
+JOB_TYPE = "evaluation"
 
 
 def parse_args() -> argparse.Namespace:
@@ -17,42 +20,21 @@ def parse_args() -> argparse.Namespace:
             "grouped by Hydra training mode and checkpoint token milestone."
         )
     )
-    parser.add_argument("--env-file", default=".env", help="Path to repository .env file.")
-    parser.add_argument("--entity", default=None, help="W&B entity. Defaults to WANDB_ENTITY or API default.")
     parser.add_argument("--project", default=None, help="W&B project. Defaults to WANDB_PROJECT from .env.")
     parser.add_argument("--output-dir", default="outputs/wandb-rwku-plots", help="Directory for PNG/CSV outputs.")
     parser.add_argument("--forget-concept", default="Rihanna", help="Filter hydra.experiment.forget_concept.")
+    parser.add_argument(
+        "--model-name",
+        default="Qwen/Qwen2.5-1.5B-Instruct",
+        help="Filter hydra.model.name. Use '' to disable.",
+    )
     parser.add_argument("--metric-prefix", default="rwku/", help="Metric prefix to plot.")
-    parser.add_argument("--job-type", default="evaluation", help="Filter W&B run job type. Use '' to disable.")
-    parser.add_argument("--max-runs", type=int, default=None, help="Optional maximum number of W&B runs to scan.")
     parser.add_argument("--ncols", type=int, default=3, help="Number of columns in the output plot matrix.")
     return parser.parse_args()
 
 
-def nested_get(data: Any, path: str) -> Any:
-    current = data
-    for part in path.split("."):
-        if not isinstance(current, dict) or part not in current:
-            return None
-        current = current[part]
-    return current
-
-
-def first_present(data: dict[str, Any], paths: list[str]) -> Any:
-    for path in paths:
-        value = nested_get(data, path)
-        if value is not None:
-            return value
-    return None
-
-
-def is_number(value: Any) -> bool:
+def is_number(value: object) -> bool:
     return isinstance(value, (int, float)) and not isinstance(value, bool) and math.isfinite(value)
-
-
-def slugify(value: str) -> str:
-    value = re.sub(r"[^A-Za-z0-9._-]+", "_", value).strip("_")
-    return value or "metric"
 
 
 def collect_eval_rows(
@@ -61,70 +43,43 @@ def collect_eval_rows(
     project: str,
     metric_prefix: str,
     forget_concept: str,
-    job_type: str,
-    max_runs: int | None,
-) -> list[dict[str, Any]]:
+    model_name: str,
+) -> list[dict[str, object]]:
     import wandb
 
     api = wandb.Api()
     path = f"{entity}/{project}" if entity else project
-    rows: list[dict[str, Any]] = []
-    scanned = 0
+    rows: list[dict[str, object]] = []
 
     for run in api.runs(path):
-        if max_runs is not None and scanned >= max_runs:
-            break
-        scanned += 1
-
         run_job_type = (
             getattr(run, "job_type", None)
             or getattr(run, "jobType", None)
             or getattr(run, "_attrs", {}).get("jobType")
         )
-        if job_type and run_job_type and run_job_type != job_type:
+        if run_job_type and run_job_type != JOB_TYPE:
             continue
 
         config = dict(run.config or {})
         summary = dict(run.summary or {})
-        hydra = config.get("hydra") or {}
-        run_forget_concept = first_present(
-            config,
-            [
-                "hydra.experiment.forget_concept",
-                "experiment.forget_concept",
-            ],
-        )
-        if run_forget_concept is None:
-            run_forget_concept = nested_get(hydra, "experiment.forget_concept")
+        run_forget_concept = config.get("hydra.experiment.forget_concept")
         if run_forget_concept != forget_concept:
             continue
 
-        milestone = first_present(
-            config,
-            [
-                "checkpoint.milestone_num_tokens",
-                "evaluation.checkpoint.milestone_num_tokens",
-            ],
-        )
-        if milestone is None:
-            milestone = nested_get(config.get("checkpoint") or {}, "milestone_num_tokens")
-        if milestone is None:
+        run_model_name = config.get("hydra.model.name")
+        if model_name and run_model_name != model_name:
             continue
+
+        milestone = config.get("checkpoint.milestone_num_tokens")
+        if milestone is None:
+            milestone = NULL_MILESTONE_NUM_TOKENS
 
         try:
             milestone = int(milestone)
         except (TypeError, ValueError):
             continue
 
-        training_mode = first_present(
-            config,
-            [
-                "hydra.training.mode",
-                "training.mode",
-            ],
-        )
-        if training_mode is None:
-            training_mode = nested_get(hydra, "training.mode")
+        training_mode = config.get("hydra.training.mode")
         if training_mode is None:
             training_mode = "unknown"
 
@@ -137,6 +92,7 @@ def collect_eval_rows(
                     "run_name": run.name,
                     "training_mode": str(training_mode),
                     "forget_concept": str(run_forget_concept),
+                    "model_name": str(run_model_name),
                     "checkpoint_milestone_num_tokens": milestone,
                     "metric": metric_name,
                     "value": float(metric_value),
@@ -146,18 +102,18 @@ def collect_eval_rows(
     return rows
 
 
-def aggregate_metric_rows(rows: list[dict[str, Any]]) -> Any:
+def aggregate_metric_rows(rows: list[dict[str, object]]) -> object:
     import pandas as pd
 
     df = pd.DataFrame(rows)
     return (
         df.groupby(["metric", "training_mode", "checkpoint_milestone_num_tokens"], as_index=False)
-        .agg(mean=("value", "mean"), min=("value", "min"), max=("value", "max"), n=("value", "count"))
+        .agg(mean=("value", "mean"), std=("value", "std"), n=("value", "count"))
         .sort_values(["metric", "training_mode", "checkpoint_milestone_num_tokens"])
     )
 
 
-def plot_metric_matrix(grouped: Any, output_dir: Path, ncols: int) -> Path:
+def plot_metric_matrix(grouped: object, output_dir: Path, ncols: int) -> Path:
     import matplotlib.pyplot as plt
 
     metrics = list(grouped["metric"].drop_duplicates())
@@ -184,17 +140,26 @@ def plot_metric_matrix(grouped: Any, output_dir: Path, ncols: int) -> Path:
     for ax, metric in zip(axes.ravel(), metrics, strict=False):
         metric_df = grouped[grouped["metric"] == metric]
         for training_mode, mode_df in metric_df.groupby("training_mode"):
-            xs = mode_df["checkpoint_milestone_num_tokens"]
+            mode_df = mode_df.sort_values("checkpoint_milestone_num_tokens")
+            xs = mode_df["checkpoint_milestone_num_tokens"].tolist()
+            means = mode_df["mean"]
             color = mode_colors[training_mode]
             (line,) = ax.plot(
                 xs,
-                mode_df["mean"],
+                means.tolist(),
                 marker="o",
                 color=color,
                 label=f"{training_mode} mean",
             )
-            ax.scatter(xs, mode_df["min"], marker="v", s=35, color=color, alpha=0.65)
-            ax.scatter(xs, mode_df["max"], marker="^", s=35, color=color, alpha=0.65)
+            std = mode_df["std"].fillna(0.0)
+            ax.fill_between(
+                xs,
+                (means - std).tolist(),
+                (means + std).tolist(),
+                color=color,
+                alpha=0.16,
+                linewidth=0,
+            )
             label = f"{training_mode} mean"
             if label not in legend_labels:
                 legend_handles.append(line)
@@ -214,11 +179,12 @@ def plot_metric_matrix(grouped: Any, output_dir: Path, ncols: int) -> Path:
             legend_handles,
             legend_labels,
             loc="upper center",
+            bbox_to_anchor=(0.5, 0.955),
             ncol=min(len(legend_labels), max(1, ncols)),
-            frameon=False,
+            frameon=True,
         )
     fig.suptitle("RWKU Evaluation Metrics", y=0.995)
-    fig.tight_layout(rect=(0, 0, 1, 0.965))
+    fig.tight_layout(rect=(0, 0, 1, 0.88))
 
     output_path = output_dir / "rwku_metrics_matrix.png"
     fig.savefig(output_path, dpi=160)
@@ -228,9 +194,9 @@ def plot_metric_matrix(grouped: Any, output_dir: Path, ncols: int) -> Path:
 
 def main() -> None:
     args = parse_args()
-    env = dotenv_values(args.env_file)
+    env = dotenv_values(ENV_FILE)
     project = args.project or env.get("WANDB_PROJECT")
-    entity = args.entity or env.get("WANDB_ENTITY")
+    entity = env.get("WANDB_ENTITY")
     api_key = env.get("WANDB_API_KEY")
     if not project:
         raise SystemExit("WANDB_PROJECT is required in .env or via --project.")
@@ -248,13 +214,13 @@ def main() -> None:
         project=str(project),
         metric_prefix=args.metric_prefix,
         forget_concept=args.forget_concept,
-        job_type=args.job_type,
-        max_runs=args.max_runs,
+        model_name=args.model_name,
     )
     if not rows:
         raise SystemExit(
             "No matching W&B eval rows found. Check project, entity, "
-            f"forget_concept={args.forget_concept!r}, and checkpoint metadata."
+            f"forget_concept={args.forget_concept!r}, model_name={args.model_name!r}, "
+            "and checkpoint metadata."
         )
 
     import pandas as pd
