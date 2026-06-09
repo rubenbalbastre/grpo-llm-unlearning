@@ -54,6 +54,7 @@ buffer:
 
 reward:
   mode: binary # entity_count or binary
+  log_events: false # Set false to skip per-sample reward rows in events.jsonl.
   language:
     enabled: true # Set true to add a small fastText English-consistency reward.
     weight: 0.3 # Total reward = unlearning reward + weight * language reward.

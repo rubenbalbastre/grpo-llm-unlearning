@@ -110,6 +110,7 @@ def build_language_reward(config: Any) -> FastTextLanguageReward | None:
 def make_language_reward_func(
     language_reward: FastTextLanguageReward,
     log_path: Path,
+    log_events: bool = True,
 ):
     from src.logging import log_event
 
@@ -144,27 +145,28 @@ def make_language_reward_func(
             log_metric("language/english_rate", english_rate)
             log_metric("language/confident_non_english_rate", non_english_rate)
 
-        for prompt, completion, result in zip(
-            prompts_list,
-            completions_list,
-            results,
-            strict=True,
-        ):
-            log_event(
-                log_path,
-                {
-                    "type": "reward",
-                    "reward_component": "language",
-                    "prompt": str(prompt),
-                    "completion": str(completion),
-                    "reward": result.reward,
-                    "language_predicted": result.predicted_language,
-                    "language_confidence": result.confidence,
-                    "language_is_english": result.is_english,
-                    "language_reason": result.reason,
-                    "step": step,
-                },
-            )
+        if log_events:
+            for prompt, completion, result in zip(
+                prompts_list,
+                completions_list,
+                results,
+                strict=True,
+            ):
+                log_event(
+                    log_path,
+                    {
+                        "type": "reward",
+                        "reward_component": "language",
+                        "prompt": str(prompt),
+                        "completion": str(completion),
+                        "reward": result.reward,
+                        "language_predicted": result.predicted_language,
+                        "language_confidence": result.confidence,
+                        "language_is_english": result.is_english,
+                        "language_reason": result.reason,
+                        "step": step,
+                    },
+                )
 
         return rewards
 

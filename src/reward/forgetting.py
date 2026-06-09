@@ -48,6 +48,7 @@ def make_forgetting_reward_func(
     log_path: Path,
     forget_concept: str,
     reward_mode: str = "entity_count",
+    log_events: bool = True,
 ):
     reward_functions = {
         "binary": binary_forgetting_reward,
@@ -90,21 +91,22 @@ def make_forgetting_reward_func(
                     ),
                 )
             rewards.append(reward)
-            log_event(
-                log_path,
-                {
-                    "type": "reward",
-                    "reward_component": "forgetting",
-                    "prompt": str(prompt),
-                    "completion": str(completion),
-                    "reward": reward,
-                    "reward_mode": reward_mode,
-                    "forget_concept": forget_concept,
-                    "matched_entities": entities,
-                    "matched_entity_count": len(entities),
-                    "step": step,
-                },
-            )
+            if log_events:
+                log_event(
+                    log_path,
+                    {
+                        "type": "reward",
+                        "reward_component": "forgetting",
+                        "prompt": str(prompt),
+                        "completion": str(completion),
+                        "reward": reward,
+                        "reward_mode": reward_mode,
+                        "forget_concept": forget_concept,
+                        "matched_entities": entities,
+                        "matched_entity_count": len(entities),
+                        "step": step,
+                    },
+                )
 
         return rewards
 
