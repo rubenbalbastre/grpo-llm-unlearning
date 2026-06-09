@@ -83,7 +83,7 @@ training:
   num_generations: 8
   gradient_accumulation_steps: 16
   gradient_checkpointing: False
-  steps_per_generation: 8
+  steps_per_generation: 16
   num_iterations: 2
   beta: 0.04
   learning_rate: 1.0e-5
