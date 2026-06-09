@@ -88,6 +88,7 @@ training:
   beta: 0.04
   learning_rate: 1.0e-5
   max_completion_length: 256
+  ddp_find_unused_parameters: false
   remove_unused_columns: false
   log_completions: true
   logging_steps: 5
