@@ -218,7 +218,7 @@ def run_evaluation(cfg: DictConfig) -> None:
             model=model,
             tokenizer=tokenizer,
             subjects=subjects,
-            max_examples=evaluation.limits.max_examples,
+            max_examples=None,
             shard=shard,
             max_new_tokens=evaluation.generation.max_new_tokens,
             temperature=evaluation.generation.temperature,
@@ -231,7 +231,7 @@ def run_evaluation(cfg: DictConfig) -> None:
             model=model,
             tokenizer=tokenizer,
             subjects=subjects,
-            max_examples=evaluation.limits.max_examples,
+            max_examples=None,
             shard=shard,
             max_new_tokens=evaluation.generation.max_new_tokens,
             temperature=evaluation.generation.temperature,
@@ -245,11 +245,7 @@ def run_evaluation(cfg: DictConfig) -> None:
             model=model,
             tokenizer=tokenizer,
             subjects=subjects,
-            max_examples=(
-                evaluation.limits.max_mia_examples
-                if evaluation.limits.max_mia_examples is not None
-                else evaluation.limits.max_examples
-            ),
+            max_examples=None,
             shard=shard,
             batch_size=evaluation.mia_batch_size,
             loss=evaluation.metrics.mia.loss,
@@ -266,8 +262,10 @@ def run_evaluation(cfg: DictConfig) -> None:
             max_examples=(
                 evaluation.limits.max_utility_examples
                 if evaluation.limits.max_utility_examples is not None
-                else evaluation.limits.max_examples
+                else None
             ),
+            sample_strategy=evaluation.limits.utility_sample_strategy,
+            sample_seed=evaluation.limits.utility_sample_seed,
             shard=shard,
             max_new_tokens=evaluation.generation.max_new_tokens,
             temperature=evaluation.generation.temperature,
