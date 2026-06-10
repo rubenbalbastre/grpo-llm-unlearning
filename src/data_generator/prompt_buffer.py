@@ -190,16 +190,24 @@ class PromptBuffer:
                 record.last_selected_step or -1,
             )
         )
-        high_variance = self._group_evaluated_prompts()[self.HIGH_VARIANCE_REWARD]
-        high_variance.sort(
-            key=lambda record: (
-                -record.latest_rollout_reward_std,
-                record.last_selected_step is not None,
-                record.last_selected_step or -1,
-            )
-        )
+        groups = self._group_evaluated_prompts()
 
-        eligible = unevaluated + high_variance
+        eligible = unevaluated
+        for group_name in self.GENERATION_CONTEXT_ORDER:
+            if groups[group_name]:
+                selected_group = groups[group_name]
+                selected_group.sort(
+                    key=lambda record: (
+                        -record.latest_rollout_reward_std,
+                        record.last_selected_step is not None,
+                        record.last_selected_step or -1,
+                    )
+                )
+                eligible += selected_group
+                
+                break
+            
+        
         if not eligible and allow_reuse_all:
             eligible = sorted(
                 self.records.values(),
