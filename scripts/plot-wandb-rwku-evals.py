@@ -11,6 +11,22 @@ from dotenv import dotenv_values
 NULL_MILESTONE_NUM_TOKENS = int(6e6)
 ENV_FILE = ".env"
 JOB_TYPE = "evaluation"
+METRIC_DIRECTION_SYMBOLS = {
+    "rwku/forget/rouge_l_recall": "↓",
+    "rwku/forget_level1/rouge_l_recall": "↓",
+    "rwku/forget_level2/rouge_l_recall": "↓",
+    "rwku/forget_level3/rouge_l_recall": "↓",
+    "rwku/neighbor/rouge_l_recall": "↑",
+    "rwku/neighbor_level1/rouge_l_recall": "↑",
+    "rwku/neighbor_level2/rouge_l_recall": "↑",
+    "rwku/mia_forget/loss": "↑",
+    "rwku/mia_retain/loss": "↓",
+    "rwku/utility_general/score": "↑",
+    "rwku/utility_reason/score": "↑",
+    "rwku/utility_truthfulness/score": "↑",
+    "rwku/utility_factuality/score": "↑",
+    "rwku/utility_fluency/score": "↑",
+}
 
 
 def parse_args() -> argparse.Namespace:
@@ -57,47 +73,55 @@ def collect_eval_rows(
             or getattr(run, "jobType", None)
             or getattr(run, "_attrs", {}).get("jobType")
         )
-        if run_job_type and run_job_type != JOB_TYPE:
-            continue
-
-        config = dict(run.config or {})
-        summary = dict(run.summary or {})
-        run_forget_concept = config.get("hydra.experiment.forget_concept")
-        if run_forget_concept != forget_concept:
-            continue
-
-        run_model_name = config.get("hydra.model.name")
-        if model_name and run_model_name != model_name:
-            continue
-
-        milestone = config.get("checkpoint.milestone_num_tokens")
-        if milestone is None:
-            milestone = NULL_MILESTONE_NUM_TOKENS
-
         try:
-            milestone = int(milestone)
-        except (TypeError, ValueError):
-            continue
+            run_forget_concept = run.config.get("hydra").get("experiment").get("forget_concept")
+            run_model_name = run.config.get("hydra").get("model").get("name")
+            training_mode = run.config.get("hydra").get("training").get("mode")
+            milestone = run.config.get("checkpoint").get("milestone_num_tokens")
+        except AttributeError:
+            run_forget_concept = None
+            run_model_name = None
+            training_mode = None
+            milestone = None
 
-        training_mode = config.get("hydra.training.mode")
-        if training_mode is None:
-            training_mode = "unknown"
-
-        for metric_name, metric_value in summary.items():
-            if not metric_name.startswith(metric_prefix) or not is_number(metric_value):
+        if run_forget_concept and run_model_name and training_mode:
+            if run_job_type and run_job_type != JOB_TYPE:
                 continue
-            rows.append(
-                {
-                    "run_id": run.id,
-                    "run_name": run.name,
-                    "training_mode": str(training_mode),
-                    "forget_concept": str(run_forget_concept),
-                    "model_name": str(run_model_name),
-                    "checkpoint_milestone_num_tokens": milestone,
-                    "metric": metric_name,
-                    "value": float(metric_value),
-                }
-            )
+
+            summary = dict(run.summary or {})
+            if run_forget_concept != forget_concept:
+                continue
+
+            if model_name and run_model_name != model_name:
+                continue
+
+            if milestone is None:
+                milestone = NULL_MILESTONE_NUM_TOKENS
+
+            try:
+                milestone = int(milestone)
+            except (TypeError, ValueError):
+                continue
+
+            if training_mode is None:
+                training_mode = "unknown"
+
+            generator_mode = None if training_mode == "standard" else run.config.get("hydra").get("data_generator").get("data_proposer").get("mode")
+            for metric_name, metric_value in summary.items():
+                if not metric_name.startswith(metric_prefix) or not is_number(metric_value):
+                    continue
+                rows.append(
+                    {
+                        "run_id": run.id,
+                        "run_name": run.name,
+                        "training_mode": f"{training_mode}-{generator_mode}" if generator_mode else training_mode,
+                        "forget_concept": str(run_forget_concept),
+                        "model_name": str(run_model_name),
+                        "checkpoint_milestone_num_tokens": milestone,
+                        "metric": metric_name,
+                        "value": float(metric_value),
+                    }
+                )
 
     return rows
 
@@ -113,7 +137,7 @@ def aggregate_metric_rows(rows: list[dict[str, object]]) -> object:
     )
 
 
-def plot_metric_matrix(grouped: object, output_dir: Path, ncols: int) -> Path:
+def plot_metric_matrix(grouped: object, output_dir: Path, ncols: int, model_name: str, forget_concept: str) -> Path:
     import matplotlib.pyplot as plt
 
     metrics = list(grouped["metric"].drop_duplicates())
@@ -128,12 +152,21 @@ def plot_metric_matrix(grouped: object, output_dir: Path, ncols: int) -> Path:
         figsize=(5.2 * ncols, 3.8 * nrows),
         squeeze=False,
     )
-    color_cycle = plt.rcParams["axes.prop_cycle"].by_key().get("color", [])
+    standard_color = "#ff7f0e"
+    color_cycle = [
+        color
+        for color in plt.rcParams["axes.prop_cycle"].by_key().get("color", [])
+        if color.lower() != standard_color
+    ]
     modes = list(grouped["training_mode"].drop_duplicates())
-    mode_colors = {
-        mode: color_cycle[i % len(color_cycle)] if color_cycle else None
-        for i, mode in enumerate(modes)
-    }
+    other_modes = [mode for mode in modes if mode != "standard"]
+    mode_colors = {"standard": standard_color}
+    mode_colors.update(
+        {
+            mode: color_cycle[i % len(color_cycle)] if color_cycle else None
+            for i, mode in enumerate(other_modes)
+        }
+    )
 
     legend_handles = []
     legend_labels = []
@@ -165,7 +198,11 @@ def plot_metric_matrix(grouped: object, output_dir: Path, ncols: int) -> Path:
                 legend_handles.append(line)
                 legend_labels.append(label)
 
-        ax.set_title(metric.replace("rwku/", ""), fontsize=10)
+        title = metric.replace("rwku/", "")
+        direction_symbol = METRIC_DIRECTION_SYMBOLS.get(metric)
+        if direction_symbol:
+            title = f"{title} {direction_symbol}"
+        ax.set_title(title, fontsize=10)
         ax.set_xlabel("checkpoint.milestone_num_tokens")
         ax.set_ylabel("value")
         ax.grid(True, alpha=0.3)
@@ -183,7 +220,7 @@ def plot_metric_matrix(grouped: object, output_dir: Path, ncols: int) -> Path:
             ncol=min(len(legend_labels), max(1, ncols)),
             frameon=True,
         )
-    fig.suptitle("RWKU Evaluation Metrics", y=0.995)
+    fig.suptitle(f"Model: {model_name}, Forget Concept: {forget_concept}, RWKU Evaluation Metrics", y=0.995)
     fig.tight_layout(rect=(0, 0, 1, 0.88))
 
     output_path = output_dir / "rwku_metrics_matrix.png"
@@ -229,7 +266,7 @@ def main() -> None:
     all_rows.to_csv(output_dir / "rwku_eval_points.csv", index=False)
     grouped = aggregate_metric_rows(all_rows.to_dict("records"))
     grouped.to_csv(output_dir / "rwku_eval_metric_summary.csv", index=False)
-    plot_path = plot_metric_matrix(grouped, output_dir, args.ncols)
+    plot_path = plot_metric_matrix(grouped, output_dir, args.ncols, args.model_name, args.forget_concept)
 
     print(f"Wrote metric matrix plot to {plot_path}")
     print(f"Wrote raw point table to {output_dir / 'rwku_eval_points.csv'}")
