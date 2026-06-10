@@ -18,11 +18,13 @@ def build_reward_functions(
     log_path: Path,
     forget_concept: str,
 ) -> tuple[list[RewardFunc], list[float]]:
+    log_events = bool(reward_config.get("log_events", True))
     forgetting_reward = make_forgetting_reward_func(
         buffer=buffer,
         log_path=log_path,
         forget_concept=forget_concept,
         reward_mode=reward_config.mode,
+        log_events=log_events,
     )
     reward_funcs: list[RewardFunc] = [forgetting_reward]
     reward_weights = [1.0]
@@ -30,7 +32,13 @@ def build_reward_functions(
     language_config = reward_config.get("language")
     language_reward = build_language_reward(language_config)
     if language_reward is not None:
-        reward_funcs.append(make_language_reward_func(language_reward, log_path))
+        reward_funcs.append(
+            make_language_reward_func(
+                language_reward,
+                log_path,
+                log_events=log_events,
+            )
+        )
         reward_weights.append(float(language_config.get("weight", 0.0)))
 
     return reward_funcs, reward_weights

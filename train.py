@@ -318,6 +318,7 @@ def main(cfg: DictConfig) -> None:
         logging_steps=cfg.training.logging_steps,
         lr_scheduler_type=cfg.training.lr_scheduler_type,
         reward_weights=reward_weights,
+        ddp_find_unused_parameters=cfg.training.ddp_find_unused_parameters,
         **standard_training_args,
     )
 
