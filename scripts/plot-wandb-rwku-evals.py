@@ -136,12 +136,21 @@ def plot_metric_matrix(grouped: object, output_dir: Path, ncols: int, model_name
         figsize=(5.2 * ncols, 3.8 * nrows),
         squeeze=False,
     )
-    color_cycle = plt.rcParams["axes.prop_cycle"].by_key().get("color", [])
+    standard_color = "#ff7f0e"
+    color_cycle = [
+        color
+        for color in plt.rcParams["axes.prop_cycle"].by_key().get("color", [])
+        if color.lower() != standard_color
+    ]
     modes = list(grouped["training_mode"].drop_duplicates())
-    mode_colors = {
-        mode: color_cycle[i % len(color_cycle)] if color_cycle else None
-        for i, mode in enumerate(modes)
-    }
+    other_modes = [mode for mode in modes if mode != "standard"]
+    mode_colors = {"standard": standard_color}
+    mode_colors.update(
+        {
+            mode: color_cycle[i % len(color_cycle)] if color_cycle else None
+            for i, mode in enumerate(other_modes)
+        }
+    )
 
     legend_handles = []
     legend_labels = []
