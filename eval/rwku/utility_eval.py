@@ -163,6 +163,8 @@ def evaluate_utility_split(
     tokenizer,
     split_name: str,
     max_examples: Optional[int],
+    sample_strategy: str,
+    sample_seed: int,
     shard,
     max_new_tokens: int,
     temperature: float,
@@ -170,7 +172,7 @@ def evaluate_utility_split(
     choice_likelihood_batch_size: int,
 ) -> List[Dict]:
     dataset = load_rwku_split(split_name)
-    dataset = select_max_examples(dataset, max_examples)
+    dataset = select_max_examples(dataset, max_examples, sample_strategy, sample_seed)
     dataset = shard_dataset(dataset, shard)
 
     if split_name == "utility_fluency":
@@ -266,6 +268,8 @@ def evaluate_utility_set(
     model,
     tokenizer,
     max_examples: Optional[int],
+    sample_strategy: str,
+    sample_seed: int,
     shard,
     max_new_tokens: int,
     temperature: float,
@@ -281,6 +285,8 @@ def evaluate_utility_set(
                 tokenizer=tokenizer,
                 split_name=split_name,
                 max_examples=max_examples,
+                sample_strategy=sample_strategy,
+                sample_seed=sample_seed,
                 shard=shard,
                 max_new_tokens=max_new_tokens,
                 temperature=temperature,

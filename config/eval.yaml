@@ -22,9 +22,9 @@ evaluation:
       min_k_plus_plus: false
 
   limits:
-    max_examples: null
-    max_mia_examples: null
-    max_utility_examples: 200
+    max_utility_examples: 2000
+    utility_sample_strategy: random # first or random; applied before sharding.
+    utility_sample_seed: 42
 
   batch_size: 32
   mia_batch_size: 32

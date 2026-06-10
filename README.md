@@ -270,6 +270,10 @@ evaluation:
       zlib: false
       min_k: false
       min_k_plus_plus: false
+  limits:
+    max_utility_examples: 2000
+    utility_sample_strategy: random
+    utility_sample_seed: 42
   wandb:
     enabled: true
     run_name: rwku-${evaluation.subjects}
@@ -277,6 +281,11 @@ evaluation:
     log_model_artifact: true
     link_to_training_run: true
 ```
+
+Forget, neighbor, and MIA sets are always evaluated in full after optional
+subject filtering. Utility can be capped with `max_utility_examples`;
+`utility_sample_strategy: random` samples a fixed-seed subset before sharding,
+while `first` preserves first-N behavior for utility only.
 
 `rouge_l_recall` is currently the implemented forget/neighbor generation
 metric. Only MIA `loss` is implemented; enabling the other MIA metric switches

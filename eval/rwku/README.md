@@ -34,9 +34,9 @@ evaluation:
       min_k: false
       min_k_plus_plus: false
   limits:
-    max_examples: null
-    max_mia_examples: null
-    max_utility_examples: null
+    max_utility_examples: 2000
+    utility_sample_strategy: random
+    utility_sample_seed: 42
   wandb:
     enabled: true
     run_name: rwku-${evaluation.subjects}
@@ -44,6 +44,12 @@ evaluation:
     log_model_artifact: true
     link_to_training_run: true
 ```
+
+Forget, neighbor, and MIA sets are always evaluated in full after optional
+subject filtering. Utility can be capped with `max_utility_examples`;
+`utility_sample_strategy: random` selects a fixed-seed random subset before
+sharding. Use `first` only when you intentionally want the first utility rows
+from the Hugging Face dataset.
 
 When W&B logging is enabled, `WANDB_API_KEY` and `WANDB_PROJECT` are read from
 `.env`. With `link_to_training_run: true`, evaluation resumes the training W&B
