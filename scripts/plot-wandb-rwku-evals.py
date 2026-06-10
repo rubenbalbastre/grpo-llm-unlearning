@@ -11,6 +11,22 @@ from dotenv import dotenv_values
 NULL_MILESTONE_NUM_TOKENS = int(6e6)
 ENV_FILE = ".env"
 JOB_TYPE = "evaluation"
+METRIC_DIRECTION_SYMBOLS = {
+    "rwku/forget/rouge_l_recall": "↓",
+    "rwku/forget_level1/rouge_l_recall": "↓",
+    "rwku/forget_level2/rouge_l_recall": "↓",
+    "rwku/forget_level3/rouge_l_recall": "↓",
+    "rwku/neighbor/rouge_l_recall": "↑",
+    "rwku/neighbor_level1/rouge_l_recall": "↑",
+    "rwku/neighbor_level2/rouge_l_recall": "↑",
+    "rwku/mia_forget/loss": "↑",
+    "rwku/mia_retain/loss": "↓",
+    "rwku/utility_general/score": "↑",
+    "rwku/utility_reason/score": "↑",
+    "rwku/utility_truthfulness/score": "↑",
+    "rwku/utility_factuality/score": "↑",
+    "rwku/utility_fluency/score": "↑",
+}
 
 
 def parse_args() -> argparse.Namespace:
@@ -182,7 +198,11 @@ def plot_metric_matrix(grouped: object, output_dir: Path, ncols: int, model_name
                 legend_handles.append(line)
                 legend_labels.append(label)
 
-        ax.set_title(metric.replace("rwku/", ""), fontsize=10)
+        title = metric.replace("rwku/", "")
+        direction_symbol = METRIC_DIRECTION_SYMBOLS.get(metric)
+        if direction_symbol:
+            title = f"{title} {direction_symbol}"
+        ax.set_title(title, fontsize=10)
         ax.set_xlabel("checkpoint.milestone_num_tokens")
         ax.set_ylabel("value")
         ax.grid(True, alpha=0.3)
