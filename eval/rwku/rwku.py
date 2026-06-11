@@ -6,6 +6,16 @@ from omegaconf import DictConfig, OmegaConf
 from dotenv import dotenv_values
 
 
+def load_yaml_config(path: Path, label: str) -> dict | None:
+    if path.exists():
+        return OmegaConf.to_container(
+            OmegaConf.load(path),
+            resolve=True,
+        )
+    print(f"{label} config not found: {path}")
+    return None
+
+
 def log_wandb_results(
     evaluation: DictConfig,
     env_values: dict,
@@ -76,13 +86,10 @@ def log_wandb_results(
     hydra_config = None
     if training_config_path:
         training_config_file = Path(training_config_path)
-        if training_config_file.exists():
-            hydra_config = OmegaConf.to_container(
-                OmegaConf.load(training_config_file),
-                resolve=True,
-            )
-        else:
-            print(f"Training Hydra config not found: {training_config_file}")
+        hydra_config = load_yaml_config(training_config_file, "Training Hydra")
+
+    eval_config_path = Path(__file__).resolve().parents[2] / "config" / "eval.yaml"
+    eval_config = load_yaml_config(eval_config_path, "Evaluation Hydra")
 
     artifact = wandb.Artifact(
         name=str(evaluation.wandb.artifact_name),
@@ -114,6 +121,8 @@ def log_wandb_results(
             "checkpoint": checkpoint_metadata,
             "training_config_path": str(training_config_path) if training_config_path else None,
             "hydra": hydra_config,
+            "eval_config_path": str(eval_config_path),
+            "eval_hydra": eval_config,
         },
     }
     if training_run_info:
