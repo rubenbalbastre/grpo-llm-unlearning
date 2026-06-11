@@ -16,6 +16,10 @@ def load_yaml_config(path: Path, label: str) -> dict | None:
     return None
 
 
+def training_run_dir_for_model(model_dir: Path) -> Path:
+    return model_dir if model_dir.parent.name == "outputs" else model_dir.parent
+
+
 def log_wandb_results(
     evaluation: DictConfig,
     env_values: dict,
@@ -43,7 +47,7 @@ def log_wandb_results(
     model_dir = Path(evaluation.model_name_or_path)
     training_run_info = None
     if evaluation.wandb.link_to_training_run:
-        run_info_path = model_dir / "wandb_run.json"
+        run_info_path = training_run_dir_for_model(model_dir) / "wandb_run.json"
         if run_info_path.exists():
             training_run_info = json.loads(run_info_path.read_text(encoding="utf-8"))
             if training_run_info["project"] != project:
@@ -55,8 +59,7 @@ def log_wandb_results(
         else:
             raise ValueError(
                 "evaluation.wandb.link_to_training_run=true requires "
-                "wandb_run.json in evaluation.model_name_or_path. Set it to false "
-                "to create a separate evaluation run."
+                f"{run_info_path}. Set it to false to create a separate evaluation run."
             )
 
     generation_by_split = {
@@ -91,23 +94,25 @@ def log_wandb_results(
     eval_config_path = Path(__file__).resolve().parents[2] / "config" / "eval.yaml"
     eval_config = load_yaml_config(eval_config_path, "Evaluation Hydra")
 
-    artifact = wandb.Artifact(
-        name=str(evaluation.wandb.artifact_name),
-        type="model" if evaluation.wandb.log_model_artifact else "evaluation",
-        metadata={
-            "model_name_or_path": str(evaluation.model_name_or_path),
-            "subjects": str(evaluation.subjects),
-            "checkpoint": checkpoint_metadata,
-        },
-    )
-    if evaluation.wandb.log_model_artifact:
-        if not model_dir.is_dir():
-            raise ValueError(
-                "evaluation.wandb.log_model_artifact=true requires "
-                "evaluation.model_name_or_path to be a local model directory."
-            )
-        artifact.add_dir(str(model_dir), name="model")
-    artifact.add_dir(str(output_dir), name="rwku_evaluation")
+    artifact = None
+    if evaluation.wandb.get("log_artifact", False):
+        artifact = wandb.Artifact(
+            name=str(evaluation.wandb.artifact_name),
+            type="model" if evaluation.wandb.log_model_artifact else "evaluation",
+            metadata={
+                "model_name_or_path": str(evaluation.model_name_or_path),
+                "subjects": str(evaluation.subjects),
+                "checkpoint": checkpoint_metadata,
+            },
+        )
+        if evaluation.wandb.log_model_artifact:
+            if not model_dir.is_dir():
+                raise ValueError(
+                    "evaluation.wandb.log_model_artifact=true requires "
+                    "evaluation.model_name_or_path to be a local model directory."
+                )
+            artifact.add_dir(str(model_dir), name="model")
+        artifact.add_dir(str(output_dir), name="rwku_evaluation")
 
     init_kwargs = {
         "project": project,
@@ -140,7 +145,8 @@ def log_wandb_results(
 
     with wandb.init(**init_kwargs) as run:
         run.log({key: value for key, value in scalar_metrics.items() if value is not None})
-        run.log_artifact(artifact)
+        if artifact is not None:
+            run.log_artifact(artifact)
 
 
 def run_evaluation(cfg: DictConfig) -> None:

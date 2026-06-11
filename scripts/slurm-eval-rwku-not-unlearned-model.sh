@@ -20,9 +20,9 @@ echo "Run program in virtual environment"
 REPO_DIR="${REPO_DIR:-/home/balalru/machine-unlearning-llm}"
 cd "${REPO_DIR}"
 
-MODEL_NAME_OR_PATH="${MODEL_NAME_OR_PATH:-Qwen/Qwen2.5-1.5B-Instruct}"
-MODEL_LABEL="${MODEL_LABEL:-Qwen2.5-1.5B-Instruct}"
-OUTPUT_DIR="${OUTPUT_DIR:-outputs/qwen2.5-1.5b-instruct/eval_rwku}"
+MODEL_NAME_OR_PATH="${MODEL_NAME_OR_PATH:-Qwen/Qwen2.5-3B-Instruct}"
+MODEL_LABEL="${MODEL_LABEL:-Qwen2.5-3B-Instruct}"
+OUTPUT_DIR="${OUTPUT_DIR:-outputs/Qwen2.5-3B-Instruct/eval_rwku}"
 
 BASE_OVERRIDES=(
   "evaluation.model_name_or_path=${MODEL_NAME_OR_PATH}"

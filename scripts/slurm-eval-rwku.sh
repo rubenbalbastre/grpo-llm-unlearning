@@ -120,7 +120,6 @@ if [[ -n "${CHECKPOINT_ROOT:-}" ]]; then
       "evaluation.checkpoint.milestone_num_tokens=${CHECKPOINT_MILESTONE}" \
       "evaluation.checkpoint.global_step=${CHECKPOINT_GLOBAL_STEP}" \
       "evaluation.checkpoint.num_input_tokens_seen=${CHECKPOINT_TOKENS}" \
-      "evaluation.wandb.link_to_training_run=false" \
       "evaluation.wandb.log_model_artifact=true" \
       "evaluation.wandb.run_name=rwku-${RUN_LABEL}-${CHECKPOINT_LABEL}" \
       "evaluation.wandb.artifact_name=rwku-${RUN_LABEL}-${CHECKPOINT_LABEL}"
