@@ -16,6 +16,10 @@ def load_yaml_config(path: Path, label: str) -> dict | None:
     return None
 
 
+def training_run_dir_for_model(model_dir: Path) -> Path:
+    return model_dir if model_dir.parent.name == "outputs" else model_dir.parent
+
+
 def log_wandb_results(
     evaluation: DictConfig,
     env_values: dict,
@@ -43,7 +47,7 @@ def log_wandb_results(
     model_dir = Path(evaluation.model_name_or_path)
     training_run_info = None
     if evaluation.wandb.link_to_training_run:
-        run_info_path = model_dir / "wandb_run.json"
+        run_info_path = training_run_dir_for_model(model_dir) / "wandb_run.json"
         if run_info_path.exists():
             training_run_info = json.loads(run_info_path.read_text(encoding="utf-8"))
             if training_run_info["project"] != project:
@@ -55,8 +59,7 @@ def log_wandb_results(
         else:
             raise ValueError(
                 "evaluation.wandb.link_to_training_run=true requires "
-                "wandb_run.json in evaluation.model_name_or_path. Set it to false "
-                "to create a separate evaluation run."
+                f"{run_info_path}. Set it to false to create a separate evaluation run."
             )
 
     generation_by_split = {
