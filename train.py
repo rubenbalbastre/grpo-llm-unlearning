@@ -333,8 +333,6 @@ def main(cfg: DictConfig) -> None:
         tokenizer.save_pretrained(final_model_dir)
     if trainer.is_world_process_zero():
         if wandb_enabled:
-            if save_final_model:
-                save_wandb_run_info(final_model_dir)
             save_wandb_run_info(output_dir)
     repo_name = (
         f"llm-unlearning-{model_name.split('/')[-1]}-forget-"
