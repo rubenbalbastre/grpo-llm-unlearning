@@ -150,19 +150,6 @@ def get_peft_config(cfg: DictConfig, num_hidden_layers: int) -> LoraConfig:
     )
 
 
-def update_latest_output_link(output_dir: Path) -> None:
-    latest_link = output_dir.parent / "latest"
-    if output_dir.name == latest_link.name:
-        raise ValueError("wandb.run_name cannot be 'latest'; that path is reserved.")
-    if latest_link.is_symlink():
-        latest_link.unlink()
-    elif latest_link.exists():
-        raise FileExistsError(
-            f"Cannot update {latest_link}: it exists and is not a symbolic link."
-        )
-    latest_link.symlink_to(output_dir.name, target_is_directory=True)
-
-
 @hydra.main(version_base=None, config_path="config", config_name="train")
 def main(cfg: DictConfig) -> None:
 
@@ -340,13 +327,15 @@ def main(cfg: DictConfig) -> None:
     # init training
     trainer.train()
 
-    # save final model and tokenizer
-    trainer.save_model(str(final_model_dir))
-    tokenizer.save_pretrained(final_model_dir)
+    save_final_model = bool(cfg.training.get("save_final_model", True))
+    if save_final_model:
+        trainer.save_model(str(final_model_dir))
+        tokenizer.save_pretrained(final_model_dir)
     if trainer.is_world_process_zero():
         if wandb_enabled:
-            save_wandb_run_info(final_model_dir)
-        update_latest_output_link(output_dir)
+            if save_final_model:
+                save_wandb_run_info(final_model_dir)
+            save_wandb_run_info(output_dir)
     repo_name = (
         f"llm-unlearning-{model_name.split('/')[-1]}-forget-"
         f"{re.sub(r'[^A-Za-z0-9._-]+', '-', forget_concept).strip('-')}"

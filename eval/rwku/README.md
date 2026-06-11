@@ -1,19 +1,16 @@
 # RWKU Evaluation
 
-RWKU evaluation is configured only through `config/eval.yaml`. The training
-Slurm job updates `outputs/latest` after saving its final model and evaluates
-that run automatically. `scripts/slurm-eval-rwku.sh` runs the same configured
-evaluation independently.
+RWKU evaluation is configured through `config/eval.yaml` or checkpoint overrides
+passed by `scripts/slurm-eval-rwku.sh`.
 If authentication is needed, it is read from `HUGGINGFACE_HUB_TOKEN` in the
 repository `.env` file.
 
-Select the latest successfully saved training run and an optional target
-filter in the config:
+Select a saved training run and an optional target filter in the config:
 
 ```yaml
 evaluation:
-  model_name_or_path: outputs/latest/final_model
-  output_dir: outputs/latest/eval_rwku
+  model_name_or_path: outputs/<wandb_run_name>/final_model
+  output_dir: outputs/<wandb_run_name>/eval_rwku
   subjects: Stephen King
 ```
 

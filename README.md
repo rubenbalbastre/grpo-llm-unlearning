@@ -114,8 +114,9 @@ To evaluate benchmark evolution across a longer run, save token checkpoints:
 
 ```bash
 RUN_NAME=adaptive-natural-4p5m sbatch scripts/slurm-run-unlearning.sh \
-  training.callback.token_budget=4_500_000 \
-  'training.callback.checkpoint_token_milestones=[1_500_000,3_000_000,4_500_000]'
+  training.save_final_model=false \
+  training.callback.token_budget=6_000_000 \
+  'training.callback.checkpoint_token_milestones=[1_500_000,3_000_000,4_500_000,6_000_000]'
 ```
 
 ## Offline Synthetic Data
@@ -200,8 +201,9 @@ Pass Hydra overrides:
 sbatch scripts/slurm-run-unlearning.sh training.max_steps=20
 ```
 
-After training finishes successfully, this script updates `outputs/latest` to
-point at the saved run and evaluates that model on RWKU using `config/eval.yaml`.
+After training finishes successfully, the run artifacts are written under
+`outputs/<wandb_run_name>`. Use `scripts/slurm-eval-rwku.sh` or
+`scripts/submit-train-and-eval.sh` to evaluate saved checkpoints.
 
 ## Outputs
 
@@ -216,13 +218,18 @@ Each training run uses the configured W&B name as its output folder:
 ```text
 outputs/<wandb_run_name>/events.jsonl
 outputs/<wandb_run_name>/hydra_config.yaml
-outputs/<wandb_run_name>/final_model
-outputs/latest -> <wandb_run_name>
+outputs/<wandb_run_name>/checkpoint-*
+outputs/<wandb_run_name>/final_model # only when training.save_final_model=true
 ```
 
 Training writes the resolved Hydra config to `hydra_config.yaml`. When W&B is
 enabled, the same config is logged under the run config key `hydra`, and the
 YAML file is saved to the W&B run.
+Set `training.save_final_model: false` to keep only the checkpoint snapshots,
+which is useful when the token-budget checkpoint already captures the end of
+training. In that setup, include the budget in
+`training.callback.checkpoint_token_milestones`; `token_budget` only stops the
+run and does not create an extra checkpoint.
 
 Under `scripts/slurm-run-unlearning.sh`, the shell script passes a per-job
 `wandb.run_name` such as `unlearning-48291`, so each submitted job gets its own
@@ -239,13 +246,9 @@ For separate local runs, override the default `-local` suffix explicitly:
 python train.py wandb.run_name=standard-grpo-dev-001
 ```
 
-`outputs/latest` is updated only after the final model has been saved
-successfully. The Slurm train-then-eval script does not rely on `latest`; it
-passes the just-completed run directory to RWKU evaluation explicitly.
-
 ## RWKU Evaluation
 
-The unlearning Slurm job automatically evaluates its final model according to:
+RWKU evaluation is configured by:
 
 ```bash
 config/eval.yaml
@@ -255,8 +258,8 @@ Select evaluation sets and MIA metrics there:
 
 ```yaml
 evaluation:
-  model_name_or_path: outputs/latest/final_model
-  output_dir: outputs/latest/eval_rwku
+  model_name_or_path: outputs/<wandb_run_name>/final_model
+  output_dir: outputs/<wandb_run_name>/eval_rwku
   subjects: Stephen King
   sets:
     forget: true
@@ -299,6 +302,9 @@ files. Set it to `false` when evaluating a model without training-run metadata.
 
 The standalone evaluation Slurm job reads the same configuration file:
 `scripts/slurm-eval-rwku.sh`.
+When `training.save_final_model: false`, evaluate checkpoints with
+`CHECKPOINT_ROOT=outputs/<wandb_run_name> scripts/slurm-eval-rwku.sh` rather
+than pointing `evaluation.model_name_or_path` at `final_model`.
 
 To evaluate every saved training checkpoint under a run directory, set
 `CHECKPOINT_ROOT`. The script evaluates each `checkpoint-*` directory
