@@ -5,12 +5,13 @@ passed by `scripts/slurm-eval-rwku.sh`.
 If authentication is needed, it is read from `HUGGINGFACE_HUB_TOKEN` in the
 repository `.env` file.
 
-Select a saved training run and an optional target filter in the config:
+Select a saved model directory and an optional target filter in the config.
+For checkpoint-only runs, point this at one `checkpoint-*` directory:
 
 ```yaml
 evaluation:
-  model_name_or_path: outputs/<wandb_run_name>/final_model
-  output_dir: outputs/<wandb_run_name>/eval_rwku
+  model_name_or_path: outputs/<wandb_run_name>/checkpoint-175
+  output_dir: outputs/<wandb_run_name>/checkpoint-175/eval_rwku
   subjects: Stephen King
 ```
 
@@ -50,12 +51,13 @@ from the Hugging Face dataset.
 
 When W&B logging is enabled, `WANDB_API_KEY` and `WANDB_PROJECT` are read from
 `.env`. With `link_to_training_run: true`, evaluation resumes the training W&B
-run recorded in
-`final_model/wandb_run.json` and logs scalar `rwku/*` metrics there. With
-`log_model_artifact: true`, it also uploads the local model directory and
-result files as a W&B `model` artifact. Set `link_to_training_run: false` for
-models without that recorded training-run identity. For a linked run,
-`WANDB_PROJECT` must match the project recorded during training.
+run recorded in `outputs/<wandb_run_name>/wandb_run.json` and logs scalar
+`rwku/*` metrics there. For `final_model` or `checkpoint-*` eval paths, RWKU
+derives the run directory from the parent folder. With `log_model_artifact:
+true`, it also uploads the local model directory and result files as a W&B
+`model` artifact. Set `link_to_training_run: false` for models without that
+recorded training-run identity. For a linked run, `WANDB_PROJECT` must match
+the project recorded during training.
 
 | Set | Ability | RWKU dataset | Metric computed |
 | --- | --- | --- | --- |

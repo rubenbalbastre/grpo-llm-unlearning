@@ -258,8 +258,8 @@ Select evaluation sets and MIA metrics there:
 
 ```yaml
 evaluation:
-  model_name_or_path: outputs/<wandb_run_name>/final_model
-  output_dir: outputs/<wandb_run_name>/eval_rwku
+  model_name_or_path: outputs/<wandb_run_name>/checkpoint-175
+  output_dir: outputs/<wandb_run_name>/checkpoint-175/eval_rwku
   subjects: Stephen King
   sets:
     forget: true
@@ -296,9 +296,12 @@ currently raises `NotImplementedError`.
 Hugging Face and W&B configuration for evaluation are read from
 `HUGGINGFACE_HUB_TOKEN`, `WANDB_API_KEY`, and `WANDB_PROJECT` in `.env`. With
 `link_to_training_run: true`, training writes its W&B run identity into the
-saved model directory and post-training evaluation resumes that same run to
-log `rwku/*` metrics and a model artifact containing the model and RWKU result
-files. Set it to `false` when evaluating a model without training-run metadata.
+run directory as `outputs/<wandb_run_name>/wandb_run.json`, and
+post-training evaluation resumes that same run to log `rwku/*` metrics and a
+model artifact containing the model and RWKU result files. For `final_model`
+or `checkpoint-*` eval paths, RWKU derives the run directory from the parent
+folder. Set it to `false` when evaluating a model without training-run
+metadata.
 
 The standalone evaluation Slurm job reads the same configuration file:
 `scripts/slurm-eval-rwku.sh`.
