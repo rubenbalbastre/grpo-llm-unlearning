@@ -94,23 +94,25 @@ def log_wandb_results(
     eval_config_path = Path(__file__).resolve().parents[2] / "config" / "eval.yaml"
     eval_config = load_yaml_config(eval_config_path, "Evaluation Hydra")
 
-    artifact = wandb.Artifact(
-        name=str(evaluation.wandb.artifact_name),
-        type="model" if evaluation.wandb.log_model_artifact else "evaluation",
-        metadata={
-            "model_name_or_path": str(evaluation.model_name_or_path),
-            "subjects": str(evaluation.subjects),
-            "checkpoint": checkpoint_metadata,
-        },
-    )
-    if evaluation.wandb.log_model_artifact:
-        if not model_dir.is_dir():
-            raise ValueError(
-                "evaluation.wandb.log_model_artifact=true requires "
-                "evaluation.model_name_or_path to be a local model directory."
-            )
-        artifact.add_dir(str(model_dir), name="model")
-    artifact.add_dir(str(output_dir), name="rwku_evaluation")
+    artifact = None
+    if evaluation.wandb.get("log_artifact", False):
+        artifact = wandb.Artifact(
+            name=str(evaluation.wandb.artifact_name),
+            type="model" if evaluation.wandb.log_model_artifact else "evaluation",
+            metadata={
+                "model_name_or_path": str(evaluation.model_name_or_path),
+                "subjects": str(evaluation.subjects),
+                "checkpoint": checkpoint_metadata,
+            },
+        )
+        if evaluation.wandb.log_model_artifact:
+            if not model_dir.is_dir():
+                raise ValueError(
+                    "evaluation.wandb.log_model_artifact=true requires "
+                    "evaluation.model_name_or_path to be a local model directory."
+                )
+            artifact.add_dir(str(model_dir), name="model")
+        artifact.add_dir(str(output_dir), name="rwku_evaluation")
 
     init_kwargs = {
         "project": project,
@@ -143,7 +145,8 @@ def log_wandb_results(
 
     with wandb.init(**init_kwargs) as run:
         run.log({key: value for key, value in scalar_metrics.items() if value is not None})
-        run.log_artifact(artifact)
+        if artifact is not None:
+            run.log_artifact(artifact)
 
 
 def run_evaluation(cfg: DictConfig) -> None:

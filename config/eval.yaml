@@ -1,6 +1,6 @@
 evaluation:
-  model_name_or_path: outputs/unlearning-3568/final_model
-  output_dir: outputs/unlearning-3568/eval_rwku
+  model_name_or_path: outputs/unlearning-3568/checkpoint-175
+  output_dir: outputs/unlearning-3568/checkpoint-175/eval_rwku
   subjects: Rihanna
   training_config_path: null
   shard:
@@ -22,7 +22,7 @@ evaluation:
       min_k_plus_plus: false
 
   limits:
-    max_utility_examples: 2000
+    max_utility_examples: 800
     utility_sample_strategy: random # first or random; applied before sharding.
     utility_sample_seed: 42
 
@@ -56,5 +56,6 @@ evaluation:
     entity: null
     run_name: rwku-${evaluation.subjects}
     artifact_name: rwku-${evaluation.subjects}-model
-    log_model_artifact: true
+    log_artifact: true
+    log_model_artifact: false
     link_to_training_run: false
