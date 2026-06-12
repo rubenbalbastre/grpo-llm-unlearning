@@ -33,7 +33,7 @@ done
 echo "Analyzing runs: ${RUN_PATHS[*]}"
 echo "Output CSV: ${OUTPUT_CSV}"
 
-python -u scripts/analyze-adaptive-completions.py \
+python -u scripts/completitions_analysis/analyze-adaptive-completions.py \
   "${RUN_PATHS[@]}" \
   --concept "${CONCEPT}" \
   --near-threshold "${FUZZY_THRESHOLD}" \

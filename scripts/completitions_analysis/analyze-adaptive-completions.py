@@ -12,7 +12,7 @@ from difflib import SequenceMatcher
 from pathlib import Path
 from typing import Any, Iterable
 
-REPO_ROOT = Path(__file__).resolve().parents[1]
+REPO_ROOT = Path(__file__).resolve().parents[2]
 sys.path.insert(0, str(REPO_ROOT))
 
 from src.reward.refusal_patterns import REFUSAL_PATTERNS  # noqa: E402
@@ -22,7 +22,7 @@ TEXT_COLUMNS = ("completion", "prediction", "response", "output", "text")
 PROMPT_COLUMNS = ("prompt", "query", "input")
 REWARD_COLUMNS = ("forgetting_reward", "reward", "rewards", "score", "rouge_l_recall")
 TOKEN_RE = re.compile(r"[A-Za-z][A-Za-z'’.-]*")
-PARQUET_WARNING_EMITTED = False
+PARQUET_WARNING_SHOWN = False
 
 
 @dataclass
@@ -36,29 +36,20 @@ class CompletionRow:
 
 
 @dataclass
-class MatchRow:
-    source: str
-    source_kind: str
-    row_index: int
-    reward: str | float | int | None
+class Finding:
+    row: CompletionRow
     exact_target: bool
     target_variant: str
     target_score: float
     exact_entities: list[str]
-    prompt: str
-    text: str
 
 
-def normalize(value: str) -> str:
-    return re.sub(r"[^a-z0-9]+", "", value.lower())
+def normalize_token(text: str) -> str:
+    return re.sub(r"[^a-z0-9]+", "", text.lower())
 
 
-def word_boundary_pattern(value: str) -> re.Pattern[str]:
-    return re.compile(rf"(?<!\w){re.escape(value)}(?!\w)", flags=re.IGNORECASE)
-
-
-def build_entity_matchers(concept: str) -> list[tuple[str, re.Pattern[str]]]:
-    return [(entity, word_boundary_pattern(entity)) for entity in REFUSAL_PATTERNS[concept]]
+def boundary_regex(text: str) -> re.Pattern[str]:
+    return re.compile(rf"(?<!\w){re.escape(text)}(?!\w)", flags=re.IGNORECASE)
 
 
 def stringify(value: Any) -> str:
@@ -73,14 +64,14 @@ def stringify(value: Any) -> str:
     return str(value)
 
 
-def first_present(row: dict[str, Any], columns: Iterable[str]) -> Any:
-    for column in columns:
-        if column in row:
-            return row[column]
+def first_existing(row: dict[str, Any], names: Iterable[str]) -> Any:
+    for name in names:
+        if name in row:
+            return row[name]
     return None
 
 
-def jsonl_kind(path: Path, row: dict[str, Any]) -> str:
+def jsonl_source_kind(path: Path, row: dict[str, Any]) -> str:
     if path.name == "rwku_generations.jsonl" or "rouge_l_recall" in row:
         return "rwku_generation"
     if row.get("type") == "reward":
@@ -88,37 +79,36 @@ def jsonl_kind(path: Path, row: dict[str, Any]) -> str:
     return path.stem
 
 
-def iter_jsonl(path: Path) -> Iterable[CompletionRow]:
+def iter_jsonl_rows(path: Path) -> Iterable[CompletionRow]:
     with path.open(encoding="utf-8") as handle:
         for row_index, line in enumerate(handle, start=1):
-            line = line.strip()
-            if not line:
+            if not line.strip():
                 continue
-            row = json.loads(line)
-            text = first_present(row, TEXT_COLUMNS)
+            raw = json.loads(line)
+            text = first_existing(raw, TEXT_COLUMNS)
             if text is None:
                 continue
             yield CompletionRow(
                 source=path,
-                source_kind=jsonl_kind(path, row),
+                source_kind=jsonl_source_kind(path, raw),
                 row_index=row_index,
-                prompt=stringify(first_present(row, PROMPT_COLUMNS)),
+                prompt=stringify(first_existing(raw, PROMPT_COLUMNS)),
                 text=stringify(text),
-                reward=first_present(row, REWARD_COLUMNS),
+                reward=first_existing(raw, REWARD_COLUMNS),
             )
 
 
-def iter_parquet(path: Path) -> Iterable[CompletionRow]:
-    global PARQUET_WARNING_EMITTED
+def iter_parquet_rows(path: Path) -> Iterable[CompletionRow]:
+    global PARQUET_WARNING_SHOWN
     try:
         import pyarrow.parquet as pq
     except ModuleNotFoundError:
-        if not PARQUET_WARNING_EMITTED:
+        if not PARQUET_WARNING_SHOWN:
             print(
                 "warning: pyarrow is not installed; skipping TRL completion parquet files",
                 file=sys.stderr,
             )
-            PARQUET_WARNING_EMITTED = True
+            PARQUET_WARNING_SHOWN = True
         return
 
     parquet_file = pq.ParquetFile(path)
@@ -130,14 +120,9 @@ def iter_parquet(path: Path) -> Iterable[CompletionRow]:
 
     prompt_column = next((name for name in PROMPT_COLUMNS if name in columns), None)
     reward_column = next((name for name in REWARD_COLUMNS if name in columns), None)
-    read_columns = [text_column]
-    if prompt_column:
-        read_columns.append(prompt_column)
-    if reward_column:
-        read_columns.append(reward_column)
+    selected_columns = [column for column in (text_column, prompt_column, reward_column) if column]
+    data = parquet_file.read(columns=selected_columns).to_pydict()
 
-    table = parquet_file.read(columns=read_columns)
-    data = table.to_pydict()
     for row_index, text in enumerate(data[text_column], start=1):
         yield CompletionRow(
             source=path,
@@ -149,56 +134,81 @@ def iter_parquet(path: Path) -> Iterable[CompletionRow]:
         )
 
 
-def collect_files(paths: list[Path]) -> list[Path]:
+def collect_input_files(paths: list[Path]) -> list[Path]:
     files: list[Path] = []
     for path in paths:
         if path.is_file():
             files.append(path)
-            continue
-        if not path.is_dir():
+        elif path.is_dir():
+            files.extend(sorted((path / "completions").glob("*.parquet")))
+            files.extend(sorted(path.glob("checkpoint-*/eval_rwku/rwku_generations.jsonl")))
+        else:
             print(f"warning: path does not exist: {path}", file=sys.stderr)
-            continue
-        files.extend(sorted((path / "completions").glob("*.parquet")))
-        files.extend(sorted(path.glob("events.jsonl")))
-        files.extend(sorted(path.glob("checkpoint-*/eval_rwku/rwku_generations.jsonl")))
     return files
 
 
-def iter_rows(path: Path) -> Iterable[CompletionRow]:
+def iter_file_rows(path: Path) -> Iterable[CompletionRow]:
     if path.suffix == ".jsonl":
-        yield from iter_jsonl(path)
+        yield from iter_jsonl_rows(path)
     elif path.suffix == ".parquet":
-        yield from iter_parquet(path)
+        yield from iter_parquet_rows(path)
 
 
-def target_name_variant(
-    text: str,
-    target_name: str,
-    threshold: float,
-) -> tuple[str, float]:
-    target = normalize(target_name)
+def reward_matches(value: str | float | int | None, expected: float | None) -> bool:
+    if expected is None:
+        return True
+    if value in (None, ""):
+        return False
+    try:
+        return abs(float(value) - expected) < 1e-9
+    except (TypeError, ValueError):
+        return False
+
+
+def best_target_variant(text: str, target_name: str, threshold: float) -> tuple[str, float]:
+    target = normalize_token(target_name)
     if len(target) < 4:
         raise ValueError("--target-name must have at least 4 normalized characters.")
 
-    best = ("", 0.0)
+    best_variant = ""
+    best_score = 0.0
     for token in TOKEN_RE.findall(text):
-        token_norm = normalize(token)
-        if not token_norm or token_norm == target:
+        normalized = normalize_token(token)
+        if not normalized or normalized == target:
             continue
-        if token_norm[0] != target[0]:
+        if normalized[0] != target[0] or abs(len(normalized) - len(target)) > 2:
             continue
-        if abs(len(token_norm) - len(target)) > 2:
-            continue
-        score = SequenceMatcher(None, token_norm, target).ratio()
-        if score > best[1]:
-            best = (token, score)
+        score = SequenceMatcher(None, normalized, target).ratio()
+        if score > best_score:
+            best_variant = token
+            best_score = score
 
-    if best[1] < threshold:
-        return ("", 0.0)
-    return best
+    return (best_variant, best_score) if best_score >= threshold else ("", 0.0)
 
 
-def write_csv(path: Path, rows: list[MatchRow]) -> None:
+def analyze_row(
+    row: CompletionRow,
+    target_regex: re.Pattern[str],
+    target_name: str,
+    near_threshold: float,
+    entity_matchers: list[tuple[str, re.Pattern[str]]],
+) -> Finding | None:
+    exact_target = bool(target_regex.search(row.text))
+    variant, score = best_target_variant(row.text, target_name, near_threshold)
+    exact_entities = [entity for entity, matcher in entity_matchers if matcher.search(row.text)]
+
+    if not (exact_target or variant or exact_entities):
+        return None
+    return Finding(
+        row=row,
+        exact_target=exact_target,
+        target_variant=variant,
+        target_score=score,
+        exact_entities=exact_entities,
+    )
+
+
+def write_csv(path: Path, findings: list[Finding]) -> None:
     path.parent.mkdir(parents=True, exist_ok=True)
     with path.open("w", encoding="utf-8", newline="") as handle:
         writer = csv.DictWriter(
@@ -217,19 +227,19 @@ def write_csv(path: Path, rows: list[MatchRow]) -> None:
             ],
         )
         writer.writeheader()
-        for row in rows:
+        for finding in findings:
             writer.writerow(
                 {
-                    "source": row.source,
-                    "source_kind": row.source_kind,
-                    "row_index": row.row_index,
-                    "reward": row.reward,
-                    "exact_target": row.exact_target,
-                    "target_variant": row.target_variant,
-                    "target_score": f"{row.target_score:.4f}",
-                    "exact_entities": "|".join(row.exact_entities),
-                    "prompt": row.prompt,
-                    "text": row.text,
+                    "source": finding.row.source,
+                    "source_kind": finding.row.source_kind,
+                    "row_index": finding.row.row_index,
+                    "reward": finding.row.reward,
+                    "exact_target": finding.exact_target,
+                    "target_variant": finding.target_variant,
+                    "target_score": f"{finding.target_score:.4f}",
+                    "exact_entities": "|".join(finding.exact_entities),
+                    "prompt": finding.row.prompt,
+                    "text": finding.row.text,
                 }
             )
 
@@ -248,87 +258,61 @@ def parse_args() -> argparse.Namespace:
     return parser.parse_args()
 
 
-def reward_matches_filter(value: str | float | int | None, expected: float | None) -> bool:
-    if expected is None:
-        return True
-    if value is None or value == "":
-        return False
-    try:
-        return abs(float(value) - expected) < 1e-9
-    except (TypeError, ValueError):
-        return False
-
-
 def main() -> None:
     args = parse_args()
     target_name = args.target_name or args.concept
-    exact_target_matcher = word_boundary_pattern(target_name)
-    exact_entity_matchers = build_entity_matchers(args.concept)
-    files = collect_files(args.paths)
+    files = collect_input_files(args.paths)
+    target_regex = boundary_regex(target_name)
+    entity_matchers = [
+        (entity, boundary_regex(entity))
+        for entity in REFUSAL_PATTERNS[args.concept]
+    ]
 
     rows_scanned = 0
-    exact_target_rows = 0
-    near_target_rows = 0
-    near_target_without_exact_target_rows = 0
-    exact_entity_rows = 0
-    variant_counts = Counter()
-    entity_counts = Counter()
-    by_source_kind = defaultdict(
+    summary = defaultdict(
         lambda: {"rows": 0, "exact_target": 0, "near_target": 0, "near_without_exact": 0, "exact_entity": 0}
     )
-    matches: list[MatchRow] = []
+    variant_counts = Counter()
+    entity_counts = Counter()
+    findings: list[Finding] = []
 
     for file_index, path in enumerate(files, start=1):
         print(f"[{file_index}/{len(files)}] scanning {path}", flush=True)
-        for row in iter_rows(path):
+        for row in iter_file_rows(path):
             if args.forgetting_reward is not None and row.source_kind != "trl_completion":
                 continue
-            if not reward_matches_filter(row.reward, args.forgetting_reward):
+            if not reward_matches(row.reward, args.forgetting_reward):
                 continue
+
             rows_scanned += 1
-            exact_target = bool(exact_target_matcher.search(row.text))
-            variant, variant_score = target_name_variant(
-                row.text,
+            finding = analyze_row(
+                row=row,
+                target_regex=target_regex,
                 target_name=target_name,
-                threshold=args.near_threshold,
+                near_threshold=args.near_threshold,
+                entity_matchers=entity_matchers,
             )
-            exact_entities = [
-                entity for entity, matcher in exact_entity_matchers if matcher.search(row.text)
-            ]
-            near_target = bool(variant)
-            near_without_exact = near_target and not exact_target
 
-            stats = by_source_kind[row.source_kind]
+            stats = summary[row.source_kind]
             stats["rows"] += 1
-            stats["exact_target"] += int(exact_target)
-            stats["near_target"] += int(near_target)
+            if finding is None:
+                continue
+
+            near_without_exact = bool(finding.target_variant) and not finding.exact_target
+            stats["exact_target"] += int(finding.exact_target)
+            stats["near_target"] += int(bool(finding.target_variant))
             stats["near_without_exact"] += int(near_without_exact)
-            stats["exact_entity"] += int(bool(exact_entities))
+            stats["exact_entity"] += int(bool(finding.exact_entities))
 
-            exact_target_rows += int(exact_target)
-            near_target_rows += int(near_target)
-            near_target_without_exact_target_rows += int(near_without_exact)
-            exact_entity_rows += int(bool(exact_entities))
-            if near_target:
-                variant_counts[variant] += 1
-            entity_counts.update(exact_entities)
-
-            if exact_target or near_target or exact_entities:
-                matches.append(
-                    MatchRow(
-                        source=str(row.source),
-                        source_kind=row.source_kind,
-                        row_index=row.row_index,
-                        reward=row.reward,
-                        exact_target=exact_target,
-                        target_variant=variant,
-                        target_score=variant_score,
-                        exact_entities=exact_entities,
-                        prompt=row.prompt,
-                        text=row.text,
-                    )
-                )
+            variant_counts.update([finding.target_variant] if finding.target_variant else [])
+            entity_counts.update(finding.exact_entities)
+            findings.append(finding)
         print(f"[{file_index}/{len(files)}] done {path}", flush=True)
+
+    exact_target_rows = sum(stats["exact_target"] for stats in summary.values())
+    near_target_rows = sum(stats["near_target"] for stats in summary.values())
+    near_without_exact_rows = sum(stats["near_without_exact"] for stats in summary.values())
+    exact_entity_rows = sum(stats["exact_entity"] for stats in summary.values())
 
     print(f"concept: {args.concept}")
     print(f"target_name: {target_name}")
@@ -338,11 +322,11 @@ def main() -> None:
     print(f"rows scanned: {rows_scanned}")
     print(f"rows with exact target-name match: {exact_target_rows}")
     print(f"rows with near target-name variant: {near_target_rows}")
-    print(f"rows with near variant but no exact target-name match: {near_target_without_exact_target_rows}")
+    print(f"rows with near variant but no exact target-name match: {near_without_exact_rows}")
     print(f"rows with any exact reward-list entity match: {exact_entity_rows}")
 
     print("\nby source kind:")
-    for source_kind, stats in sorted(by_source_kind.items()):
+    for source_kind, stats in sorted(summary.items()):
         print(
             f"  {source_kind}: rows={stats['rows']} exact_target={stats['exact_target']} "
             f"near_target={stats['near_target']} near_without_exact={stats['near_without_exact']} "
@@ -360,17 +344,17 @@ def main() -> None:
             print(f"  {entity}: {count}")
 
     print("\nexamples:")
-    for row in matches[: args.max_examples]:
-        snippet = " ".join(row.text.split())[:300]
+    for finding in findings[: args.max_examples]:
+        snippet = " ".join(finding.row.text.split())[:300]
         print(
-            f"- {row.source_kind} {row.source}:{row.row_index} reward={row.reward!r} "
-            f"exact_target={row.exact_target} variant={row.target_variant!r} "
-            f"score={row.target_score:.3f} exact_entities={row.exact_entities}\n"
-            f"  {snippet}"
+            f"- {finding.row.source_kind} {finding.row.source}:{finding.row.row_index} "
+            f"reward={finding.row.reward!r} exact_target={finding.exact_target} "
+            f"variant={finding.target_variant!r} score={finding.target_score:.3f} "
+            f"exact_entities={finding.exact_entities}\n  {snippet}"
         )
 
     if args.output_csv:
-        write_csv(args.output_csv, matches)
+        write_csv(args.output_csv, findings)
         print(f"\nwrote matches CSV: {args.output_csv}")
 
 
