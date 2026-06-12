@@ -20,8 +20,8 @@ from src.reward.refusal_patterns import REFUSAL_PATTERNS  # noqa: E402
 
 TEXT_COLUMNS = ("completion", "prediction", "response", "output", "text")
 PROMPT_COLUMNS = ("prompt", "query", "input")
-REWARD_COLUMNS = ("reward", "rewards", "score", "rouge_l_recall")
-TOKEN_RE = re.compile(r"[A-Za-z0-9][A-Za-z0-9'’.-]*")
+REWARD_COLUMNS = ("forgetting_reward", "reward", "rewards", "score", "rouge_l_recall")
+TOKEN_RE = re.compile(r"[A-Za-z][A-Za-z'’.-]*")
 PARQUET_WARNING_EMITTED = False
 
 
@@ -40,27 +40,25 @@ class MatchRow:
     source: str
     source_kind: str
     row_index: int
+    reward: str | float | int | None
+    exact_target: bool
+    target_variant: str
+    target_score: float
+    exact_entities: list[str]
     prompt: str
     text: str
-    reward: str | float | int | None
-    exact_entities: list[str]
-    fuzzy_entity: str
-    fuzzy_variant: str
-    fuzzy_score: float
 
 
 def normalize(value: str) -> str:
-    return re.sub(r"[^a-z0-9]+", " ", value.lower()).strip()
+    return re.sub(r"[^a-z0-9]+", "", value.lower())
+
+
+def word_boundary_pattern(value: str) -> re.Pattern[str]:
+    return re.compile(rf"(?<!\w){re.escape(value)}(?!\w)", flags=re.IGNORECASE)
 
 
 def build_entity_matchers(concept: str) -> list[tuple[str, re.Pattern[str]]]:
-    return [
-        (
-            entity,
-            re.compile(rf"(?<!\w){re.escape(entity)}(?!\w)", flags=re.IGNORECASE),
-        )
-        for entity in REFUSAL_PATTERNS[concept]
-    ]
+    return [(entity, word_boundary_pattern(entity)) for entity in REFUSAL_PATTERNS[concept]]
 
 
 def stringify(value: Any) -> str:
@@ -80,6 +78,14 @@ def first_present(row: dict[str, Any], columns: Iterable[str]) -> Any:
         if column in row:
             return row[column]
     return None
+
+
+def jsonl_kind(path: Path, row: dict[str, Any]) -> str:
+    if path.name == "rwku_generations.jsonl" or "rouge_l_recall" in row:
+        return "rwku_generation"
+    if row.get("type") == "reward":
+        return f"reward:{row.get('reward_component', 'unknown')}"
+    return path.stem
 
 
 def iter_jsonl(path: Path) -> Iterable[CompletionRow]:
@@ -102,14 +108,6 @@ def iter_jsonl(path: Path) -> Iterable[CompletionRow]:
             )
 
 
-def jsonl_kind(path: Path, row: dict[str, Any]) -> str:
-    if path.name == "rwku_generations.jsonl" or "rouge_l_recall" in row:
-        return "rwku_generation"
-    if row.get("type") == "reward":
-        return f"reward:{row.get('reward_component', 'unknown')}"
-    return path.stem
-
-
 def iter_parquet(path: Path) -> Iterable[CompletionRow]:
     global PARQUET_WARNING_EMITTED
     try:
@@ -123,8 +121,8 @@ def iter_parquet(path: Path) -> Iterable[CompletionRow]:
             PARQUET_WARNING_EMITTED = True
         return
 
-    table = pq.read_table(path)
-    columns = set(table.column_names)
+    parquet_file = pq.ParquetFile(path)
+    columns = set(parquet_file.schema_arrow.names)
     text_column = next((name for name in TEXT_COLUMNS if name in columns), None)
     if text_column is None:
         print(f"warning: skipping {path}; no text column among {TEXT_COLUMNS}", file=sys.stderr)
@@ -132,6 +130,13 @@ def iter_parquet(path: Path) -> Iterable[CompletionRow]:
 
     prompt_column = next((name for name in PROMPT_COLUMNS if name in columns), None)
     reward_column = next((name for name in REWARD_COLUMNS if name in columns), None)
+    read_columns = [text_column]
+    if prompt_column:
+        read_columns.append(prompt_column)
+    if reward_column:
+        read_columns.append(reward_column)
+
+    table = parquet_file.read(columns=read_columns)
     data = table.to_pydict()
     for row_index, text in enumerate(data[text_column], start=1):
         yield CompletionRow(
@@ -159,45 +164,37 @@ def collect_files(paths: list[Path]) -> list[Path]:
     return files
 
 
-def iter_rows(files: list[Path]) -> Iterable[CompletionRow]:
-    for path in files:
-        if path.suffix == ".jsonl":
-            yield from iter_jsonl(path)
-        elif path.suffix == ".parquet":
-            yield from iter_parquet(path)
+def iter_rows(path: Path) -> Iterable[CompletionRow]:
+    if path.suffix == ".jsonl":
+        yield from iter_jsonl(path)
+    elif path.suffix == ".parquet":
+        yield from iter_parquet(path)
 
 
-def fuzzy_best_match(text: str, entities: list[str], threshold: float) -> tuple[str, str, float]:
-    tokens = [token for token in TOKEN_RE.findall(text) if len(normalize(token)) >= 4]
-    normalized_tokens = [normalize(token) for token in tokens]
-    best = ("", "", 0.0)
+def target_name_variant(
+    text: str,
+    target_name: str,
+    threshold: float,
+) -> tuple[str, float]:
+    target = normalize(target_name)
+    if len(target) < 4:
+        raise ValueError("--target-name must have at least 4 normalized characters.")
 
-    for entity in entities:
-        entity_norm = normalize(entity)
-        if len(entity_norm) < 4:
+    best = ("", 0.0)
+    for token in TOKEN_RE.findall(text):
+        token_norm = normalize(token)
+        if not token_norm or token_norm == target:
             continue
-        entity_words = entity_norm.split()
-        if not entity_words:
+        if token_norm[0] != target[0]:
             continue
-        window_sizes = {len(entity_words)}
-        if len(entity_words) > 1:
-            window_sizes.update({len(entity_words) - 1, len(entity_words) + 1})
-        for window_size in sorted(size for size in window_sizes if size > 0):
-            if len(normalized_tokens) < window_size:
-                continue
-            for start in range(0, len(normalized_tokens) - window_size + 1):
-                candidate_norm = " ".join(normalized_tokens[start : start + window_size])
-                if not candidate_norm:
-                    continue
-                if candidate_norm == entity_norm:
-                    continue
-                score = SequenceMatcher(None, candidate_norm, entity_norm).ratio()
-                if score > best[2]:
-                    variant = " ".join(tokens[start : start + window_size])
-                    best = (entity, variant, score)
+        if abs(len(token_norm) - len(target)) > 2:
+            continue
+        score = SequenceMatcher(None, token_norm, target).ratio()
+        if score > best[1]:
+            best = (token, score)
 
-    if best[2] < threshold:
-        return ("", "", 0.0)
+    if best[1] < threshold:
+        return ("", 0.0)
     return best
 
 
@@ -211,10 +208,10 @@ def write_csv(path: Path, rows: list[MatchRow]) -> None:
                 "source_kind",
                 "row_index",
                 "reward",
+                "exact_target",
+                "target_variant",
+                "target_score",
                 "exact_entities",
-                "fuzzy_entity",
-                "fuzzy_variant",
-                "fuzzy_score",
                 "prompt",
                 "text",
             ],
@@ -227,10 +224,10 @@ def write_csv(path: Path, rows: list[MatchRow]) -> None:
                     "source_kind": row.source_kind,
                     "row_index": row.row_index,
                     "reward": row.reward,
+                    "exact_target": row.exact_target,
+                    "target_variant": row.target_variant,
+                    "target_score": f"{row.target_score:.4f}",
                     "exact_entities": "|".join(row.exact_entities),
-                    "fuzzy_entity": row.fuzzy_entity,
-                    "fuzzy_variant": row.fuzzy_variant,
-                    "fuzzy_score": f"{row.fuzzy_score:.4f}",
                     "prompt": row.prompt,
                     "text": row.text,
                 }
@@ -239,116 +236,136 @@ def write_csv(path: Path, rows: list[MatchRow]) -> None:
 
 def parse_args() -> argparse.Namespace:
     parser = argparse.ArgumentParser(
-        description=(
-            "Analyze adaptive training/RWKU completions for exact and fuzzy forgotten-entity mentions."
-        )
+        description="Scan completions for exact and misspelled target-name mentions."
     )
     parser.add_argument("paths", nargs="+", type=Path, help="Run dirs or completion/eval files.")
     parser.add_argument("--concept", default="Rihanna", choices=sorted(REFUSAL_PATTERNS))
-    parser.add_argument("--fuzzy-threshold", type=float, default=0.84)
+    parser.add_argument("--target-name", default=None)
+    parser.add_argument("--near-threshold", type=float, default=0.84)
+    parser.add_argument("--forgetting-reward", type=float, default=None)
     parser.add_argument("--output-csv", type=Path, default=None)
     parser.add_argument("--max-examples", type=int, default=20)
     return parser.parse_args()
 
 
+def reward_matches_filter(value: str | float | int | None, expected: float | None) -> bool:
+    if expected is None:
+        return True
+    if value is None or value == "":
+        return False
+    try:
+        return abs(float(value) - expected) < 1e-9
+    except (TypeError, ValueError):
+        return False
+
+
 def main() -> None:
     args = parse_args()
-    entities = REFUSAL_PATTERNS[args.concept]
-    exact_matchers = build_entity_matchers(args.concept)
+    target_name = args.target_name or args.concept
+    exact_target_matcher = word_boundary_pattern(target_name)
+    exact_entity_matchers = build_entity_matchers(args.concept)
     files = collect_files(args.paths)
 
-    total_rows = 0
-    exact_rows = 0
-    fuzzy_rows = 0
-    fuzzy_only_rows = 0
-    fuzzy_escaped_entity_rows = 0
-    exact_entities = Counter()
-    fuzzy_variants = Counter()
+    rows_scanned = 0
+    exact_target_rows = 0
+    near_target_rows = 0
+    near_target_without_exact_target_rows = 0
+    exact_entity_rows = 0
+    variant_counts = Counter()
+    entity_counts = Counter()
     by_source_kind = defaultdict(
-        lambda: {"rows": 0, "exact": 0, "fuzzy": 0, "fuzzy_escaped_entity": 0, "fuzzy_only": 0}
+        lambda: {"rows": 0, "exact_target": 0, "near_target": 0, "near_without_exact": 0, "exact_entity": 0}
     )
     matches: list[MatchRow] = []
 
-    for row in iter_rows(files):
-        total_rows += 1
-        exact = [entity for entity, matcher in exact_matchers if matcher.search(row.text)]
-        fuzzy_entity, fuzzy_variant, fuzzy_score = fuzzy_best_match(
-            row.text,
-            entities,
-            threshold=args.fuzzy_threshold,
-        )
-        has_exact = bool(exact)
-        has_fuzzy = bool(fuzzy_entity)
-        fuzzy_escaped_entity = has_fuzzy and fuzzy_entity not in exact
-        fuzzy_only = has_fuzzy and not has_exact
-
-        stats = by_source_kind[row.source_kind]
-        stats["rows"] += 1
-        stats["exact"] += int(has_exact)
-        stats["fuzzy"] += int(has_fuzzy)
-        stats["fuzzy_escaped_entity"] += int(fuzzy_escaped_entity)
-        stats["fuzzy_only"] += int(fuzzy_only)
-
-        exact_rows += int(has_exact)
-        fuzzy_rows += int(has_fuzzy)
-        fuzzy_escaped_entity_rows += int(fuzzy_escaped_entity)
-        fuzzy_only_rows += int(fuzzy_only)
-        exact_entities.update(exact)
-        if fuzzy_escaped_entity:
-            fuzzy_variants[(fuzzy_entity, fuzzy_variant)] += 1
-
-        if has_exact or fuzzy_escaped_entity:
-            matches.append(
-                MatchRow(
-                    source=str(row.source),
-                    source_kind=row.source_kind,
-                    row_index=row.row_index,
-                    prompt=row.prompt,
-                    text=row.text,
-                    reward=row.reward,
-                    exact_entities=exact,
-                    fuzzy_entity=fuzzy_entity if fuzzy_escaped_entity else "",
-                    fuzzy_variant=fuzzy_variant if fuzzy_escaped_entity else "",
-                    fuzzy_score=fuzzy_score if fuzzy_escaped_entity else 0.0,
-                )
+    for file_index, path in enumerate(files, start=1):
+        print(f"[{file_index}/{len(files)}] scanning {path}", flush=True)
+        for row in iter_rows(path):
+            if args.forgetting_reward is not None and row.source_kind != "trl_completion":
+                continue
+            if not reward_matches_filter(row.reward, args.forgetting_reward):
+                continue
+            rows_scanned += 1
+            exact_target = bool(exact_target_matcher.search(row.text))
+            variant, variant_score = target_name_variant(
+                row.text,
+                target_name=target_name,
+                threshold=args.near_threshold,
             )
+            exact_entities = [
+                entity for entity, matcher in exact_entity_matchers if matcher.search(row.text)
+            ]
+            near_target = bool(variant)
+            near_without_exact = near_target and not exact_target
+
+            stats = by_source_kind[row.source_kind]
+            stats["rows"] += 1
+            stats["exact_target"] += int(exact_target)
+            stats["near_target"] += int(near_target)
+            stats["near_without_exact"] += int(near_without_exact)
+            stats["exact_entity"] += int(bool(exact_entities))
+
+            exact_target_rows += int(exact_target)
+            near_target_rows += int(near_target)
+            near_target_without_exact_target_rows += int(near_without_exact)
+            exact_entity_rows += int(bool(exact_entities))
+            if near_target:
+                variant_counts[variant] += 1
+            entity_counts.update(exact_entities)
+
+            if exact_target or near_target or exact_entities:
+                matches.append(
+                    MatchRow(
+                        source=str(row.source),
+                        source_kind=row.source_kind,
+                        row_index=row.row_index,
+                        reward=row.reward,
+                        exact_target=exact_target,
+                        target_variant=variant,
+                        target_score=variant_score,
+                        exact_entities=exact_entities,
+                        prompt=row.prompt,
+                        text=row.text,
+                    )
+                )
+        print(f"[{file_index}/{len(files)}] done {path}", flush=True)
 
     print(f"concept: {args.concept}")
+    print(f"target_name: {target_name}")
+    if args.forgetting_reward is not None:
+        print(f"forgetting_reward filter: {args.forgetting_reward}")
     print(f"files scanned: {len(files)}")
-    print(f"rows scanned: {total_rows}")
-    print(f"rows with exact reward-style entity match: {exact_rows}")
-    print(f"rows with fuzzy entity-like mention: {fuzzy_rows}")
-    print(f"rows where a fuzzy entity mention escaped exact matching for that entity: {fuzzy_escaped_entity_rows}")
-    print(f"rows with fuzzy-only mention escaping exact match: {fuzzy_only_rows}")
+    print(f"rows scanned: {rows_scanned}")
+    print(f"rows with exact target-name match: {exact_target_rows}")
+    print(f"rows with near target-name variant: {near_target_rows}")
+    print(f"rows with near variant but no exact target-name match: {near_target_without_exact_target_rows}")
+    print(f"rows with any exact reward-list entity match: {exact_entity_rows}")
 
     print("\nby source kind:")
     for source_kind, stats in sorted(by_source_kind.items()):
         print(
-            f"  {source_kind}: rows={stats['rows']} exact={stats['exact']} "
-            f"fuzzy={stats['fuzzy']} fuzzy_escaped_entity={stats['fuzzy_escaped_entity']} "
-            f"fuzzy_only={stats['fuzzy_only']}"
+            f"  {source_kind}: rows={stats['rows']} exact_target={stats['exact_target']} "
+            f"near_target={stats['near_target']} near_without_exact={stats['near_without_exact']} "
+            f"exact_entity={stats['exact_entity']}"
         )
 
-    if exact_entities:
-        print("\ntop exact entities:")
-        for entity, count in exact_entities.most_common(15):
-            print(f"  {entity}: {count}")
+    if variant_counts:
+        print("\ntop near target-name variants:")
+        for variant, count in variant_counts.most_common(20):
+            print(f"  {variant!r}: {count}")
 
-    if fuzzy_variants:
-        print("\ntop fuzzy escaped variants:")
-        for (entity, variant), count in fuzzy_variants.most_common(15):
-            print(f"  {variant!r} ~ {entity!r}: {count}")
+    if entity_counts:
+        print("\ntop exact reward-list entities:")
+        for entity, count in entity_counts.most_common(20):
+            print(f"  {entity}: {count}")
 
     print("\nexamples:")
     for row in matches[: args.max_examples]:
-        marker = "fuzzy-escaped-entity" if row.fuzzy_entity else "exact"
-        if row.fuzzy_entity and not row.exact_entities:
-            marker = "fuzzy-only"
         snippet = " ".join(row.text.split())[:300]
         print(
-            f"- {marker} {row.source_kind} {row.source}:{row.row_index} "
-            f"reward={row.reward!r} exact={row.exact_entities} "
-            f"fuzzy={row.fuzzy_variant!r}->{row.fuzzy_entity!r} score={row.fuzzy_score:.3f}\n"
+            f"- {row.source_kind} {row.source}:{row.row_index} reward={row.reward!r} "
+            f"exact_target={row.exact_target} variant={row.target_variant!r} "
+            f"score={row.target_score:.3f} exact_entities={row.exact_entities}\n"
             f"  {snippet}"
         )
 
