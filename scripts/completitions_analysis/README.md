@@ -25,6 +25,7 @@ forgetting reward.
 - Near variants without an exact target-name match
 - Exact matches for any configured reward-list entity
 - A CSV containing the matching rows
+- A summary CSV containing aggregate leakage counts
 
 The most important signal for reward evasion is:
 
@@ -72,6 +73,25 @@ scripts/completitions_analysis/analyze-adaptive-completions.py \
   --forgetting-reward 1 \
   --output-csv outputs/completion_analysis/rihanna-adaptive-runs-forgetting-reward-1.csv
 ```
+
+When `--output-csv` is set, a second CSV is written next to it using the
+`.summary.csv` suffix. For example:
+
+```text
+outputs/completion_analysis/rihanna-adaptive-runs-forgetting-reward-1.csv
+outputs/completion_analysis/rihanna-adaptive-runs-forgetting-reward-1.summary.csv
+```
+
+The summary CSV includes one `all` row per source kind and one row per
+`unlearning-*` run/source-kind pair. It reports:
+
+- `total_rows`: all rows read from that source kind before filtering
+- `matching_filter_rows`: rows kept after filters such as `--forgetting-reward 1`
+- `exact_target_rows`
+- `near_target_rows`
+- `near_without_exact_rows`
+- `exact_entity_rows`
+- `near_without_exact_rate`
 
 For Slurm usage, use:
 

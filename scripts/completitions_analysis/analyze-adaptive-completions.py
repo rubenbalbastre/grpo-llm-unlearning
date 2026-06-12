@@ -44,6 +44,18 @@ class Finding:
     exact_entities: list[str]
 
 
+@dataclass
+class SummaryRow:
+    group: str
+    source_kind: str
+    total_rows: int = 0
+    matching_filter_rows: int = 0
+    exact_target_rows: int = 0
+    near_target_rows: int = 0
+    near_without_exact_rows: int = 0
+    exact_entity_rows: int = 0
+
+
 def normalize_token(text: str) -> str:
     return re.sub(r"[^a-z0-9]+", "", text.lower())
 
@@ -147,6 +159,10 @@ def collect_input_files(paths: list[Path]) -> list[Path]:
     return files
 
 
+def run_name_from_path(path: Path) -> str:
+    return next((part for part in path.parts if part.startswith("unlearning-")), "all")
+
+
 def iter_file_rows(path: Path) -> Iterable[CompletionRow]:
     if path.suffix == ".jsonl":
         yield from iter_jsonl_rows(path)
@@ -244,6 +260,48 @@ def write_csv(path: Path, findings: list[Finding]) -> None:
             )
 
 
+def write_summary_csv(path: Path, rows: list[SummaryRow]) -> None:
+    path.parent.mkdir(parents=True, exist_ok=True)
+    with path.open("w", encoding="utf-8", newline="") as handle:
+        writer = csv.DictWriter(
+            handle,
+            fieldnames=[
+                "group",
+                "source_kind",
+                "total_rows",
+                "matching_filter_rows",
+                "exact_target_rows",
+                "near_target_rows",
+                "near_without_exact_rows",
+                "exact_entity_rows",
+                "near_without_exact_rate",
+            ],
+        )
+        writer.writeheader()
+        for row in rows:
+            denominator = row.matching_filter_rows or 0
+            rate = row.near_without_exact_rows / denominator if denominator else 0.0
+            writer.writerow(
+                {
+                    "group": row.group,
+                    "source_kind": row.source_kind,
+                    "total_rows": row.total_rows,
+                    "matching_filter_rows": row.matching_filter_rows,
+                    "exact_target_rows": row.exact_target_rows,
+                    "near_target_rows": row.near_target_rows,
+                    "near_without_exact_rows": row.near_without_exact_rows,
+                    "exact_entity_rows": row.exact_entity_rows,
+                    "near_without_exact_rate": f"{rate:.8f}",
+                }
+            )
+
+
+def default_summary_path(matches_path: Path | None) -> Path | None:
+    if matches_path is None:
+        return None
+    return matches_path.with_name(f"{matches_path.stem}.summary.csv")
+
+
 def parse_args() -> argparse.Namespace:
     parser = argparse.ArgumentParser(
         description="Scan completions for exact and misspelled target-name mentions."
@@ -254,6 +312,7 @@ def parse_args() -> argparse.Namespace:
     parser.add_argument("--near-threshold", type=float, default=0.84)
     parser.add_argument("--forgetting-reward", type=float, default=None)
     parser.add_argument("--output-csv", type=Path, default=None)
+    parser.add_argument("--summary-csv", type=Path, default=None)
     parser.add_argument("--max-examples", type=int, default=20)
     return parser.parse_args()
 
@@ -269,9 +328,8 @@ def main() -> None:
     ]
 
     rows_scanned = 0
-    summary = defaultdict(
-        lambda: {"rows": 0, "exact_target": 0, "near_target": 0, "near_without_exact": 0, "exact_entity": 0}
-    )
+    source_summary = defaultdict(lambda: SummaryRow(group="all", source_kind=""))
+    run_summary = defaultdict(lambda: SummaryRow(group="", source_kind=""))
     variant_counts = Counter()
     entity_counts = Counter()
     findings: list[Finding] = []
@@ -279,6 +337,17 @@ def main() -> None:
     for file_index, path in enumerate(files, start=1):
         print(f"[{file_index}/{len(files)}] scanning {path}", flush=True)
         for row in iter_file_rows(path):
+            total_source_stats = source_summary[row.source_kind]
+            total_source_stats.group = "all"
+            total_source_stats.source_kind = row.source_kind
+            total_source_stats.total_rows += 1
+
+            run = run_name_from_path(row.source)
+            total_run_stats = run_summary[(run, row.source_kind)]
+            total_run_stats.group = run
+            total_run_stats.source_kind = row.source_kind
+            total_run_stats.total_rows += 1
+
             if args.forgetting_reward is not None and row.source_kind != "trl_completion":
                 continue
             if not reward_matches(row.reward, args.forgetting_reward):
@@ -293,26 +362,31 @@ def main() -> None:
                 entity_matchers=entity_matchers,
             )
 
-            stats = summary[row.source_kind]
-            stats["rows"] += 1
+            source_stats = source_summary[row.source_kind]
+            source_stats.matching_filter_rows += 1
+
+            run_stats = run_summary[(run, row.source_kind)]
+            run_stats.matching_filter_rows += 1
+
             if finding is None:
                 continue
 
             near_without_exact = bool(finding.target_variant) and not finding.exact_target
-            stats["exact_target"] += int(finding.exact_target)
-            stats["near_target"] += int(bool(finding.target_variant))
-            stats["near_without_exact"] += int(near_without_exact)
-            stats["exact_entity"] += int(bool(finding.exact_entities))
+            for stats in (source_stats, run_stats):
+                stats.exact_target_rows += int(finding.exact_target)
+                stats.near_target_rows += int(bool(finding.target_variant))
+                stats.near_without_exact_rows += int(near_without_exact)
+                stats.exact_entity_rows += int(bool(finding.exact_entities))
 
             variant_counts.update([finding.target_variant] if finding.target_variant else [])
             entity_counts.update(finding.exact_entities)
             findings.append(finding)
         print(f"[{file_index}/{len(files)}] done {path}", flush=True)
 
-    exact_target_rows = sum(stats["exact_target"] for stats in summary.values())
-    near_target_rows = sum(stats["near_target"] for stats in summary.values())
-    near_without_exact_rows = sum(stats["near_without_exact"] for stats in summary.values())
-    exact_entity_rows = sum(stats["exact_entity"] for stats in summary.values())
+    exact_target_rows = sum(stats.exact_target_rows for stats in source_summary.values())
+    near_target_rows = sum(stats.near_target_rows for stats in source_summary.values())
+    near_without_exact_rows = sum(stats.near_without_exact_rows for stats in source_summary.values())
+    exact_entity_rows = sum(stats.exact_entity_rows for stats in source_summary.values())
 
     print(f"concept: {args.concept}")
     print(f"target_name: {target_name}")
@@ -326,11 +400,12 @@ def main() -> None:
     print(f"rows with any exact reward-list entity match: {exact_entity_rows}")
 
     print("\nby source kind:")
-    for source_kind, stats in sorted(summary.items()):
+    for source_kind, stats in sorted(source_summary.items()):
         print(
-            f"  {source_kind}: rows={stats['rows']} exact_target={stats['exact_target']} "
-            f"near_target={stats['near_target']} near_without_exact={stats['near_without_exact']} "
-            f"exact_entity={stats['exact_entity']}"
+            f"  {source_kind}: rows={stats.matching_filter_rows} "
+            f"exact_target={stats.exact_target_rows} near_target={stats.near_target_rows} "
+            f"near_without_exact={stats.near_without_exact_rows} "
+            f"exact_entity={stats.exact_entity_rows}"
         )
 
     if variant_counts:
@@ -356,6 +431,15 @@ def main() -> None:
     if args.output_csv:
         write_csv(args.output_csv, findings)
         print(f"\nwrote matches CSV: {args.output_csv}")
+
+    summary_csv = args.summary_csv or default_summary_path(args.output_csv)
+    if summary_csv:
+        summary_rows = sorted(source_summary.values(), key=lambda row: (row.group, row.source_kind))
+        summary_rows.extend(
+            sorted(run_summary.values(), key=lambda row: (row.group, row.source_kind))
+        )
+        write_summary_csv(summary_csv, summary_rows)
+        print(f"wrote summary CSV: {summary_csv}")
 
 
 if __name__ == "__main__":
