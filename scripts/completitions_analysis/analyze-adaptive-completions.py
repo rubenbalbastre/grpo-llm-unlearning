@@ -12,6 +12,8 @@ from difflib import SequenceMatcher
 from pathlib import Path
 from typing import Any, Iterable
 
+import pyarrow.parquet as pq
+
 REPO_ROOT = Path(__file__).resolve().parents[2]
 sys.path.insert(0, str(REPO_ROOT))
 
@@ -22,7 +24,6 @@ TEXT_COLUMNS = ("completion", "prediction", "response", "output", "text")
 PROMPT_COLUMNS = ("prompt", "query", "input")
 REWARD_COLUMNS = ("forgetting_reward", "reward", "rewards", "score", "rouge_l_recall")
 TOKEN_RE = re.compile(r"[A-Za-z][A-Za-z'’.-]*")
-PARQUET_WARNING_SHOWN = False
 
 
 @dataclass
@@ -111,18 +112,6 @@ def iter_jsonl_rows(path: Path) -> Iterable[CompletionRow]:
 
 
 def iter_parquet_rows(path: Path) -> Iterable[CompletionRow]:
-    global PARQUET_WARNING_SHOWN
-    try:
-        import pyarrow.parquet as pq
-    except ModuleNotFoundError:
-        if not PARQUET_WARNING_SHOWN:
-            print(
-                "warning: pyarrow is not installed; skipping TRL completion parquet files",
-                file=sys.stderr,
-            )
-            PARQUET_WARNING_SHOWN = True
-        return
-
     parquet_file = pq.ParquetFile(path)
     columns = set(parquet_file.schema_arrow.names)
     text_column = next((name for name in TEXT_COLUMNS if name in columns), None)
@@ -183,9 +172,6 @@ def reward_matches(value: str | float | int | None, expected: float | None) -> b
 
 def best_target_variant(text: str, target_name: str, threshold: float) -> tuple[str, float]:
     target = normalize_token(target_name)
-    if len(target) < 4:
-        raise ValueError("--target-name must have at least 4 normalized characters.")
-
     best_variant = ""
     best_score = 0.0
     for token in TOKEN_RE.findall(text):
