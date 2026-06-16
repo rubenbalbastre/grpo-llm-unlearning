@@ -1,7 +1,7 @@
 evaluation:
   model_name_or_path: outputs/unlearning-3568/checkpoint-175
   output_dir: outputs/unlearning-3568/checkpoint-175/eval_rwku
-  subjects: Rihanna
+  subjects: Justin Timberlake
   training_config_path: null
   shard:
     index: 0
