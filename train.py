@@ -26,6 +26,27 @@ from src.data_generator.get_contaminated_data import get_rwku_contaminated_data
 from src.trainer_callback import get_training_callbacks
 
 
+def is_main_process() -> bool:
+    return int(os.getenv("RANK", "0")) == 0
+
+
+def filter_empty_prompts(dataset: Dataset, prompt_column: str, dataset_label: str) -> Dataset:
+    before = len(dataset)
+    dataset = dataset.filter(
+        lambda row: isinstance(row[prompt_column], str) and row[prompt_column].strip() != ""
+    )
+    removed = before - len(dataset)
+    if removed > 0 and is_main_process():
+        print(
+            f"WARNING: filtered out {removed} row(s) with empty prompts from "
+            f"{dataset_label} before applying dataset_size.",
+            flush=True,
+        )
+    if len(dataset) == 0:
+        raise ValueError(f"No valid prompts remain in {dataset_label} after filtering empty prompts.")
+    return dataset
+
+
 def adaptive_rollout_func(prompts: list[str], trainer) -> dict[str, Any]:
 
     step = int(getattr(getattr(trainer, "state", None), "global_step", 0) or 0)
@@ -85,6 +106,7 @@ def load_standard_dataset(cfg: DictConfig) -> Dataset:
     dataset = dataset.filter(
         lambda row: row[subject_column] == cfg.experiment.forget_concept
     )
+    dataset = filter_empty_prompts(dataset, prompt_column, "standard_data")
     dataset_size = cfg.standard_data.get("dataset_size")
     if dataset_size is not None:
         dataset_size = int(dataset_size)
@@ -109,6 +131,7 @@ def load_offline_dataset(cfg: DictConfig) -> Dataset:
             f"Prompt column '{prompt_column}' not found in offline dataset columns: "
             f"{dataset.column_names}"
         )
+    dataset = filter_empty_prompts(dataset, prompt_column, "offline_data")
     dataset_size = cfg.offline_data.get("dataset_size")
     if dataset_size is not None:
         dataset_size = int(dataset_size)
