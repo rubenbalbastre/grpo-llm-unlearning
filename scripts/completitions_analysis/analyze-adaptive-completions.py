@@ -20,19 +20,17 @@ from src.reward.refusal_patterns import REFUSAL_PATTERNS  # noqa: E402
 
 
 TEXT_COLUMNS = ("completion", "prediction", "response", "output", "text")
-PROMPT_COLUMNS = ("prompt", "query", "input")
 REWARD_COLUMNS = ("forgetting_reward", "unlearning_reward_func", "reward", "rewards", "score", "rouge_l_recall")
 TOKEN_RE = re.compile(r"[A-Za-z][A-Za-z'’.-]*")
 WANDB_COMPLETION_FILE_RE = re.compile(r"(^|/)media/table/completions_.*\.table\.json$")
+SOURCE_KIND = "wandb_completion"
 TRAINING_JOB_TYPE = "training"
 
 
 @dataclass
 class CompletionRow:
     source: Path
-    source_kind: str
     row_index: int
-    prompt: str
     text: str
     reward: str | float | int | None
 
@@ -103,10 +101,8 @@ def iter_wandb_table_rows(path: Path) -> Iterable[CompletionRow]:
     if text_column is None:
         return
 
-    prompt_column = next((name for name in PROMPT_COLUMNS if name in columns), None)
     reward_column = next((name for name in REWARD_COLUMNS if name in columns), None)
     text_index = columns.index(text_column)
-    prompt_index = columns.index(prompt_column) if prompt_column else None
     reward_index = columns.index(reward_column) if reward_column else None
 
     for row_index, values in enumerate(data, start=1):
@@ -114,9 +110,7 @@ def iter_wandb_table_rows(path: Path) -> Iterable[CompletionRow]:
             continue
         yield CompletionRow(
             source=path,
-            source_kind="wandb_completion",
             row_index=row_index,
-            prompt=stringify(values[prompt_index]) if prompt_index is not None and prompt_index < len(values) else "",
             text=stringify(values[text_index]),
             reward=values[reward_index] if reward_index is not None and reward_index < len(values) else None,
         )
@@ -126,6 +120,18 @@ def run_name_from_path(path: Path) -> str:
     if path.parent.name == "table" and path.parent.parent.name == "media":
         return path.parent.parent.parent.name
     return "all"
+
+
+def make_summary(group: str, training_mode: str) -> SummaryRow:
+    return SummaryRow(group=group, training_mode=training_mode, source_kind=SOURCE_KIND)
+
+
+def record_finding(stats: SummaryRow, finding: Finding) -> None:
+    near_without_exact = bool(finding.target_variant) and not finding.exact_target
+    stats.exact_target_rows += int(finding.exact_target)
+    stats.near_target_rows += int(bool(finding.target_variant))
+    stats.near_without_exact_rows += int(near_without_exact)
+    stats.exact_entity_rows += int(bool(finding.exact_entities))
 
 
 def reward_matches(value: str | float | int | None, expected: float | None) -> bool:
@@ -219,7 +225,7 @@ def write_csv(path: Path, findings: list[Finding]) -> None:
             writer.writerow(
                 {
                     "source": finding.row.source,
-                    "source_kind": finding.row.source_kind,
+                    "source_kind": SOURCE_KIND,
                     "row_index": finding.row.row_index,
                     "reward": finding.row.reward,
                     "exact_target": finding.exact_target,
@@ -273,6 +279,17 @@ def default_summary_path(matches_path: Path | None) -> Path | None:
     if matches_path is None:
         return None
     return matches_path.with_name(f"{matches_path.stem}.summary.csv")
+
+
+def load_env_file(path: Path = REPO_ROOT / ".env") -> None:
+    if not path.exists():
+        return
+    for line in path.read_text(encoding="utf-8").splitlines():
+        stripped = line.strip()
+        if not stripped or stripped.startswith("#") or "=" not in stripped:
+            continue
+        key, value = stripped.split("=", 1)
+        os.environ.setdefault(key.strip(), value.strip().strip("'\""))
 
 
 def config_get(config: dict[str, Any], keys: Iterable[str]) -> Any:
@@ -376,7 +393,7 @@ def parse_args() -> argparse.Namespace:
 
 
 def main() -> None:
-    load_dotenv("../../.env")
+    load_env_file()
     args = parse_args()
     project = os.environ.get("WANDB_PROJECT")
     if not project:
@@ -398,9 +415,9 @@ def main() -> None:
     fuzzy_targets = build_fuzzy_targets(target_entities)
 
     rows_scanned = 0
-    source_summary = defaultdict(lambda: SummaryRow(group="all", training_mode="all", source_kind=""))
-    mode_summary = defaultdict(lambda: SummaryRow(group="", training_mode="", source_kind=""))
-    run_summary = defaultdict(lambda: SummaryRow(group="", training_mode="", source_kind=""))
+    source_summary = defaultdict(lambda: make_summary("all", "all"))
+    mode_summary = defaultdict(lambda: SummaryRow(group="", training_mode="", source_kind=SOURCE_KIND))
+    run_summary = defaultdict(lambda: SummaryRow(group="", training_mode="", source_kind=SOURCE_KIND))
     variant_counts = Counter()
     entity_counts = Counter()
     findings: list[Finding] = []
@@ -410,24 +427,17 @@ def main() -> None:
         training_mode = completion_file.training_mode
         print(f"[{file_index}/{len(files)}] scanning {path}", flush=True)
         for row in iter_wandb_table_rows(path):
-            total_source_stats = source_summary[row.source_kind]
-            total_source_stats.group = "all"
-            total_source_stats.training_mode = "all"
-            total_source_stats.source_kind = row.source_kind
-            total_source_stats.total_rows += 1
-
-            total_mode_stats = mode_summary[(training_mode, row.source_kind)]
-            total_mode_stats.group = training_mode
-            total_mode_stats.training_mode = training_mode
-            total_mode_stats.source_kind = row.source_kind
-            total_mode_stats.total_rows += 1
-
             run = run_name_from_path(row.source)
-            total_run_stats = run_summary[(training_mode, run, row.source_kind)]
-            total_run_stats.group = run
-            total_run_stats.training_mode = training_mode
-            total_run_stats.source_kind = row.source_kind
-            total_run_stats.total_rows += 1
+            mode_stats = mode_summary[(training_mode, SOURCE_KIND)]
+            mode_stats.group = training_mode
+            mode_stats.training_mode = training_mode
+            run_stats = run_summary[(training_mode, run, SOURCE_KIND)]
+            run_stats.group = run
+            run_stats.training_mode = training_mode
+
+            summary_rows = [source_summary[SOURCE_KIND], mode_stats, run_stats]
+            for stats in summary_rows:
+                stats.total_rows += 1
 
             if not reward_matches(row.reward, args.forgetting_reward):
                 continue
@@ -440,24 +450,14 @@ def main() -> None:
                 near_threshold=args.near_threshold,
             )
 
-            source_stats = source_summary[row.source_kind]
-            source_stats.matching_filter_rows += 1
-
-            mode_stats = mode_summary[(training_mode, row.source_kind)]
-            mode_stats.matching_filter_rows += 1
-
-            run_stats = run_summary[(training_mode, run, row.source_kind)]
-            run_stats.matching_filter_rows += 1
+            for stats in summary_rows:
+                stats.matching_filter_rows += 1
 
             if finding is None:
                 continue
 
-            near_without_exact = bool(finding.target_variant) and not finding.exact_target
-            for stats in (source_stats, mode_stats, run_stats):
-                stats.exact_target_rows += int(finding.exact_target)
-                stats.near_target_rows += int(bool(finding.target_variant))
-                stats.near_without_exact_rows += int(near_without_exact)
-                stats.exact_entity_rows += int(bool(finding.exact_entities))
+            for stats in summary_rows:
+                record_finding(stats, finding)
 
             variant_counts.update([finding.target_variant] if finding.target_variant else [])
             entity_counts.update(finding.exact_entities)
@@ -514,7 +514,7 @@ def main() -> None:
     for finding in findings[: args.max_examples]:
         snippet = " ".join(finding.row.text.split())[:300]
         print(
-            f"- {finding.row.source_kind} {finding.row.source}:{finding.row.row_index} "
+            f"- {SOURCE_KIND} {finding.row.source}:{finding.row.row_index} "
             f"reward={finding.row.reward!r} exact_target={finding.exact_target} "
             f"variant={finding.target_variant!r} target_entity={finding.target_entity!r} "
             f"score={finding.target_score:.3f} "
