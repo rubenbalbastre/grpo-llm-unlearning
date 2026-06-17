@@ -47,4 +47,5 @@ def build_reward_funcs(reward_config: Any, forget_concept: str) -> tuple[list[Ca
 
 
 def get_reward_weights(reward_config: Any) -> list[float]:
+    print(reward_config)
     return reward_config.get("type").get("reward_weights")
