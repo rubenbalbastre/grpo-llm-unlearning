@@ -9,7 +9,7 @@ from typing import Any, Callable
 from datasets import Dataset
 from omegaconf import DictConfig, OmegaConf
 from transformers import AutoModelForCausalLM, AutoTokenizer
-from trl import GRPOConfig, GRPOTrainer
+from trl import GRPOTrainer
 from dotenv import load_dotenv
 
 from src.data_generator.data_generator import DataGenerator
@@ -236,40 +236,6 @@ def standard_training_args(cfg: DictConfig) -> dict[str, Any]:
     if num_epochs <= 0:
         raise ValueError("training.num_epochs must be positive in standard/offline mode.")
     return {"num_train_epochs": num_epochs}
-
-
-def build_grpo_config(
-    cfg: DictConfig,
-    *,
-    output_dir: Path,
-    run_name: str,
-    wandb_enabled: bool,
-    reward_weights: list[float],
-) -> GRPOConfig:
-    return GRPOConfig(
-        output_dir=str(output_dir),
-        run_name=run_name,
-        seed=cfg.experiment.seed,
-        data_seed=cfg.experiment.seed,
-        per_device_train_batch_size=cfg.training.per_device_train_batch_size,
-        gradient_accumulation_steps=cfg.training.gradient_accumulation_steps,
-        num_generations=cfg.training.num_generations,
-        steps_per_generation=cfg.training.steps_per_generation,
-        num_iterations=cfg.training.num_iterations,
-        beta=cfg.training.beta,
-        gradient_checkpointing=cfg.training.gradient_checkpointing,
-        max_steps=cfg.training.max_steps,
-        learning_rate=cfg.training.learning_rate,
-        max_completion_length=cfg.training.max_completion_length,
-        remove_unused_columns=cfg.training.remove_unused_columns,
-        report_to=["wandb"] if wandb_enabled else [],
-        log_completions=cfg.training.log_completions,
-        logging_steps=cfg.training.logging_steps,
-        lr_scheduler_type=cfg.training.lr_scheduler_type,
-        reward_weights=reward_weights,
-        ddp_find_unused_parameters=cfg.training.ddp_find_unused_parameters,
-        **standard_training_args(cfg),
-    )
 
 
 def attach_adaptive_state(trainer: GRPOTrainer, data_setup: TrainingDataSetup) -> None:

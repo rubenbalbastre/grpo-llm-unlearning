@@ -3,17 +3,17 @@ from __future__ import annotations
 import hydra
 from omegaconf import DictConfig
 from transformers import set_seed
-from trl import GRPOTrainer
+from trl import GRPOConfig, GRPOTrainer
 
 from src.peft import get_peft_config
 from src.reward.factory import build_reward_funcs, get_reward_weights
 from src.train_setup import (
     attach_adaptive_state,
-    build_grpo_config,
     finish_training,
     load_model_and_tokenizer,
     setup_run,
     setup_training_data,
+    standard_training_args,
 )
 from src.trainer_callback import get_training_callbacks
 
@@ -31,12 +31,30 @@ def main(cfg: DictConfig) -> None:
 
     reward_funcs = build_reward_funcs(forget_concept=forget_concept, reward_config=cfg.reward)
     reward_weights = get_reward_weights(reward_config=cfg.reward)
-    args = build_grpo_config(
-        cfg,
-        output_dir=paths.output_dir,
+
+    args = GRPOConfig(
+        output_dir=str(paths.output_dir),
         run_name=run_name,
-        wandb_enabled=wandb_enabled,
+        seed=cfg.experiment.seed,
+        data_seed=cfg.experiment.seed,
+        per_device_train_batch_size=cfg.training.per_device_train_batch_size,
+        gradient_accumulation_steps=cfg.training.gradient_accumulation_steps,
+        num_generations=cfg.training.num_generations,
+        steps_per_generation=cfg.training.steps_per_generation,
+        num_iterations=cfg.training.num_iterations,
+        beta=cfg.training.beta,
+        gradient_checkpointing=cfg.training.gradient_checkpointing,
+        max_steps=cfg.training.max_steps,
+        learning_rate=cfg.training.learning_rate,
+        max_completion_length=cfg.training.max_completion_length,
+        remove_unused_columns=cfg.training.remove_unused_columns,
+        report_to=["wandb"] if wandb_enabled else [],
+        log_completions=cfg.training.log_completions,
+        logging_steps=cfg.training.logging_steps,
+        lr_scheduler_type=cfg.training.lr_scheduler_type,
         reward_weights=reward_weights,
+        ddp_find_unused_parameters=cfg.training.ddp_find_unused_parameters,
+        **standard_training_args(cfg),
     )
 
     trainer = GRPOTrainer(
