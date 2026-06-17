@@ -4,6 +4,7 @@ from __future__ import annotations
 import argparse
 import csv
 import json
+import math
 import os
 import re
 import sys
@@ -56,6 +57,7 @@ class SummaryRow:
     near_target_rows: int = 0
     near_without_exact_rows: int = 0
     exact_entity_rows: int = 0
+    near_without_exact_rate_std: float | None = None
 
 
 @dataclass(frozen=True)
@@ -132,6 +134,44 @@ def record_finding(stats: SummaryRow, finding: Finding) -> None:
     stats.near_target_rows += int(bool(finding.target_variant))
     stats.near_without_exact_rows += int(near_without_exact)
     stats.exact_entity_rows += int(bool(finding.exact_entities))
+
+
+def near_without_exact_rate(row: SummaryRow) -> float:
+    if not row.matching_filter_rows:
+        return 0.0
+    return row.near_without_exact_rows / row.matching_filter_rows
+
+
+def sample_std(values: list[float]) -> float | None:
+    if len(values) < 2:
+        return None
+    mean = sum(values) / len(values)
+    return math.sqrt(sum((value - mean) ** 2 for value in values) / (len(values) - 1))
+
+
+def set_rate_stds(
+    source_rows: Iterable[SummaryRow],
+    mode_rows: Iterable[SummaryRow],
+    run_rows: Iterable[SummaryRow],
+) -> None:
+    run_rows = list(run_rows)
+    for source_row in source_rows:
+        rates = [
+            near_without_exact_rate(run_row)
+            for run_row in run_rows
+            if run_row.source_kind == source_row.source_kind and run_row.matching_filter_rows
+        ]
+        source_row.near_without_exact_rate_std = sample_std(rates)
+
+    for mode_row in mode_rows:
+        rates = [
+            near_without_exact_rate(run_row)
+            for run_row in run_rows
+            if run_row.training_mode == mode_row.training_mode
+            and run_row.source_kind == mode_row.source_kind
+            and run_row.matching_filter_rows
+        ]
+        mode_row.near_without_exact_rate_std = sample_std(rates)
 
 
 def reward_matches(value: str | float | int | None, expected: float | None) -> bool:
@@ -253,12 +293,17 @@ def write_summary_csv(path: Path, rows: list[SummaryRow]) -> None:
                 "near_without_exact_rows",
                 "exact_entity_rows",
                 "near_without_exact_rate",
+                "near_without_exact_rate_std",
             ],
         )
         writer.writeheader()
         for row in rows:
-            denominator = row.matching_filter_rows or 0
-            rate = row.near_without_exact_rows / denominator if denominator else 0.0
+            rate = near_without_exact_rate(row)
+            rate_std = (
+                f"{row.near_without_exact_rate_std:.8f}"
+                if row.near_without_exact_rate_std is not None
+                else ""
+            )
             writer.writerow(
                 {
                     "group": row.group,
@@ -271,6 +316,7 @@ def write_summary_csv(path: Path, rows: list[SummaryRow]) -> None:
                     "near_without_exact_rows": row.near_without_exact_rows,
                     "exact_entity_rows": row.exact_entity_rows,
                     "near_without_exact_rate": f"{rate:.8f}",
+                    "near_without_exact_rate_std": rate_std,
                 }
             )
 
@@ -527,6 +573,11 @@ def main() -> None:
 
     summary_csv = args.summary_csv or default_summary_path(args.output_csv)
     if summary_csv:
+        set_rate_stds(
+            source_rows=source_summary.values(),
+            mode_rows=mode_summary.values(),
+            run_rows=run_summary.values(),
+        )
         summary_rows = sorted(source_summary.values(), key=lambda row: (row.group, row.source_kind))
         summary_rows.extend(
             sorted(mode_summary.values(), key=lambda row: (row.training_mode, row.source_kind))

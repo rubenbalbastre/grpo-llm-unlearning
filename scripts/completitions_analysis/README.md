@@ -73,6 +73,7 @@ pair. It reports:
 - `near_without_exact_rows`
 - `exact_entity_rows`
 - `near_without_exact_rate`
+- `near_without_exact_rate_std`: sample standard deviation of per-run `near_without_exact_rate` values for aggregate rows
 
 For Slurm usage, use:
 
