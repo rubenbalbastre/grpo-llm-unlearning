@@ -1,0 +1,3 @@
+# @package reward
+type: r1
+reward_weights: [1.0, 0.3, 0.0] # simple_match, language, fuzzy_match

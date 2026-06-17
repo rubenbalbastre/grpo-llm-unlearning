@@ -4,41 +4,54 @@ from collections.abc import Callable
 from pathlib import Path
 from typing import Any
 
-from src.data_generator.prompt_buffer import PromptBuffer
 from src.reward.forgetting import make_forgetting_reward_func
 from src.reward.language import build_language_reward, make_language_reward_func
+from src.reward.fuzzy import make_forgetting_fuzzy_reward_func
+
+REWARD_NAMES = ("simple_match", "language", "fuzzy_match")
 
 
-RewardFunc = Callable[..., list[float]]
+def get_reward_weights(reward_config: Any) -> list[float]:
+    weights = [float(weight) for weight in reward_config.get("reward_weights", [])]
+    if len(weights) != len(REWARD_NAMES):
+        raise ValueError(
+            "reward.reward_weights must have one value for each reward in "
+            f"{list(REWARD_NAMES)}, got {weights!r}."
+        )
+    return weights
 
 
-def build_reward_functions(
-    reward_config: Any,
-    buffer: PromptBuffer | None,
-    log_path: Path,
-    forget_concept: str,
-) -> tuple[list[RewardFunc], list[float]]:
-    log_events = bool(reward_config.get("log_events", True))
+def build_reward_funcs(reward_config: Any, forget_concept: str) -> list[Callable]:
+    log_events = reward_config.get("log_events", False)
+    reward_funcs: list[Callable] = []
+
     forgetting_reward = make_forgetting_reward_func(
-        buffer=buffer,
-        log_path=log_path,
+        buffer=None,
+        log_path=Path("events.jsonl"),
         forget_concept=forget_concept,
-        reward_mode=reward_config.mode,
+        reward_mode=reward_config.get("functions").get("simple_match").get("mode"),
         log_events=log_events,
     )
-    reward_funcs: list[RewardFunc] = [forgetting_reward]
-    reward_weights = [1.0]
+    reward_funcs.append(forgetting_reward)
 
-    language_config = reward_config.get("language")
+    language_config = reward_config.get("functions").get("language")
     language_reward = build_language_reward(language_config)
-    if language_reward is not None:
-        reward_funcs.append(
-            make_language_reward_func(
-                language_reward,
-                log_path,
-                log_events=log_events,
-            )
+    reward_funcs.append(
+        make_language_reward_func(
+            language_reward,
+            Path("events.jsonl"),
+            log_events=log_events,
         )
-        reward_weights.append(float(language_config.get("weight", 0.0)))
+    )
 
-    return reward_funcs, reward_weights
+    fuzzy_config = reward_config.get("functions").get("fuzzy_match")
+    fuzzy_reward = make_forgetting_fuzzy_reward_func(
+        buffer=None,
+        log_path=Path("events.jsonl"),
+        forget_concept=forget_concept,
+        reward_mode=fuzzy_config.get("mode"),
+        log_events=log_events,
+    )
+    reward_funcs.append(fuzzy_reward)
+
+    return reward_funcs

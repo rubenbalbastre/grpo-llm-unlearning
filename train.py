@@ -21,7 +21,7 @@ from src.logging import (
     setup_huggingface_hub,
 )
 from src.data_generator.prompt_buffer import PromptBuffer
-from src.reward import build_reward_functions
+from src.reward.factory import build_reward_funcs, get_reward_weights
 from src.data_generator.get_contaminated_data import get_rwku_contaminated_data
 from src.trainer_callback import get_training_callbacks
 
@@ -290,12 +290,8 @@ def main(cfg: DictConfig) -> None:
         raise ValueError("training.mode must be one of: 'adaptive', 'standard', or 'offline'.")
 
     # Reward function configuration
-    reward_funcs, reward_weights = build_reward_functions(
-        cfg.reward,
-        buffer=buffer,
-        log_path=events_log_path,
-        forget_concept=forget_concept,
-    )
+    reward_funcs = build_reward_funcs(forget_concept=forget_concept, reward_config=cfg.reward)
+    reward_weights = get_reward_weights(reward_config=cfg.reward)
 
     # other GRPO configurations
     standard_training_args: dict[str, Any] = {}

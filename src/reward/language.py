@@ -25,8 +25,7 @@ class FastTextLanguageReward:
     ) -> None:
         if not model_path:
             raise ValueError(
-                "reward.language.enabled=true requires reward.language.model_path "
-                "or FASTTEXT_LID_PATH."
+                "reward.functions.language.model_path or FASTTEXT_LID_PATH is required."
             )
         path = Path(os.path.expandvars(str(model_path))).expanduser()
         if not path.exists():
@@ -91,10 +90,7 @@ class FastTextLanguageReward:
         return label.replace("__label__", ""), float(confidence)
 
 
-def build_language_reward(config: Any) -> FastTextLanguageReward | None:
-    if config is None or not bool(config.get("enabled", False)):
-        return None
-
+def build_language_reward(config: Any) -> FastTextLanguageReward:
     return FastTextLanguageReward(
         model_path=config.get("model_path"),
         min_chars=int(config.get("min_chars", 20)),
