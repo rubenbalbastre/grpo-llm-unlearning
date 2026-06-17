@@ -173,9 +173,11 @@ class DataGenerator:
                 max_completions_per_prompt=self.context_max_completions_per_prompt,
             )
             prompt_pool_size_before_generation = len(buffer.records)
+            unevaluated_prompt_count = buffer.count_unevaluated_prompts()
             num_new_prompts = self._resolve_num_new_prompts(
                 batch_size=num_prompts,
                 prompt_pool_size=prompt_pool_size_before_generation,
+                unevaluated_prompt_count=unevaluated_prompt_count,
             )
             generated = []
             if num_new_prompts > 0:
@@ -204,6 +206,7 @@ class DataGenerator:
                     group: len(items) for group, items in rollout_group_context.items()
                 },
                 "prompt_pool_size": len(buffer.records),
+                "unevaluated_prompt_count_before_generation": unevaluated_prompt_count,
                 "num_new_prompts": num_new_prompts,
                 "generated_prompt_count_after": self.generated_prompt_count,
                 "max_generated_prompts": self.max_generated_prompts,
@@ -238,6 +241,10 @@ class DataGenerator:
                 "batch_size": len(final_prompts),
                 "rollout_group_context": batch_info.get("rollout_group_context", {}),
                 "prompt_pool_size": batch_info.get("prompt_pool_size", 0),
+                "unevaluated_prompt_count_before_generation": batch_info.get(
+                    "unevaluated_prompt_count_before_generation",
+                    0,
+                ),
                 "generated_prompt_count_after": batch_info.get(
                     "generated_prompt_count_after"
                 ),
@@ -301,8 +308,15 @@ class DataGenerator:
     def _resolve_new_prompts_per_step(self, batch_size: int) -> int:
         return max(1, math.ceil(batch_size * float(self.new_prompts_per_step)))
 
-    def _resolve_num_new_prompts(self, batch_size: int, prompt_pool_size: int) -> int:
-        if prompt_pool_size < batch_size:
+    def _resolve_num_new_prompts(
+        self,
+        batch_size: int,
+        prompt_pool_size: int,
+        unevaluated_prompt_count: int = 0,
+    ) -> int:
+        if unevaluated_prompt_count >= batch_size:
+            requested = 0
+        elif prompt_pool_size < batch_size:
             requested = batch_size
         else:
             requested = self._resolve_new_prompts_per_step(batch_size)

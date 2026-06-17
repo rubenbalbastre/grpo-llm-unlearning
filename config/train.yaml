@@ -20,6 +20,7 @@ wandb:
 
 data_generator:
   safe: false
+  initial_standard_prompt_count: 64 # Adaptive mode warm-start prompts sampled from standard_data; null or 0 disables.
   new_prompts_per_step: 0.1 # Fraction of the rollout prompt batch generated each step.
   max_generated_prompts: 300 # Stop external prompt generation after this many accepted prompts; null disables the cap.
   data_proposer:
