@@ -4,7 +4,6 @@ from collections.abc import Callable
 from pathlib import Path
 from typing import Any
 
-from src.data_generator.prompt_buffer import PromptBuffer
 from src.reward.forgetting import make_forgetting_reward_func
 from src.reward.language import build_language_reward, make_language_reward_func
 from src.reward.fuzzy import make_forgetting_fuzzy_reward_func
