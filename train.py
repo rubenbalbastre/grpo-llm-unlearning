@@ -290,12 +290,18 @@ def main(cfg: DictConfig) -> None:
         raise ValueError("training.mode must be one of: 'adaptive', 'standard', or 'offline'.")
 
     # Reward function configuration
-    reward_funcs, reward_weights = build_reward_functions(
-        cfg.reward,
-        buffer=buffer,
-        log_path=events_log_path,
-        forget_concept=forget_concept,
-    )
+    if cfg.reward.type == "r0":
+        reward_funcs, reward_weights = build_r0_reward(
+            forget_concept=forget_concept,
+            r0_reward_config=cfg.reward,
+        )
+    elif cfg.reward.type == "r1":
+        reward_funcs, reward_weights = build_r1_reward(
+            forget_concept=forget_concept,
+            r1_reward_config=cfg.reward,
+        )
+    else:
+        raise ValueError("reward.type must be one of: 'r0' or 'r1'.")
 
     # other GRPO configurations
     standard_training_args: dict[str, Any] = {}
