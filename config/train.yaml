@@ -59,7 +59,6 @@ reward:
     simple_match:
       mode: binary
     language:
-      enabled: true
       model_path: ${oc.env:FASTTEXT_LID_PATH,null} # Path to fastText lid.176.ftz or lid.176.bin.
       min_chars: 20 # Short completions are scored neutral because language ID is unreliable.
       english_confidence_threshold: 0.6 # +1 when top prediction is English above this confidence.

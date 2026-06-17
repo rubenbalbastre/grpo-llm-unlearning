@@ -71,10 +71,9 @@ data_generator.data_proposer.proposer_context.context_max_completions_per_prompt
 buffer.max_prompts: 512
 buffer.high_reward_std_threshold: 0.2
 buffer.high_mean_reward_threshold: 0.3
-reward.mode: entity_count # entity_count or binary
-reward.language.enabled: false # optional fastText English-consistency reward
-reward.language.weight: 0.1 # passed to GRPOConfig.reward_weights
-reward.language.model_path: ${oc.env:FASTTEXT_LID_PATH,null}
+reward: r0 # r0/r1/r2 select reward_weights; reward functions stay in config/train.yaml
+reward.functions.simple_match.mode: entity_count # optional override; entity_count or binary
+reward.functions.language.model_path: ${oc.env:FASTTEXT_LID_PATH,null}
 standard_data.config_name: train_refusal_phi3
 standard_data.dataset_size: 100 # limit after filtering by forget_concept
 offline_data.path: outputs/offline-synthetic/prompts_stephen_king.jsonl

@@ -36,8 +36,6 @@ def build_reward_funcs(reward_config: Any, forget_concept: str) -> list[Callable
 
     language_config = reward_config.get("functions").get("language")
     language_reward = build_language_reward(language_config)
-    if language_reward is None:
-        raise ValueError("language reward is configured but not enabled.")
     reward_funcs.append(
         make_language_reward_func(
             language_reward,

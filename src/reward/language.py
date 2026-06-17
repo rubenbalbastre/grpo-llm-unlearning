@@ -25,8 +25,7 @@ class FastTextLanguageReward:
     ) -> None:
         if not model_path:
             raise ValueError(
-                "reward.language.enabled=true requires reward.language.model_path "
-                "or FASTTEXT_LID_PATH."
+                "reward.functions.language.model_path or FASTTEXT_LID_PATH is required."
             )
         path = Path(os.path.expandvars(str(model_path))).expanduser()
         if not path.exists():
