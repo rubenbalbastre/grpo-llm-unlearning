@@ -4,6 +4,8 @@ from __future__ import annotations
 import argparse
 import csv
 import json
+import math
+import os
 import re
 import sys
 from collections import Counter, defaultdict
@@ -12,8 +14,6 @@ from difflib import SequenceMatcher
 from pathlib import Path
 from typing import Any, Iterable
 
-import pyarrow.parquet as pq
-
 REPO_ROOT = Path(__file__).resolve().parents[2]
 sys.path.insert(0, str(REPO_ROOT))
 
@@ -21,17 +21,17 @@ from src.reward.refusal_patterns import REFUSAL_PATTERNS  # noqa: E402
 
 
 TEXT_COLUMNS = ("completion", "prediction", "response", "output", "text")
-PROMPT_COLUMNS = ("prompt", "query", "input")
-REWARD_COLUMNS = ("forgetting_reward", "reward", "rewards", "score", "rouge_l_recall")
+REWARD_COLUMNS = ("forgetting_reward", "unlearning_reward_func", "reward", "rewards", "score", "rouge_l_recall")
 TOKEN_RE = re.compile(r"[A-Za-z][A-Za-z'’.-]*")
+WANDB_COMPLETION_FILE_RE = re.compile(r"(^|/)media/table/completions_.*\.table\.json$")
+SOURCE_KIND = "wandb_completion"
+TRAINING_JOB_TYPE = "training"
 
 
 @dataclass
 class CompletionRow:
     source: Path
-    source_kind: str
     row_index: int
-    prompt: str
     text: str
     reward: str | float | int | None
 
@@ -40,6 +40,7 @@ class CompletionRow:
 class Finding:
     row: CompletionRow
     exact_target: bool
+    target_entity: str
     target_variant: str
     target_score: float
     exact_entities: list[str]
@@ -48,6 +49,7 @@ class Finding:
 @dataclass
 class SummaryRow:
     group: str
+    training_mode: str
     source_kind: str
     total_rows: int = 0
     matching_filter_rows: int = 0
@@ -55,6 +57,19 @@ class SummaryRow:
     near_target_rows: int = 0
     near_without_exact_rows: int = 0
     exact_entity_rows: int = 0
+    near_without_exact_rate_std: float | None = None
+
+
+@dataclass(frozen=True)
+class FuzzyTarget:
+    entity: str
+    normalized: str
+
+
+@dataclass(frozen=True)
+class DownloadedCompletion:
+    path: Path
+    training_mode: str
 
 
 def normalize_token(text: str) -> str:
@@ -77,86 +92,86 @@ def stringify(value: Any) -> str:
     return str(value)
 
 
-def first_existing(row: dict[str, Any], names: Iterable[str]) -> Any:
-    for name in names:
-        if name in row:
-            return row[name]
-    return None
-
-
-def jsonl_source_kind(path: Path, row: dict[str, Any]) -> str:
-    if path.name == "rwku_generations.jsonl" or "rouge_l_recall" in row:
-        return "rwku_generation"
-    if row.get("type") == "reward":
-        return f"reward:{row.get('reward_component', 'unknown')}"
-    return path.stem
-
-
-def iter_jsonl_rows(path: Path) -> Iterable[CompletionRow]:
-    with path.open(encoding="utf-8") as handle:
-        for row_index, line in enumerate(handle, start=1):
-            if not line.strip():
-                continue
-            raw = json.loads(line)
-            text = first_existing(raw, TEXT_COLUMNS)
-            if text is None:
-                continue
-            yield CompletionRow(
-                source=path,
-                source_kind=jsonl_source_kind(path, raw),
-                row_index=row_index,
-                prompt=stringify(first_existing(raw, PROMPT_COLUMNS)),
-                text=stringify(text),
-                reward=first_existing(raw, REWARD_COLUMNS),
-            )
-
-
-def iter_parquet_rows(path: Path) -> Iterable[CompletionRow]:
-    parquet_file = pq.ParquetFile(path)
-    columns = set(parquet_file.schema_arrow.names)
-    text_column = next((name for name in TEXT_COLUMNS if name in columns), None)
-    if text_column is None:
-        print(f"warning: skipping {path}; no text column among {TEXT_COLUMNS}", file=sys.stderr)
+def iter_wandb_table_rows(path: Path) -> Iterable[CompletionRow]:
+    raw = json.loads(path.read_text(encoding="utf-8"))
+    columns = raw.get("columns") or []
+    data = raw.get("data") or []
+    if not isinstance(columns, list) or not isinstance(data, list):
         return
 
-    prompt_column = next((name for name in PROMPT_COLUMNS if name in columns), None)
-    reward_column = next((name for name in REWARD_COLUMNS if name in columns), None)
-    selected_columns = [column for column in (text_column, prompt_column, reward_column) if column]
-    data = parquet_file.read(columns=selected_columns).to_pydict()
+    text_column = next((name for name in TEXT_COLUMNS if name in columns), None)
+    if text_column is None:
+        return
 
-    for row_index, text in enumerate(data[text_column], start=1):
+    reward_column = next((name for name in REWARD_COLUMNS if name in columns), None)
+    text_index = columns.index(text_column)
+    reward_index = columns.index(reward_column) if reward_column else None
+
+    for row_index, values in enumerate(data, start=1):
+        if not isinstance(values, list) or text_index >= len(values):
+            continue
         yield CompletionRow(
             source=path,
-            source_kind="trl_completion",
             row_index=row_index,
-            prompt=stringify(data[prompt_column][row_index - 1]) if prompt_column else "",
-            text=stringify(text),
-            reward=data[reward_column][row_index - 1] if reward_column else None,
+            text=stringify(values[text_index]),
+            reward=values[reward_index] if reward_index is not None and reward_index < len(values) else None,
         )
 
 
-def collect_input_files(paths: list[Path]) -> list[Path]:
-    files: list[Path] = []
-    for path in paths:
-        if path.is_file():
-            files.append(path)
-        elif path.is_dir():
-            files.extend(sorted((path / "completions").glob("*.parquet")))
-            files.extend(sorted(path.glob("checkpoint-*/eval_rwku/rwku_generations.jsonl")))
-        else:
-            print(f"warning: path does not exist: {path}", file=sys.stderr)
-    return files
-
-
 def run_name_from_path(path: Path) -> str:
-    return next((part for part in path.parts if part.startswith("unlearning-")), "all")
+    if path.parent.name == "table" and path.parent.parent.name == "media":
+        return path.parent.parent.parent.name
+    return "all"
 
 
-def iter_file_rows(path: Path) -> Iterable[CompletionRow]:
-    if path.suffix == ".jsonl":
-        yield from iter_jsonl_rows(path)
-    elif path.suffix == ".parquet":
-        yield from iter_parquet_rows(path)
+def make_summary(group: str, training_mode: str) -> SummaryRow:
+    return SummaryRow(group=group, training_mode=training_mode, source_kind=SOURCE_KIND)
+
+
+def record_finding(stats: SummaryRow, finding: Finding) -> None:
+    near_without_exact = bool(finding.target_variant) and not finding.exact_target
+    stats.exact_target_rows += int(finding.exact_target)
+    stats.near_target_rows += int(bool(finding.target_variant))
+    stats.near_without_exact_rows += int(near_without_exact)
+    stats.exact_entity_rows += int(bool(finding.exact_entities))
+
+
+def near_without_exact_rate(row: SummaryRow) -> float:
+    if not row.matching_filter_rows:
+        return 0.0
+    return row.near_without_exact_rows / row.matching_filter_rows
+
+
+def sample_std(values: list[float]) -> float | None:
+    if len(values) < 2:
+        return None
+    mean = sum(values) / len(values)
+    return math.sqrt(sum((value - mean) ** 2 for value in values) / (len(values) - 1))
+
+
+def set_rate_stds(
+    source_rows: Iterable[SummaryRow],
+    mode_rows: Iterable[SummaryRow],
+    run_rows: Iterable[SummaryRow],
+) -> None:
+    run_rows = list(run_rows)
+    for source_row in source_rows:
+        rates = [
+            near_without_exact_rate(run_row)
+            for run_row in run_rows
+            if run_row.source_kind == source_row.source_kind and run_row.matching_filter_rows
+        ]
+        source_row.near_without_exact_rate_std = sample_std(rates)
+
+    for mode_row in mode_rows:
+        rates = [
+            near_without_exact_rate(run_row)
+            for run_row in run_rows
+            if run_row.training_mode == mode_row.training_mode
+            and run_row.source_kind == mode_row.source_kind
+            and run_row.matching_filter_rows
+        ]
+        mode_row.near_without_exact_rate_std = sample_std(rates)
 
 
 def reward_matches(value: str | float | int | None, expected: float | None) -> bool:
@@ -170,40 +185,58 @@ def reward_matches(value: str | float | int | None, expected: float | None) -> b
         return False
 
 
-def best_target_variant(text: str, target_name: str, threshold: float) -> tuple[str, float]:
-    target = normalize_token(target_name)
-    best_variant = ""
-    best_score = 0.0
-    for token in TOKEN_RE.findall(text):
-        normalized = normalize_token(token)
-        if not normalized or normalized == target:
+def build_fuzzy_targets(target_entities: list[str]) -> dict[str, list[FuzzyTarget]]:
+    targets: dict[str, list[FuzzyTarget]] = defaultdict(list)
+    for entity in target_entities:
+        normalized = normalize_token(entity)
+        if len(normalized) < 4 or " " in entity.strip():
             continue
-        if normalized[0] != target[0] or abs(len(normalized) - len(target)) > 2:
-            continue
-        score = SequenceMatcher(None, normalized, target).ratio()
-        if score > best_score:
-            best_variant = token
-            best_score = score
+        targets[normalized[0]].append(FuzzyTarget(entity=entity, normalized=normalized))
+    return dict(targets)
 
-    return (best_variant, best_score) if best_score >= threshold else ("", 0.0)
+
+def best_target_variant(
+    text: str,
+    fuzzy_targets: dict[str, list[FuzzyTarget]],
+    threshold: float,
+) -> tuple[str, str, float]:
+    best_variant = ""
+    best_entity = ""
+    best_score = 0.0
+    for token in set(TOKEN_RE.findall(text)):
+        normalized = normalize_token(token)
+        if not normalized:
+            continue
+        for target in fuzzy_targets.get(normalized[0], []):
+            if normalized == target.normalized:
+                continue
+            if abs(len(normalized) - len(target.normalized)) > 2:
+                continue
+            score = SequenceMatcher(None, normalized, target.normalized).ratio()
+            if score > best_score:
+                best_variant = token
+                best_entity = target.entity
+                best_score = score
+
+    return (best_variant, best_entity, best_score) if best_score >= threshold else ("", "", 0.0)
 
 
 def analyze_row(
     row: CompletionRow,
-    target_regex: re.Pattern[str],
-    target_name: str,
+    target_matchers: list[tuple[str, re.Pattern[str]]],
+    fuzzy_targets: dict[str, list[FuzzyTarget]],
     near_threshold: float,
-    entity_matchers: list[tuple[str, re.Pattern[str]]],
 ) -> Finding | None:
-    exact_target = bool(target_regex.search(row.text))
-    variant, score = best_target_variant(row.text, target_name, near_threshold)
-    exact_entities = [entity for entity, matcher in entity_matchers if matcher.search(row.text)]
+    exact_entities = [entity for entity, matcher in target_matchers if matcher.search(row.text)]
+    variant, target_entity, score = best_target_variant(row.text, fuzzy_targets, near_threshold)
+    exact_target = bool(exact_entities)
 
     if not (exact_target or variant or exact_entities):
         return None
     return Finding(
         row=row,
         exact_target=exact_target,
+        target_entity=target_entity,
         target_variant=variant,
         target_score=score,
         exact_entities=exact_entities,
@@ -221,11 +254,10 @@ def write_csv(path: Path, findings: list[Finding]) -> None:
                 "row_index",
                 "reward",
                 "exact_target",
+                "target_entity",
                 "target_variant",
                 "target_score",
                 "exact_entities",
-                "prompt",
-                "text",
             ],
         )
         writer.writeheader()
@@ -233,15 +265,14 @@ def write_csv(path: Path, findings: list[Finding]) -> None:
             writer.writerow(
                 {
                     "source": finding.row.source,
-                    "source_kind": finding.row.source_kind,
+                    "source_kind": SOURCE_KIND,
                     "row_index": finding.row.row_index,
                     "reward": finding.row.reward,
                     "exact_target": finding.exact_target,
+                    "target_entity": finding.target_entity,
                     "target_variant": finding.target_variant,
                     "target_score": f"{finding.target_score:.4f}",
                     "exact_entities": "|".join(finding.exact_entities),
-                    "prompt": finding.row.prompt,
-                    "text": finding.row.text,
                 }
             )
 
@@ -253,6 +284,7 @@ def write_summary_csv(path: Path, rows: list[SummaryRow]) -> None:
             handle,
             fieldnames=[
                 "group",
+                "training_mode",
                 "source_kind",
                 "total_rows",
                 "matching_filter_rows",
@@ -261,15 +293,21 @@ def write_summary_csv(path: Path, rows: list[SummaryRow]) -> None:
                 "near_without_exact_rows",
                 "exact_entity_rows",
                 "near_without_exact_rate",
+                "near_without_exact_rate_std",
             ],
         )
         writer.writeheader()
         for row in rows:
-            denominator = row.matching_filter_rows or 0
-            rate = row.near_without_exact_rows / denominator if denominator else 0.0
+            rate = near_without_exact_rate(row)
+            rate_std = (
+                f"{row.near_without_exact_rate_std:.8f}"
+                if row.near_without_exact_rate_std is not None
+                else ""
+            )
             writer.writerow(
                 {
                     "group": row.group,
+                    "training_mode": row.training_mode,
                     "source_kind": row.source_kind,
                     "total_rows": row.total_rows,
                     "matching_filter_rows": row.matching_filter_rows,
@@ -278,6 +316,7 @@ def write_summary_csv(path: Path, rows: list[SummaryRow]) -> None:
                     "near_without_exact_rows": row.near_without_exact_rows,
                     "exact_entity_rows": row.exact_entity_rows,
                     "near_without_exact_rate": f"{rate:.8f}",
+                    "near_without_exact_rate_std": rate_std,
                 }
             )
 
@@ -288,81 +327,183 @@ def default_summary_path(matches_path: Path | None) -> Path | None:
     return matches_path.with_name(f"{matches_path.stem}.summary.csv")
 
 
+def load_env_file(path: Path = REPO_ROOT / ".env") -> None:
+    if not path.exists():
+        return
+    for line in path.read_text(encoding="utf-8").splitlines():
+        stripped = line.strip()
+        if not stripped or stripped.startswith("#") or "=" not in stripped:
+            continue
+        key, value = stripped.split("=", 1)
+        os.environ.setdefault(key.strip(), value.strip().strip("'\""))
+
+
+def config_get(config: dict[str, Any], keys: Iterable[str]) -> Any:
+    value: Any = config
+    for key in keys:
+        if not isinstance(value, dict):
+            return None
+        value = value.get(key)
+        if isinstance(value, dict) and set(value) == {"value"}:
+            value = value["value"]
+    return value
+
+
+def run_job_type(run: Any) -> str | None:
+    value = (
+        getattr(run, "job_type", None)
+        or getattr(run, "jobType", None)
+        or getattr(run, "_attrs", {}).get("jobType")
+    )
+    return str(value) if value else None
+
+
+def download_wandb_completion_files(
+    *,
+    entity: str | None,
+    project: str,
+    forget_concept: str,
+    model_name: str | None,
+    download_dir: Path,
+) -> list[DownloadedCompletion]:
+    import wandb
+
+    api = wandb.Api()
+    wandb_path = f"{entity}/{project}" if entity else project
+    downloaded: list[DownloadedCompletion] = []
+    matched_runs = 0
+
+    for run in api.runs(wandb_path):
+        config = dict(run.config or {})
+        concept = config_get(config, ("hydra", "experiment", "forget_concept"))
+        if concept != forget_concept:
+            continue
+        run_model_name = config_get(config, ("hydra", "model", "name"))
+        if model_name and run_model_name != model_name:
+            continue
+        training_mode = config_get(config, ("hydra", "training", "mode"))
+        if training_mode is None:
+            training_mode = "unknown"
+        job_type = run_job_type(run)
+        if job_type and job_type != TRAINING_JOB_TYPE:
+            continue
+
+        run_dir = download_dir / f"{run.name or run.id}-{run.id}"
+        matched_runs += 1
+        run_file_count = 0
+        for wandb_file in run.files():
+            if not WANDB_COMPLETION_FILE_RE.search(wandb_file.name):
+                continue
+            local_path = run_dir / wandb_file.name
+            if not local_path.exists():
+                local_path = Path(wandb_file.download(root=str(run_dir), replace=True).name)
+            downloaded.append(DownloadedCompletion(path=local_path, training_mode=str(training_mode)))
+            run_file_count += 1
+        print(
+            f"found {run_file_count} W&B completion table(s) for {run.name or run.id}",
+            flush=True,
+        )
+
+    model_filter = f", hydra.model.name={model_name!r}" if model_name else ""
+    print(
+        f"matched {matched_runs} W&B training run(s) with "
+        f"hydra.experiment.forget_concept={forget_concept!r}{model_filter}",
+        flush=True,
+    )
+    return sorted(downloaded, key=lambda item: str(item.path))
+
+
 def parse_args() -> argparse.Namespace:
     parser = argparse.ArgumentParser(
-        description="Scan completions for exact and misspelled target-name mentions."
+        description="Download W&B training completions and scan for exact or misspelled target-entity mentions."
     )
-    parser.add_argument("paths", nargs="+", type=Path, help="Run dirs or completion/eval files.")
-    parser.add_argument("--concept", default="Rihanna", choices=sorted(REFUSAL_PATTERNS))
-    parser.add_argument("--target-name", default=None)
+    parser.add_argument(
+        "--concept",
+        default="Rihanna",
+        choices=sorted(REFUSAL_PATTERNS),
+        help="Forgotten concept; filters W&B hydra.experiment.forget_concept.",
+    )
     parser.add_argument("--near-threshold", type=float, default=0.84)
     parser.add_argument("--forgetting-reward", type=float, default=None)
     parser.add_argument("--output-csv", type=Path, default=None)
     parser.add_argument("--summary-csv", type=Path, default=None)
     parser.add_argument("--max-examples", type=int, default=20)
+    parser.add_argument("--model-name", default=None, help="Filter W&B runs by hydra.model.name.")
+    parser.add_argument(
+        "--wandb-download-dir",
+        type=Path,
+        default=Path("outputs/completion_analysis/wandb-downloads"),
+        help="Directory for downloaded W&B completion table JSON files.",
+    )
     return parser.parse_args()
 
 
 def main() -> None:
+    load_env_file()
     args = parse_args()
-    target_name = args.target_name or args.concept
-    files = collect_input_files(args.paths)
-    target_regex = boundary_regex(target_name)
-    entity_matchers = [
+    project = os.environ.get("WANDB_PROJECT")
+    if not project:
+        raise ValueError("WANDB_PROJECT is required in the repository .env file or environment.")
+    files = download_wandb_completion_files(
+        entity=os.environ.get("WANDB_ENTITY"),
+        project=project,
+        forget_concept=args.concept,
+        model_name=args.model_name,
+        download_dir=args.wandb_download_dir,
+    )
+    if not files:
+        raise ValueError(f"No W&B completion tables found for concept {args.concept!r}.")
+    target_entities = REFUSAL_PATTERNS[args.concept]
+    target_matchers = [
         (entity, boundary_regex(entity))
-        for entity in REFUSAL_PATTERNS[args.concept]
+        for entity in target_entities
     ]
+    fuzzy_targets = build_fuzzy_targets(target_entities)
 
     rows_scanned = 0
-    source_summary = defaultdict(lambda: SummaryRow(group="all", source_kind=""))
-    run_summary = defaultdict(lambda: SummaryRow(group="", source_kind=""))
+    source_summary = defaultdict(lambda: make_summary("all", "all"))
+    mode_summary = defaultdict(lambda: SummaryRow(group="", training_mode="", source_kind=SOURCE_KIND))
+    run_summary = defaultdict(lambda: SummaryRow(group="", training_mode="", source_kind=SOURCE_KIND))
     variant_counts = Counter()
     entity_counts = Counter()
     findings: list[Finding] = []
 
-    for file_index, path in enumerate(files, start=1):
+    for file_index, completion_file in enumerate(files, start=1):
+        path = completion_file.path
+        training_mode = completion_file.training_mode
         print(f"[{file_index}/{len(files)}] scanning {path}", flush=True)
-        for row in iter_file_rows(path):
-            total_source_stats = source_summary[row.source_kind]
-            total_source_stats.group = "all"
-            total_source_stats.source_kind = row.source_kind
-            total_source_stats.total_rows += 1
-
+        for row in iter_wandb_table_rows(path):
             run = run_name_from_path(row.source)
-            total_run_stats = run_summary[(run, row.source_kind)]
-            total_run_stats.group = run
-            total_run_stats.source_kind = row.source_kind
-            total_run_stats.total_rows += 1
+            mode_stats = mode_summary[(training_mode, SOURCE_KIND)]
+            mode_stats.group = training_mode
+            mode_stats.training_mode = training_mode
+            run_stats = run_summary[(training_mode, run, SOURCE_KIND)]
+            run_stats.group = run
+            run_stats.training_mode = training_mode
 
-            if args.forgetting_reward is not None and row.source_kind != "trl_completion":
-                continue
+            summary_rows = [source_summary[SOURCE_KIND], mode_stats, run_stats]
+            for stats in summary_rows:
+                stats.total_rows += 1
+
             if not reward_matches(row.reward, args.forgetting_reward):
                 continue
 
             rows_scanned += 1
             finding = analyze_row(
                 row=row,
-                target_regex=target_regex,
-                target_name=target_name,
+                target_matchers=target_matchers,
+                fuzzy_targets=fuzzy_targets,
                 near_threshold=args.near_threshold,
-                entity_matchers=entity_matchers,
             )
 
-            source_stats = source_summary[row.source_kind]
-            source_stats.matching_filter_rows += 1
-
-            run_stats = run_summary[(run, row.source_kind)]
-            run_stats.matching_filter_rows += 1
+            for stats in summary_rows:
+                stats.matching_filter_rows += 1
 
             if finding is None:
                 continue
 
-            near_without_exact = bool(finding.target_variant) and not finding.exact_target
-            for stats in (source_stats, run_stats):
-                stats.exact_target_rows += int(finding.exact_target)
-                stats.near_target_rows += int(bool(finding.target_variant))
-                stats.near_without_exact_rows += int(near_without_exact)
-                stats.exact_entity_rows += int(bool(finding.exact_entities))
+            for stats in summary_rows:
+                record_finding(stats, finding)
 
             variant_counts.update([finding.target_variant] if finding.target_variant else [])
             entity_counts.update(finding.exact_entities)
@@ -375,14 +516,16 @@ def main() -> None:
     exact_entity_rows = sum(stats.exact_entity_rows for stats in source_summary.values())
 
     print(f"concept: {args.concept}")
-    print(f"target_name: {target_name}")
+    if args.model_name:
+        print(f"model_name filter: {args.model_name}")
+    print(f"target_entities: {len(target_entities)} refusal pattern(s)")
     if args.forgetting_reward is not None:
         print(f"forgetting_reward filter: {args.forgetting_reward}")
     print(f"files scanned: {len(files)}")
     print(f"rows scanned: {rows_scanned}")
-    print(f"rows with exact target-name match: {exact_target_rows}")
-    print(f"rows with near target-name variant: {near_target_rows}")
-    print(f"rows with near variant but no exact target-name match: {near_without_exact_rows}")
+    print(f"rows with exact target-entity match: {exact_target_rows}")
+    print(f"rows with near target-entity variant: {near_target_rows}")
+    print(f"rows with near variant but no exact target-entity match: {near_without_exact_rows}")
     print(f"rows with any exact reward-list entity match: {exact_entity_rows}")
 
     print("\nby source kind:")
@@ -394,8 +537,17 @@ def main() -> None:
             f"exact_entity={stats.exact_entity_rows}"
         )
 
+    print("\nby training mode:")
+    for (training_mode, source_kind), stats in sorted(mode_summary.items()):
+        print(
+            f"  {training_mode}/{source_kind}: rows={stats.matching_filter_rows} "
+            f"exact_target={stats.exact_target_rows} near_target={stats.near_target_rows} "
+            f"near_without_exact={stats.near_without_exact_rows} "
+            f"exact_entity={stats.exact_entity_rows}"
+        )
+
     if variant_counts:
-        print("\ntop near target-name variants:")
+        print("\ntop near target-entity variants:")
         for variant, count in variant_counts.most_common(20):
             print(f"  {variant!r}: {count}")
 
@@ -408,9 +560,10 @@ def main() -> None:
     for finding in findings[: args.max_examples]:
         snippet = " ".join(finding.row.text.split())[:300]
         print(
-            f"- {finding.row.source_kind} {finding.row.source}:{finding.row.row_index} "
+            f"- {SOURCE_KIND} {finding.row.source}:{finding.row.row_index} "
             f"reward={finding.row.reward!r} exact_target={finding.exact_target} "
-            f"variant={finding.target_variant!r} score={finding.target_score:.3f} "
+            f"variant={finding.target_variant!r} target_entity={finding.target_entity!r} "
+            f"score={finding.target_score:.3f} "
             f"exact_entities={finding.exact_entities}\n  {snippet}"
         )
 
@@ -420,9 +573,17 @@ def main() -> None:
 
     summary_csv = args.summary_csv or default_summary_path(args.output_csv)
     if summary_csv:
+        set_rate_stds(
+            source_rows=source_summary.values(),
+            mode_rows=mode_summary.values(),
+            run_rows=run_summary.values(),
+        )
         summary_rows = sorted(source_summary.values(), key=lambda row: (row.group, row.source_kind))
         summary_rows.extend(
-            sorted(run_summary.values(), key=lambda row: (row.group, row.source_kind))
+            sorted(mode_summary.values(), key=lambda row: (row.training_mode, row.source_kind))
+        )
+        summary_rows.extend(
+            sorted(run_summary.values(), key=lambda row: (row.training_mode, row.group, row.source_kind))
         )
         write_summary_csv(summary_csv, summary_rows)
         print(f"wrote summary CSV: {summary_csv}")

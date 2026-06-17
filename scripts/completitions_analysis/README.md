@@ -1,30 +1,30 @@
 # Completions Analysis
 
-Utilities for inspecting model completions after unlearning runs.
+Utilities for inspecting model completions logged by W&B training runs.
 
 The main script, `analyze-adaptive-completions.py`, looks for completions that
-mention a target concept exactly or through near-spellings. The motivating case
-is `Rihanna` vs variants such as `Rihana`, `Rhianna`, or `Rihannna`.
+mention any refusal-pattern entity for the selected concept exactly or through
+near-spellings. For `CONCEPT=Rihanna`, that includes `Rihanna`, `Fenty Beauty`,
+`Umbrella`, and the rest of `REFUSAL_PATTERNS["Rihanna"]`.
 
 ## What It Scans
 
-For each run directory passed to the script, it reads:
+The script downloads `media/table/completions_*.table.json` from W&B training
+runs whose config has
+`hydra.experiment.forget_concept == --concept`, then scans those downloaded
+tables.
+When `--model-name` is set, runs are also filtered by `hydra.model.name`.
 
-- `completions/*.parquet` from TRL completion logging
-- `checkpoint-*/eval_rwku/rwku_generations.jsonl`
-
-When `--forgetting-reward 1` is used, only TRL completion rows with
-`forgetting_reward == 1.0` are analyzed. RWKU rows are ignored in that mode,
-because their `reward`-like value is `rouge_l_recall`, not the training
-forgetting reward.
+When `--forgetting-reward 1` is used, only completion rows with
+`unlearning_reward_func == 1.0` are analyzed.
 
 ## What It Reports
 
-- Exact target-name matches, for example `Rihanna`
-- Near target-name variants, for example `Rihana` or `Rihannna`
-- Near variants without an exact target-name match
+- Exact target-entity matches, for example `Rihanna` or `Fenty Beauty`
+- Near target-entity variants, for example `Rihana` or `Rihannna`
+- Near variants without an exact target-entity match
 - Exact matches for any configured reward-list entity
-- A CSV containing the matching rows
+- A compact CSV containing matching row metadata
 - A summary CSV containing aggregate leakage counts
 
 The most important signal for reward evasion is:
@@ -39,64 +39,47 @@ exact_entities == ""
 That means the reward considered the completion successful, but the completion
 still contains a near-spelling of the forgotten entity.
 
-## Current Run Groups
-
-Standard runs:
-
-```text
-3845
-3857
-3859
-3861
-3863
-```
-
-Adaptive runs:
-
-```text
-3855
-3868
-3870
-3874
-3886
-```
-
-`38744` was also mentioned during analysis, but
-`outputs/unlearning-38744` does not exist locally.
-
 ## Example
 
 ```bash
 scripts/completitions_analysis/analyze-adaptive-completions.py \
-  outputs/unlearning-3855 outputs/unlearning-3868 \
-  --concept Rihanna \
+  --concept Confucius \
+  --model-name Qwen/Qwen2.5-1.5B-Instruct \
   --forgetting-reward 1 \
-  --output-csv outputs/completion_analysis/rihanna-adaptive-runs-forgetting-reward-1.csv
+  --output-csv outputs/completion_analysis/confucius-wandb-forgetting-reward-1.csv
 ```
+
+The script reads `WANDB_PROJECT` from the repository `.env` file or
+environment. `WANDB_ENTITY` is optional and can also be read from
+`.env`/environment.
 
 When `--output-csv` is set, a second CSV is written next to it using the
 `.summary.csv` suffix. For example:
 
 ```text
-outputs/completion_analysis/rihanna-adaptive-runs-forgetting-reward-1.csv
-outputs/completion_analysis/rihanna-adaptive-runs-forgetting-reward-1.summary.csv
+outputs/completion_analysis/confucius-wandb-forgetting-reward-1.csv
+outputs/completion_analysis/confucius-wandb-forgetting-reward-1.summary.csv
 ```
 
-The summary CSV includes one `all` row per source kind and one row per
-`unlearning-*` run/source-kind pair. It reports:
+The summary CSV includes one `all` row per source kind, one aggregate row per
+`hydra.training.mode`/source-kind pair, and one row per W&B run/source-kind
+pair. It reports:
 
 - `total_rows`: all rows read from that source kind before filtering
+- `training_mode`: `hydra.training.mode` from the W&B run config, or `all`
 - `matching_filter_rows`: rows kept after filters such as `--forgetting-reward 1`
 - `exact_target_rows`
 - `near_target_rows`
 - `near_without_exact_rows`
 - `exact_entity_rows`
 - `near_without_exact_rate`
+- `near_without_exact_rate_std`: sample standard deviation of per-run `near_without_exact_rate` values for aggregate rows
 
 For Slurm usage, use:
 
 ```bash
-RUNS="3855 3868 3886 3874 3870" \
-OUTPUT_CSV=outputs/completion_analysis/rihanna-adaptive-runs-forgetting-reward-1.csv \
+CONCEPT=Confucius \
+MODEL_NAME=Qwen/Qwen2.5-1.5B-Instruct \
+OUTPUT_CSV=outputs/completion_analysis/confucius-wandb-forgetting-reward-1.csv \
 sbatch scripts/completitions_analysis/slurm-analyze-completions.sh
 ```
