@@ -111,3 +111,5 @@ def make_forgetting_reward_func(
         return rewards
 
     return forgetting_reward
+
+

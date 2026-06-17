@@ -1,2 +1,3 @@
 # @package reward
-forgetting_mode: binary # entity_count or binary
+rewards_funcs: [simple_match, language, fuzzy_match]
+rewards_weights: [1.0, 0.0, 0.0]
