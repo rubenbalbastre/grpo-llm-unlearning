@@ -119,6 +119,34 @@ def load_standard_dataset(cfg: DictConfig) -> Dataset:
     return dataset
 
 
+def load_initial_adaptive_prompts(cfg: DictConfig) -> list[str]:
+    prompt_count = cfg.data_generator.get("initial_standard_prompt_count")
+    if prompt_count is None:
+        return []
+    prompt_count = int(prompt_count)
+    if prompt_count < 0:
+        raise ValueError("data_generator.initial_standard_prompt_count must be non-negative or null.")
+    if prompt_count == 0:
+        return []
+    if prompt_count > int(cfg.buffer.max_prompts):
+        raise ValueError(
+            "data_generator.initial_standard_prompt_count cannot exceed "
+            f"buffer.max_prompts: requested {prompt_count}, "
+            f"buffer.max_prompts={cfg.buffer.max_prompts}."
+        )
+
+    dataset = load_standard_dataset(cfg)
+    if prompt_count > len(dataset):
+        raise ValueError(
+            "data_generator.initial_standard_prompt_count cannot exceed the "
+            f"standard dataset size after filtering: requested {prompt_count}, "
+            f"available {len(dataset)}."
+        )
+    dataset = dataset.shuffle(seed=int(cfg.experiment.seed))
+    dataset = dataset.select(range(prompt_count))
+    return [str(prompt).strip() for prompt in dataset["prompt"]]
+
+
 def load_offline_dataset(cfg: DictConfig) -> Dataset:
     dataset = load_dataset(
         "json",
@@ -245,6 +273,14 @@ def main(cfg: DictConfig) -> None:
             high_reward_std_threshold=cfg.buffer.high_reward_std_threshold,
             high_mean_reward_threshold=cfg.buffer.high_mean_reward_threshold,
         )
+        initial_prompts = load_initial_adaptive_prompts(cfg)
+        buffer.add_generated_prompts(initial_prompts)
+        if initial_prompts and is_main_process():
+            print(
+                f"Seeded adaptive prompt buffer with {len(initial_prompts)} "
+                "standard_data prompt(s).",
+                flush=True,
+            )
         num_processes = int(os.getenv("WORLD_SIZE", "1"))
         placeholder_dataset_size = (
             per_device_train_batch_size

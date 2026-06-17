@@ -132,6 +132,13 @@ class PromptBuffer:
         while len(self.records) > self.max_prompts:
             self.records.pop(next(iter(self.records)))
 
+    def count_unevaluated_prompts(self) -> int:
+        return sum(
+            1
+            for record in self.records.values()
+            if record.latest_rollout_mean_reward is None
+        )
+
     def record_rollout_outcome(self, prompt: str, outcome: RolloutCompletionOutcome) -> None:
         self.pending_rollout_outcomes.append((self._normalize_prompt(prompt), outcome))
 
