@@ -7,8 +7,7 @@ from typing import Any
 
 import hydra
 from omegaconf import DictConfig, OmegaConf
-import torch
-from datasets import Dataset, load_dataset
+from datasets import Dataset
 from transformers import AutoModelForCausalLM, AutoTokenizer, set_seed
 from trl import GRPOConfig, GRPOTrainer
 from dotenv import load_dotenv
@@ -21,6 +20,12 @@ from src.logging import (
     setup_huggingface_hub,
 )
 from src.data_generator.prompt_buffer import PromptBuffer
+from src.load_dataset import (
+    load_initial_adaptive_prompts,
+    load_offline_dataset,
+    load_standard_dataset,
+)
+from src.peft import get_peft_config
 from src.reward.factory import build_reward_funcs, get_reward_weights
 from src.data_generator.get_contaminated_data import get_rwku_contaminated_data
 from src.trainer_callback import get_training_callbacks
@@ -28,23 +33,6 @@ from src.trainer_callback import get_training_callbacks
 
 def is_main_process() -> bool:
     return int(os.getenv("RANK", "0")) == 0
-
-
-def filter_empty_prompts(dataset: Dataset, prompt_column: str, dataset_label: str) -> Dataset:
-    before = len(dataset)
-    dataset = dataset.filter(
-        lambda row: isinstance(row[prompt_column], str) and row[prompt_column].strip() != ""
-    )
-    removed = before - len(dataset)
-    if removed > 0 and is_main_process():
-        print(
-            f"WARNING: filtered out {removed} row(s) with empty prompts from "
-            f"{dataset_label} before applying dataset_size.",
-            flush=True,
-        )
-    if len(dataset) == 0:
-        raise ValueError(f"No valid prompts remain in {dataset_label} after filtering empty prompts.")
-    return dataset
 
 
 def adaptive_rollout_func(prompts: list[str], trainer) -> dict[str, Any]:
@@ -92,113 +80,6 @@ def adaptive_rollout_func(prompts: list[str], trainer) -> dict[str, Any]:
         "logprobs": logprobs,
         "selected_prompt": final,
     }
-
-
-def load_standard_dataset(cfg: DictConfig) -> Dataset:
-    config_name = cfg.standard_data.get("config_name")
-    dataset = load_dataset(
-        cfg.standard_data.name,
-        config_name if config_name else None,
-        split=cfg.standard_data.split,
-    )
-    subject_column = cfg.standard_data.subject_column
-    prompt_column = cfg.standard_data.prompt_column
-    dataset = dataset.filter(
-        lambda row: row[subject_column] == cfg.experiment.forget_concept
-    )
-    dataset = filter_empty_prompts(dataset, prompt_column, "standard_data")
-    dataset_size = cfg.standard_data.get("dataset_size")
-    if dataset_size is not None:
-        dataset_size = int(dataset_size)
-        if dataset_size <= 0:
-            raise ValueError("standard_data.dataset_size must be positive or null.")
-        dataset = dataset.select(range(min(dataset_size, len(dataset))))
-    dataset = dataset.select_columns([prompt_column])
-    if prompt_column != "prompt":
-        dataset = dataset.rename_column(prompt_column, "prompt")
-    return dataset
-
-
-def load_initial_adaptive_prompts(cfg: DictConfig) -> list[str]:
-    prompt_count = cfg.data_generator.get("initial_standard_prompt_count")
-    if prompt_count is None:
-        return []
-    prompt_count = int(prompt_count)
-    if prompt_count < 0:
-        raise ValueError("data_generator.initial_standard_prompt_count must be non-negative or null.")
-    if prompt_count == 0:
-        return []
-    if prompt_count > int(cfg.buffer.max_prompts):
-        raise ValueError(
-            "data_generator.initial_standard_prompt_count cannot exceed "
-            f"buffer.max_prompts: requested {prompt_count}, "
-            f"buffer.max_prompts={cfg.buffer.max_prompts}."
-        )
-
-    dataset = load_standard_dataset(cfg)
-    if prompt_count > len(dataset):
-        raise ValueError(
-            "data_generator.initial_standard_prompt_count cannot exceed the "
-            f"standard dataset size after filtering: requested {prompt_count}, "
-            f"available {len(dataset)}."
-        )
-    dataset = dataset.shuffle(seed=int(cfg.experiment.seed))
-    dataset = dataset.select(range(prompt_count))
-    return [str(prompt).strip() for prompt in dataset["prompt"]]
-
-
-def load_offline_dataset(cfg: DictConfig) -> Dataset:
-    dataset = load_dataset(
-        "json",
-        data_files=str(cfg.offline_data.path),
-        split=cfg.offline_data.split,
-    )
-    prompt_column = cfg.offline_data.prompt_column
-    if prompt_column not in dataset.column_names:
-        raise ValueError(
-            f"Prompt column '{prompt_column}' not found in offline dataset columns: "
-            f"{dataset.column_names}"
-        )
-    dataset = filter_empty_prompts(dataset, prompt_column, "offline_data")
-    dataset_size = cfg.offline_data.get("dataset_size")
-    if dataset_size is not None:
-        dataset_size = int(dataset_size)
-        if dataset_size <= 0:
-            raise ValueError("offline_data.dataset_size must be positive or null.")
-        dataset = dataset.select(range(min(dataset_size, len(dataset))))
-    dataset = dataset.select_columns([prompt_column])
-    if prompt_column != "prompt":
-        dataset = dataset.rename_column(prompt_column, "prompt")
-    return dataset
-
-
-def get_peft_config(cfg: DictConfig, num_hidden_layers: int) -> LoraConfig:
-    from peft import LoraConfig
-    lora_args = cfg.get("peft", None).get("lora", None)
-    number_layers_to_transform = int(lora_args.number_layers_to_transform)
-    if number_layers_to_transform == -1:
-        layers_to_transform = list(range(num_hidden_layers))
-    elif 1 <= number_layers_to_transform <= num_hidden_layers:
-        layers_to_transform = list(
-            range(num_hidden_layers - number_layers_to_transform, num_hidden_layers)
-        )
-    else:
-        raise ValueError(
-            "peft.lora.number_layers_to_transform must be -1 or between 1 "
-            f"and {num_hidden_layers}, got {number_layers_to_transform}."
-        )
-    return LoraConfig(
-        r=lora_args.r,
-        lora_alpha=lora_args.alpha,
-        init_lora_weights=lora_args.init_lora_weights,
-        target_modules=OmegaConf.to_container(
-            lora_args.target_modules, resolve=True
-        ),
-        task_type="CAUSAL_LM",
-        bias="none",
-        layers_pattern="layers",
-        layers_to_transform=layers_to_transform,
-    )
 
 
 @hydra.main(version_base=None, config_path="config", config_name="train")
