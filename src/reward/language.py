@@ -91,10 +91,7 @@ class FastTextLanguageReward:
         return label.replace("__label__", ""), float(confidence)
 
 
-def build_language_reward(config: Any) -> FastTextLanguageReward | None:
-    if config is None or not bool(config.get("enabled", False)):
-        return None
-
+def build_language_reward(config: Any) -> FastTextLanguageReward:
     return FastTextLanguageReward(
         model_path=config.get("model_path"),
         min_chars=int(config.get("min_chars", 20)),
