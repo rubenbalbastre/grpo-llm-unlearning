@@ -1,10 +1,24 @@
 import re
 import unicodedata
-from rapidfuzz.distance import Levenshtein
+from dataclasses import dataclass
+from rapidfuzz import fuzz
 from pathlib import Path
+from typing import Iterable
 
 from src.data_generator.prompt_buffer import PromptBuffer, RolloutCompletionOutcome
-from src.reward.forgetting import build_entity_matchers
+from src.reward.refusal_patterns import REFUSAL_PATTERNS
+
+EntityLike = str | tuple[str, re.Pattern]
+FUZZY_SIMILARITY_THRESHOLD = 85.0
+MIN_FUZZY_ENTITY_LENGTH = 4
+
+
+@dataclass(frozen=True)
+class FuzzyEntity:
+    name: str
+    normalized: str
+    compact: str
+    normalized_pattern: re.Pattern
 
 
 def normalize(text: str) -> str:
@@ -15,43 +29,56 @@ def normalize(text: str) -> str:
     return re.sub(r"\s+", " ", text).strip()
 
 
-def max_edit_distance(entity: str, ratio: float = 0.20) -> int:
-    n = len(entity.replace(" ", ""))
-    return max(1, round(n * ratio))
+def build_fuzzy_entities(forbidden_entities: Iterable[EntityLike]) -> list[FuzzyEntity]:
+    entities: list[FuzzyEntity] = []
+    for entity in iter_entity_names(forbidden_entities):
+        normalized = normalize(entity)
+        if not normalized:
+            continue
+        entities.append(
+            FuzzyEntity(
+                name=entity,
+                normalized=normalized,
+                compact=normalized.replace(" ", ""),
+                normalized_pattern=re.compile(rf"(?<!\w){re.escape(normalized)}(?!\w)"),
+            )
+        )
+    return entities
 
 
-def has_normalized_match(output: str, entity: str) -> bool:
-    output = normalize(output)
-    entity = normalize(entity)
+def build_fuzzy_entities_for_concept(forget_concept: str) -> list[FuzzyEntity]:
+    if forget_concept not in REFUSAL_PATTERNS:
+        raise ValueError(
+            "No refusal patterns configured for "
+            f"{forget_concept!r}. Available options: {list(REFUSAL_PATTERNS)}."
+        )
+    return build_fuzzy_entities(REFUSAL_PATTERNS[forget_concept])
 
-    return re.search(rf"(?<!\w){re.escape(entity)}(?!\w)", output) is not None
+
+def has_normalized_match(normalized_output: str, entity: FuzzyEntity) -> bool:
+    return entity.normalized_pattern.search(normalized_output) is not None
 
 
 def has_fuzzy_match(
-    output: str,
-    entity: str,
-    similarity_threshold: float = 0.85,
+    compact_output: str,
+    entity: FuzzyEntity,
+    similarity_threshold: float = FUZZY_SIMILARITY_THRESHOLD,
 ) -> bool:
-    output = normalize(output).replace(" ", "")
-    entity = normalize(entity).replace(" ", "")
-
-    if not output or not entity:
+    if (
+        not compact_output
+        or not entity.compact
+        or len(entity.compact) < MIN_FUZZY_ENTITY_LENGTH
+    ):
         return False
 
-    max_dist = max_edit_distance(entity)
-    entity_len = len(entity)
-
-    for i in range(len(output)):
-        for j in range(i + max(1, entity_len - max_dist), min(len(output), i + entity_len + max_dist) + 1):
-            span = output[i:j]
-
-            sim = Levenshtein.normalized_similarity(entity, span)
-            dist = Levenshtein.distance(entity, span)
-
-            if sim >= similarity_threshold and dist <= max_dist:
-                return True
-
-    return False
+    return (
+        fuzz.partial_ratio(
+            entity.compact,
+            compact_output,
+            score_cutoff=similarity_threshold,
+        )
+        >= similarity_threshold
+    )
 
 
 def make_forgetting_fuzzy_reward_func(
@@ -62,7 +89,7 @@ def make_forgetting_fuzzy_reward_func(
     log_events: bool = True,
 ):
 
-    entity_matchers = build_entity_matchers(forget_concept)
+    entity_matchers = build_fuzzy_entities_for_concept(forget_concept)
 
     def forgetting_fuzzy_reward(prompts, completions, **kwargs) -> list[float]:
         rewards: list[float] = []
@@ -100,11 +127,31 @@ def make_forgetting_fuzzy_reward_func(
 
 
 
-def compute_fuzzy_reward_per_completion(completion: str, forbidden_entities: list[str]) -> float:
+def iter_entity_names(forbidden_entities: Iterable[EntityLike]) -> Iterable[str]:
     for entity in forbidden_entities:
-        if has_normalized_match(completion, entity):
+        if isinstance(entity, tuple):
+            yield entity[0]
+        else:
+            yield entity
+
+
+def compute_fuzzy_reward_per_completion(
+    completion: str,
+    forbidden_entities: Iterable[EntityLike] | Iterable[FuzzyEntity],
+) -> float:
+    raw_entities = list(forbidden_entities)
+    entities = (
+        raw_entities
+        if all(isinstance(entity, FuzzyEntity) for entity in raw_entities)
+        else build_fuzzy_entities(raw_entities)
+    )
+    normalized_completion = normalize(completion)
+    compact_completion = normalized_completion.replace(" ", "")
+
+    for entity in entities:
+        if has_normalized_match(normalized_completion, entity):
             return 0.0
-        if has_fuzzy_match(completion, entity):
+        if has_fuzzy_match(compact_completion, entity):
             return 0.0
 
     return 1.0
