@@ -16,9 +16,7 @@ cd "${REPO_DIR}"
 
 CONCEPT="${CONCEPT:-Nicolas Cage}" # Karl Marx
 MODEL_NAME="${MODEL_NAME:-Qwen/Qwen2.5-3B-Instruct}"
-FUZZY_THRESHOLD="${FUZZY_THRESHOLD:-0.84}"
-FORGETTING_REWARD="${FORGETTING_REWARD:-1}"
-OUTPUT_CSV="${OUTPUT_CSV:-outputs/completion_analysis/${MODEL_NAME//\//_}-${CONCEPT,,}-wandb-forgetting-reward-${FORGETTING_REWARD}.csv}"
+OUTPUT_CSV="${OUTPUT_CSV:-outputs/completion_analysis/${MODEL_NAME//\//_}-${CONCEPT,,}-wandb-completions.csv}"
 MAX_EXAMPLES="${MAX_EXAMPLES:-40}"
 WANDB_DOWNLOAD_DIR="${WANDB_DOWNLOAD_DIR:-outputs/completion_analysis/wandb-downloads}"
 
@@ -39,7 +37,5 @@ echo "Output CSV: ${OUTPUT_CSV}"
 python -u scripts/completitions_analysis/analyze-adaptive-completions.py \
   "${ARGS[@]}" \
   --concept "${CONCEPT}" \
-  --near-threshold "${FUZZY_THRESHOLD}" \
-  --forgetting-reward "${FORGETTING_REWARD}" \
   --max-examples "${MAX_EXAMPLES}" \
   --output-csv "${OUTPUT_CSV}"
