@@ -34,7 +34,7 @@ if [[ -n "${MODEL_NAME}" ]]; then
 fi
 echo "Output CSV: ${OUTPUT_CSV}"
 
-python -u scripts/completitions_analysis/analyze-adaptive-completions.py \
+python -u scripts/completitions_analysis/analyze-completions.py \
   "${ARGS[@]}" \
   --concept "${CONCEPT}" \
   --max-examples "${MAX_EXAMPLES}" \
