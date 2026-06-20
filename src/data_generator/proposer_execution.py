@@ -101,19 +101,36 @@ class BaseProposerExecution:
         request_index: int | None = None,
         source_prompt: str | None = None,
     ) -> list[dict[str, Any]]:
-        out: list[dict[str, Any]] = []
-        for i, prompt in enumerate(prompts):
-            metadata: dict[str, Any] = {
-                "variant": i,
-                "data_generator_model": self.model_name,
-                "prompt_family": prompt.prompt_family,
-                "execution_mode": self.execution_mode,
-            }
-            if request_index is not None:
-                metadata["request_index"] = request_index
-            if source_prompt is not None:
-                metadata["source_prompt"] = source_prompt
-            out.append({"prompt": prompt.prompt.strip(), "metadata": metadata})
+
+        if self.objective == "unlearning":
+            out: list[dict[str, Any]] = []
+            for i, prompt in enumerate(prompts):
+                metadata: dict[str, Any] = {
+                    "variant": i,
+                    "data_generator_model": self.model_name,
+                    "prompt_family": prompt.prompt_family,
+                    "execution_mode": self.execution_mode,
+                }
+                if request_index is not None:
+                    metadata["request_index"] = request_index
+                if source_prompt is not None:
+                    metadata["source_prompt"] = source_prompt
+                out.append({"prompt": prompt.prompt.strip(), "metadata": metadata})
+        elif self.objective == "general":
+            out: list[dict[str, Any]] = []
+            for i, prompt in enumerate(prompts):
+                metadata: dict[str, Any] = {
+                    "variant": i,
+                    "data_generator_model": self.model_name,
+                    "execution_mode": self.execution_mode,
+                }
+                if request_index is not None:
+                    metadata["request_index"] = request_index
+                if source_prompt is not None:
+                    metadata["source_prompt"] = source_prompt
+                out.append({"prompt": prompt.strip(), "metadata": metadata})
+        else:
+            raise ValueError(f"Unknown objective: {self.objective}")
         return out
 
     def _log_shortfall(
