@@ -165,11 +165,13 @@ def build_data_generator(cfg: DictConfig, events_log_path: Path) -> DataGenerato
     if data_proposer_cfg is None:
         data_proposer_model_name = cfg.data_generator.model_name
         data_proposer_mode = cfg.data_generator.mode
+        objective = cfg.data_generator.get("objective", "general")
         proposer_context_cfg = {}
         proposer_execution_cfg = {}
     else:
         data_proposer_model_name = data_proposer_cfg.model_name
         data_proposer_mode = data_proposer_cfg.mode
+        objective = data_proposer_cfg.get("objective", "general")
         proposer_context_cfg = data_proposer_cfg.get("proposer_context", {})
         proposer_execution_cfg = data_proposer_cfg.get("execution", {})
 
@@ -177,6 +179,7 @@ def build_data_generator(cfg: DictConfig, events_log_path: Path) -> DataGenerato
         topic=f"Forget concept: '{forget_concept}.'",
         log_path=events_log_path,
         model_name=data_proposer_model_name,
+        objective=objective,
         mode=data_proposer_mode,
         context_mode=proposer_context_cfg.get("context_mode", "summary"),
         context_max_prompts=proposer_context_cfg.get(

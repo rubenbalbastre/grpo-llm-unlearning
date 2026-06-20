@@ -18,6 +18,8 @@ from src.data_generator.data_proposer import (
     log_event,
 )
 
+from src.data_generator.general_data_proposer import build_data_generator_prompt_general_objective, GeneralDataProposerResponse
+
 
 class BaseProposerExecution:
     def __init__(
@@ -29,6 +31,7 @@ class BaseProposerExecution:
         mode: GeneratorMode,
         context_mode: ContextMode,
         execution_mode: ExecutionMode,
+        objective: str = "general",
     ) -> None:
         self.topic = topic
         self.log_path = log_path
@@ -36,6 +39,8 @@ class BaseProposerExecution:
         self.mode = mode
         self.context_mode = context_mode
         self.execution_mode = execution_mode
+        self.objective = objective
+        self.structured_response_format = GeneralDataProposerResponse if objective == "general" else DataProposerResponse
 
     def _build_input_messages(
         self,
@@ -43,15 +48,28 @@ class BaseProposerExecution:
         num_prompts: int,
         contamination_prompts: list[str] | None = None,
     ) -> list[dict[str, str]]:
+
+        if self.objective == "unlearning":
+            system_prompt = build_data_generator_prompt(
+                topic=self.topic,
+                num_prompts=num_prompts,
+                mode=self.mode,
+                context_mode=self.context_mode,
+            )
+        elif self.objective == "general":
+            system_prompt = build_data_generator_prompt_general_objective(
+                topic=self.topic,
+                num_prompts=num_prompts,
+                mode=self.mode,
+                context_mode=self.context_mode,
+            )
+        else:
+            raise ValueError(f"Unknown objective: {self.objective}")
+
         input_messages: list[dict[str, str]] = [
             {
                 "role": "system",
-                "content": build_data_generator_prompt(
-                    topic=self.topic,
-                    num_prompts=num_prompts,
-                    mode=self.mode,
-                    context_mode=self.context_mode,
-                ),
+                "content": system_prompt
             },
         ]
         if any(rollout_group_context.values()):
@@ -159,7 +177,7 @@ class BatchProposerExecution(BaseProposerExecution):
                 response = self._client.responses.parse(
                     model=self.model_name,
                     input=input_messages,
-                    text_format=DataProposerResponse,
+                    text_format=self.structured_response_format,
                 )
             prompts = self._parse_response_prompts(response, num_prompts)
             out = self._format_output(prompts)
@@ -269,7 +287,7 @@ class AsyncIndividualProposerExecution(BaseProposerExecution):
                     response = await self._async_client.responses.parse(
                         model=self.model_name,
                         input=input_messages,
-                        text_format=DataProposerResponse,
+                        text_format=self.structured_response_format,
                     )
             prompts = self._parse_response_prompts(response, request_size)
             source_prompt = str(context_item.get("prompt", "")).strip() or None
@@ -339,6 +357,7 @@ def build_proposer_execution(
     topic: str,
     log_path: Path,
     model_name: str,
+    objective: str,
     mode: GeneratorMode,
     context_mode: ContextMode,
     execution_mode: ExecutionMode,
@@ -349,6 +368,7 @@ def build_proposer_execution(
         "topic": topic,
         "log_path": log_path,
         "model_name": model_name,
+        "objective": objective,
         "mode": mode,
         "context_mode": context_mode,
         "execution_mode": execution_mode,

@@ -18,6 +18,7 @@ class DataGenerator:
         # proposer configuration
         topic: str,
         model_name: str = "gpt-5.4-nano",
+        objective: str = "general",
         mode: GeneratorMode = "natural",
         context_mode: ContextMode = "summary",
         context_max_prompts: int = 16,
@@ -71,16 +72,19 @@ class DataGenerator:
         self.mode = mode
         self.topic = topic
         self.model_name = model_name
+        self.objective = objective
         self.proposer = DataProposer(
             topic=topic,
             log_path=log_path,
             model_name=model_name,
+            objective=objective,
             mode=mode,
             context_mode=context_mode,
             execution_mode=execution_mode,
             max_concurrent_requests=max_concurrent_requests,
             prompts_per_context_item=prompts_per_context_item,
         )
+
         # filtering configuration
         self.contamination_buffer = None
         self.data_filter = None
