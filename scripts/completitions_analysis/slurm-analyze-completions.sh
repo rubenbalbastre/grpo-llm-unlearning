@@ -4,29 +4,37 @@
 #SBATCH --time=00:30:00
 #SBATCH --partition=sc-cpu
 set -euo pipefail
-
 hostname; pwd; date
-source "$HOME/anaconda3/etc/profile.d/conda.sh"
-conda activate py312
 
-REPO_DIR="${REPO_DIR:-/home/balalru/machine-unlearning-llm}"
-cd "${REPO_DIR}"
+# SLURM
+# source "$HOME/anaconda3/etc/profile.d/conda.sh"
+# conda activate py312
 
-CONCEPT="${CONCEPT:-Nicolas Cage}" # Karl Marx
-MODEL_NAME="${MODEL_NAME:-Qwen/Qwen2.5-3B-Instruct}"
-REWARD_TYPE="${REWARD_TYPE:-r1}"
-OUTPUT_CSV="${OUTPUT_CSV:-outputs/completion_analysis/${MODEL_NAME//\//_}-${CONCEPT,,}-wandb-completions.csv}"
-MAX_EXAMPLES="${MAX_EXAMPLES:-40}"
+# REPO_DIR="${REPO_DIR:-/home/balalru/machine-unlearning-llm}"
+# cd "${REPO_DIR}"
+
+# LOCAL
+source .venv/bin/activate
+
+
+authors=(
+  "Rihanna"
+  "Karl Marx"
+  "Confucius"
+  "Nicolas Cage"
+  "Justin Timberlake"
+)
+
+MODEL_NAME="${MODEL_NAME:-Qwen/Qwen2.5-1.5B-Instruct}"
 WANDB_DOWNLOAD_DIR="${WANDB_DOWNLOAD_DIR:-outputs/completion_analysis/wandb-downloads}"
+REWARD_TYPE="${REWARD_TYPE:-r0}"
 
-mkdir -p "$(dirname "${OUTPUT_CSV}")"
+for CONCEPT in "${authors[@]}"; do
 
-ARGS=()
-ARGS+=("--wandb-download-dir" "${WANDB_DOWNLOAD_DIR}")
-ARGS+=("--model-name" "${MODEL_NAME}")
-ARGS+=("--reward-type" "${REWARD_TYPE}")
-python -u scripts/completitions_analysis/analyze-completions.py \
-  "${ARGS[@]}" \
+  python -u scripts/completitions_analysis/analyze-completions.py \
   --concept "${CONCEPT}" \
-  --max-examples "${MAX_EXAMPLES}" \
-  --output-csv "${OUTPUT_CSV}"
+  "--model-name" "${MODEL_NAME}" \
+  "--reward-type" "${REWARD_TYPE}" \
+  "--wandb-download-dir" "${WANDB_DOWNLOAD_DIR}" \
+  
+done
