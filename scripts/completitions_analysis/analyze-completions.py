@@ -156,31 +156,15 @@ def parse_args() -> argparse.Namespace:
     parser = argparse.ArgumentParser(
         description="Download W&B training completions and scan them with exact and fuzzy reward matching."
     )
-    parser.add_argument(
-        "--concept",
-        default="Confucius",
-        help="Forgotten concept; filters W&B hydra.experiment.forget_concept.",
-    )
+    parser.add_argument("--concept", default="Confucius")
     parser.add_argument("--output-csv", type=Path, default=None)
-    parser.add_argument("--max-examples", type=int, default=20)
     parser.add_argument("--model-name", default="Qwen/Qwen2.5-1.5B-Instruct", help="Filter W&B runs by hydra.model.name.")
-    parser.add_argument(
-        "--reward-type",
-        default="r1",
-        choices=["r0", "r1", "r2"],
-        help="Which reward to use for fuzzy matching; determines which fuzzy entity list is used.",
-    )
-    parser.add_argument(
-        "--wandb-download-dir",
-        type=Path,
-        default=Path("outputs/completion_analysis/wandb-downloads"),
-        help="Directory for downloaded W&B completion table JSON files.",
-    )
-
+    parser.add_argument("--reward-type", default="r0", choices=["r0", "r1", "r2"])
+    parser.add_argument("--wandb-download-dir", type=Path, default=Path("outputs/completion_analysis/wandb-downloads"))
     args = parser.parse_args()
 
     if args.output_csv is None:
-        args.output_csv = f"outputs/completion_analysis/{args.model_name.replace("/", "-")}-{args.concept}-wandb-completions.csv"
+        args.output_csv = f"outputs/completion_analysis/{args.model_name.replace("/", "-")}-{args.concept}-{args.reward_type}-wandb-completions.csv"
     return args
 
 
