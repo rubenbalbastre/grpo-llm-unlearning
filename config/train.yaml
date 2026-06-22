@@ -25,7 +25,8 @@ data_generator:
   max_generated_prompts: 300 # Stop external prompt generation after this many accepted prompts; null disables the cap.
   data_proposer:
     model_name: gpt-5.4-nano
-    mode: "natural" # natural or expanded
+    objective: "general" # general, unlearning
+    mode: "natural" # natural, expanded
     execution:
       mode: async_individual # batch or async_individual
       max_concurrent_requests: 4 # async_individual only: maximum parallel external proposer requests.

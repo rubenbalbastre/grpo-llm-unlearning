@@ -6,13 +6,7 @@ from typing import Any, Literal
 from pydantic import BaseModel
 from textwrap import dedent
 
-try:
-    from src.logging import log_event
-except Exception:
-    def log_event(path: Path, row: dict[str, Any]) -> None:
-        path.parent.mkdir(parents=True, exist_ok=True)
-        with path.open("a", encoding="utf-8") as f:
-            f.write(json.dumps(row, ensure_ascii=False) + "\n")
+from src.logging import log_event
 
 
 GeneratorMode = Literal[
@@ -170,6 +164,7 @@ class DataProposer:
         topic: str,
         log_path: Path,
         model_name: str = "gpt-5.4-nano",
+        objective: str = "general",
         mode: GeneratorMode = "natural",
         context_mode: ContextMode = "summary",
         execution_mode: ExecutionMode = "batch",
@@ -195,6 +190,7 @@ class DataProposer:
             topic=topic,
             log_path=log_path,
             model_name=model_name,
+            objective=objective,
             mode=mode,
             context_mode=context_mode,
             execution_mode=execution_mode,
