@@ -63,18 +63,19 @@ def scan_completion_files(
         tmp_df['forget_concept'] = concept
         tmp_df['training_mode'] = run.training_mode
         tmp_df['run_name'] = run.run_name
+        tmp_df['reward_type'] = run.reward_type
 
         dfs.append(tmp_df)
 
     # analysis
     df = pd.concat(dfs)
     by_run = (
-        df.groupby(['forget_concept', 'training_mode', 'run_name'], as_index=False)
+        df.groupby(['forget_concept', 'training_mode', 'run_name', 'reward_type'], as_index=False)
         [['forgetting_reward', 'forgetting_fuzzy_reward', 'language_reward']]
         .agg(['std', 'mean'])
     )
     by_training_mode = (
-        df.groupby(['forget_concept', 'training_mode'], as_index=False)
+        df.groupby(['forget_concept', 'training_mode', 'reward_type'], as_index=False)
         [['forgetting_reward', 'forgetting_fuzzy_reward', 'language_reward']]
         .agg(['std', 'mean'])
     )
@@ -158,7 +159,7 @@ def parse_args() -> argparse.Namespace:
     )
     parser.add_argument(
         "--concept",
-        default="Rihanna",
+        default="Confucius",
         help="Forgotten concept; filters W&B hydra.experiment.forget_concept.",
     )
     parser.add_argument("--output-csv", type=Path, default=None)
