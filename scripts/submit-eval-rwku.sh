@@ -7,27 +7,36 @@ cd "${REPO_DIR}"
 EVAL_SCRIPT="${EVAL_SLURM_SCRIPT:-${REPO_DIR}/scripts/slurm-eval-rwku.sh}"
 INCLUDE_FINAL_MODEL="${INCLUDE_FINAL_MODEL:-true}"
 
-if [[ -z "${CHECKPOINT_ROOT:-}" ]]; then
-  if [[ -z "${RUN_NAME:-}" ]]; then
-    echo "Set RUN_NAME=unlearning-<job_id> or CHECKPOINT_ROOT=outputs/<run_name>." >&2
-    exit 2
-  fi
+
+run_names=(
+  "unlearning-4162"
+  "unlearning-4106"
+  "unlearning-4112"
+  "unlearning-4114"
+  "unlearning-4164"
+  "unlearning-4058"
+  "unlearning-4161"
+  "unlearning-4099"
+  "unlearning-4111"
+  "unlearning-4113"
+  "unlearning-4085"  
+  "unlearning-4163"
+  "unlearning-4083"
+  "unlearning-4160"
+  "unlearning-4110"
+)
+
+for RUN_NAME in "${run_names[@]}"; do
+
   CHECKPOINT_ROOT="outputs/${RUN_NAME}"
-fi
 
-CHECKPOINT_ROOT="${CHECKPOINT_ROOT%/}"
-if [[ ! -d "${CHECKPOINT_ROOT}" ]]; then
-  echo "CHECKPOINT_ROOT does not exist: ${CHECKPOINT_ROOT}" >&2
-  exit 1
-fi
+  EVAL_JOB_ID="$(
+    sbatch --parsable \
+      --export="ALL,CHECKPOINT_ROOT=${CHECKPOINT_ROOT},INCLUDE_FINAL_MODEL=${INCLUDE_FINAL_MODEL}" \
+      "${EVAL_SCRIPT}" \
+      "$@"
+  )"
 
-EVAL_JOB_ID="$(
-  sbatch --parsable \
-    --export="ALL,CHECKPOINT_ROOT=${CHECKPOINT_ROOT},INCLUDE_FINAL_MODEL=${INCLUDE_FINAL_MODEL}" \
-    "${EVAL_SCRIPT}" \
-    "$@"
-)"
+  echo "Submitted RWKU eval job: ${EVAL_JOB_ID}"
 
-echo "Submitted RWKU eval job: ${EVAL_JOB_ID}"
-echo "Eval checkpoint root: ${CHECKPOINT_ROOT}"
-echo "Include final model: ${INCLUDE_FINAL_MODEL}"
+done
