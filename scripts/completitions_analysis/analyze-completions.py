@@ -149,7 +149,7 @@ def download_wandb_completion_files(
 
 
 def write_outputs(args: argparse.Namespace, result: pd.DataFrame) -> None:
-    summary_csv = f"{args.output_csv}.summary.csv"
+    summary_csv = f"{args.output_csv}.csv"
     result.to_csv(summary_csv)
 
 
