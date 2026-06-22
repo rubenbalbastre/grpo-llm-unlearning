@@ -180,7 +180,7 @@ def parse_args() -> argparse.Namespace:
     args = parser.parse_args()
 
     if args.output_csv is None:
-        args.output_csv = f"outputs/completion_analysis/${args.model_name}-{args.concept}-wandb-completions.csv"
+        args.output_csv = f"outputs/completion_analysis/{args.model_name.replace("/", "-")}-{args.concept}-wandb-completions.csv"
     return args
 
 
