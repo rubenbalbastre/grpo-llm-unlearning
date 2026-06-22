@@ -43,7 +43,6 @@ def scan_completion_files(
 
         tmp_dfs = []
         for completion_file in run.completions_tables:
-            # print(completion_file)
             tmp_dfs.append(pd.read_json(completion_file, orient="split"))
         tmp_df = pd.concat(tmp_dfs)
 
