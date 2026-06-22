@@ -22,10 +22,9 @@ from src.reward.fuzzy import (  # noqa: E402
     build_fuzzy_entities_for_concept,
     compute_fuzzy_reward_per_completion,
 )
-from src.reward.refusal_patterns import REFUSAL_PATTERNS  # noqa: E402
+from src.reward.forgetting import build_entity_matchers
 
 
-TEXT_COLUMNS = ("completion", "prediction", "response", "output", "text")
 WANDB_COMPLETION_FILE_RE = re.compile(r"(^|/)media/table/completions_.*\.table\.json$")
 SOURCE_KIND = "wandb_completion"
 MATCHES_FIELDNAMES = [
@@ -102,28 +101,11 @@ class AnalysisResult:
     findings: list[Finding]
 
 
-def boundary_regex(text: str) -> re.Pattern[str]:
-    return re.compile(rf"(?<!\w){re.escape(text)}(?!\w)", flags=re.IGNORECASE)
-
-
-def stringify(value: Any) -> str:
-    if value is None:
-        return ""
-    if isinstance(value, str):
-        return value
-    if isinstance(value, list):
-        return " ".join(stringify(item) for item in value)
-    if isinstance(value, dict):
-        return json.dumps(value, ensure_ascii=False)
-    return str(value)
-
-
 def iter_wandb_table_rows(path: Path) -> Iterable[CompletionRow]:
     raw = json.loads(path.read_text(encoding="utf-8"))
     columns = raw.get("columns") or []
     data = raw.get("data") or []
-    text_column = next((name for name in TEXT_COLUMNS if name in columns), None)
-    text_index = columns.index(text_column)
+    text_index = columns.index("completion")
 
     for row_index, values in enumerate(data, start=1):
         yield CompletionRow(
@@ -235,17 +217,13 @@ def analyze_row(
     )
 
 
-def build_target_matchers(concept: str) -> list[tuple[str, re.Pattern[str]]]:
-    return [(entity, boundary_regex(entity)) for entity in REFUSAL_PATTERNS[concept]]
-
-
 def scan_completion_files(
     files: list[DownloadedCompletion],
     *,
     concept: str,
 ) -> AnalysisResult:
 
-    target_matchers = build_target_matchers(concept)
+    target_matchers = build_entity_matchers(concept)
     fuzzy_entities = build_fuzzy_entities_for_concept(concept)
     summaries = make_summary_tables()
     entity_counts = Counter()
@@ -436,7 +414,6 @@ def parse_args() -> argparse.Namespace:
     parser.add_argument(
         "--concept",
         default="Rihanna",
-        choices=sorted(REFUSAL_PATTERNS),
         help="Forgotten concept; filters W&B hydra.experiment.forget_concept.",
     )
     parser.add_argument("--output-csv", type=Path, default=None)
