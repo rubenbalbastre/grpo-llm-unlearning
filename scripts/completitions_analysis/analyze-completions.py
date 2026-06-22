@@ -48,7 +48,7 @@ def scan_completion_files(
         tmp_df = pd.concat(tmp_dfs)
 
         # filter reward = 1 completions
-        reward_column = "forgetting_reward" if run.reward_type == "r0" else "forgetting_fuzzy_reward"
+        reward_column = "forgetting_reward" if run.reward_type in ["r0", "r1"] else "forgetting_fuzzy_reward"
         tmp_df = tmp_df[tmp_df[reward_column] == 1.0]
         
         if "forgetting_reward" not in tmp_df.columns:
