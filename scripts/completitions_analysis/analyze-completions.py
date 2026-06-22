@@ -25,7 +25,6 @@ from src.reward.fuzzy import (  # noqa: E402
 from src.reward.forgetting import build_entity_matchers
 
 
-WANDB_COMPLETION_FILE_RE = re.compile(r"(^|/)media/table/completions_.*\.table\.json$")
 SOURCE_KIND = "wandb_completion"
 MATCHES_FIELDNAMES = [
     "source",
@@ -323,17 +322,6 @@ def write_summary_csv(path: Path, rows: list[SummaryRow]) -> None:
             )
 
 
-def config_get(config: dict[str, Any], keys: Iterable[str]) -> Any:
-    value: Any = config
-    for key in keys:
-        if not isinstance(value, dict):
-            return None
-        value = value.get(key)
-        if isinstance(value, dict) and set(value) == {"value"}:
-            value = value["value"]
-    return value
-
-
 def download_wandb_completion_files(
         *,
         project: str,
@@ -351,33 +339,32 @@ def download_wandb_completion_files(
     for run in api.runs(project):
 
         # training job?
-        if getattr(run, "job_type") != "training":
-            continue
+        if getattr(run, "jobType") == "training":
 
-        # inspect run config
-        config = dict(run.config)
-        run_concept = config_get(config, ("hydra", "experiment", "forget_concept"))
-        run_model_name = config_get(config, ("hydra", "model", "name"))
-        run_reward_type = config_get(config, ("hydra", "training", "reward_type"))
-        training_mode = config_get(config, ("hydra", "training", "mode"))
+            # inspect run config
+            config = dict(run.config)
+            run_concept = config.get("hydra").get("experiment").get("forget_concept")
+            run_model_name = config.get("hydra").get("model").get("name")
+            run_reward_type = config.get("hydra").get("reward").get("type")
+            training_mode = config.get("hydra").get("training").get("mode")
 
-        if (run_concept != forget_concept) | (run_reward_type != reward_type) | (run_model_name != model_name):
-            continue
+            if (run_concept == forget_concept) & (run_reward_type == reward_type) & (run_model_name == model_name):
 
-        # download info
-        run_dir = download_dir / f"{run.name or run.id}-{run.id}"
-        matched_runs += 1
-        run_file_count = 0
-        for wandb_file in run.files():
-            local_path = run_dir / wandb_file.name
-            if not local_path.exists():
-                local_path = Path(wandb_file.download(root=str(run_dir), replace=True).name)
-            downloaded.append(DownloadedCompletion(path=local_path, training_mode=str(training_mode)))
-            run_file_count += 1
-        print(
-            f"found {run_file_count} W&B completion table(s) for {run.name or run.id}",
-            flush=True,
-        )
+                # download info
+                run_dir = download_dir / f"{run.name or run.id}-{run.id}"
+                matched_runs += 1
+                run_file_count = 0
+                run
+                for wandb_file in run.files():
+                    local_path = run_dir / wandb_file.name
+                    if not local_path.exists():
+                        local_path = Path(wandb_file.download(root=str(run_dir), replace=True).name)
+                    downloaded.append(DownloadedCompletion(path=local_path, training_mode=str(training_mode)))
+                    run_file_count += 1
+                print(
+                    f"found {run_file_count} W&B completion table(s) for {run.name or run.id}",
+                    flush=True,
+                )
 
     print(f"matched {matched_runs} W&B training run(s)")
     return sorted(downloaded, key=lambda item: str(item.path))
@@ -416,10 +403,9 @@ def parse_args() -> argparse.Namespace:
         default="Rihanna",
         help="Forgotten concept; filters W&B hydra.experiment.forget_concept.",
     )
-    parser.add_argument("--output-csv", type=Path, default=None)
-    parser.add_argument("--summary-csv", type=Path, default=None)
+    parser.add_argument("--output-csv", type=Path, default="outputs/completion_analysis/test-wandb-completions.csv")
     parser.add_argument("--max-examples", type=int, default=20)
-    parser.add_argument("--model-name", default=None, help="Filter W&B runs by hydra.model.name.")
+    parser.add_argument("--model-name", default="Qwen/Qwen2.5-1.5B-Instruct", help="Filter W&B runs by hydra.model.name.")
     parser.add_argument(
         "--reward-type",
         default="r1",
@@ -451,7 +437,6 @@ def main() -> None:
     result = scan_completion_files(
         files,
         concept=args.concept,
-        reward_type=args.reward_type,
     )
     write_outputs(args, result)
 
