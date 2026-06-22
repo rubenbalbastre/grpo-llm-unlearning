@@ -28,7 +28,6 @@ from src.reward.refusal_patterns import REFUSAL_PATTERNS  # noqa: E402
 TEXT_COLUMNS = ("completion", "prediction", "response", "output", "text")
 WANDB_COMPLETION_FILE_RE = re.compile(r"(^|/)media/table/completions_.*\.table\.json$")
 SOURCE_KIND = "wandb_completion"
-TRAINING_JOB_TYPE = "training"
 MATCHES_FIELDNAMES = [
     "source",
     "source_kind",
@@ -56,6 +55,9 @@ class CompletionRow:
     source: Path
     row_index: int
     text: str
+    forgetting_fuzzy_reward: float | None = None
+    language_reward: float | None = None
+    forgetting_reward: float | None = None
 
 
 @dataclass
@@ -120,22 +122,17 @@ def iter_wandb_table_rows(path: Path) -> Iterable[CompletionRow]:
     raw = json.loads(path.read_text(encoding="utf-8"))
     columns = raw.get("columns") or []
     data = raw.get("data") or []
-    if not isinstance(columns, list) or not isinstance(data, list):
-        return
-
     text_column = next((name for name in TEXT_COLUMNS if name in columns), None)
-    if text_column is None:
-        return
-
     text_index = columns.index(text_column)
 
     for row_index, values in enumerate(data, start=1):
-        if not isinstance(values, list) or text_index >= len(values):
-            continue
         yield CompletionRow(
             source=path,
             row_index=row_index,
             text=stringify(values[text_index]),
+            forgetting_fuzzy_reward=None,
+            language_reward=None,
+            forgetting_reward=None
         )
 
 
@@ -247,6 +244,7 @@ def scan_completion_files(
     *,
     concept: str,
 ) -> AnalysisResult:
+
     target_matchers = build_target_matchers(concept)
     fuzzy_entities = build_fuzzy_entities_for_concept(concept)
     summaries = make_summary_tables()
@@ -268,7 +266,11 @@ def scan_completion_files(
                 stats.total_rows += 1
 
             rows_scanned += 1
-            fuzzy_reward = compute_fuzzy_reward_per_completion(row.text, fuzzy_entities)
+            if "train/rewards/forgetting_fuzzy_reward/mean" not in row:
+                fuzzy_reward = compute_fuzzy_reward_per_completion(row.text, fuzzy_entities)
+            else:
+                fuzzy_reward = float(row["train/rewards/forgetting_fuzzy_reward/mean"])
+
             finding = analyze_row(
                 row=row,
                 target_matchers=target_matchers,
@@ -343,12 +345,6 @@ def write_summary_csv(path: Path, rows: list[SummaryRow]) -> None:
             )
 
 
-def default_summary_path(matches_path: Path | None) -> Path | None:
-    if matches_path is None:
-        return None
-    return matches_path.with_name(f"{matches_path.stem}.summary.csv")
-
-
 def config_get(config: dict[str, Any], keys: Iterable[str]) -> Any:
     value: Any = config
     for key in keys:
@@ -361,45 +357,40 @@ def config_get(config: dict[str, Any], keys: Iterable[str]) -> Any:
 
 
 def download_wandb_completion_files(
-    *,
-    entity: str | None,
-    project: str,
-    forget_concept: str,
-    model_name: str | None,
-    download_dir: Path,
-) -> list[DownloadedCompletion]:
+        *,
+        project: str,
+        forget_concept: str,
+        reward_type: str,
+        model_name: str | None,
+        download_dir: Path,
+    ) -> list[DownloadedCompletion]:
     import wandb
 
     api = wandb.Api()
-    wandb_path = f"{entity}/{project}" if entity else project
     downloaded: list[DownloadedCompletion] = []
     matched_runs = 0
 
-    for run in api.runs(wandb_path):
-        config = dict(run.config or {})
-        concept = config_get(config, ("hydra", "experiment", "forget_concept"))
-        if concept != forget_concept:
-            continue
-        run_model_name = config_get(config, ("hydra", "model", "name"))
-        if model_name and run_model_name != model_name:
-            continue
-        training_mode = config_get(config, ("hydra", "training", "mode"))
-        if training_mode is None:
-            training_mode = "unknown"
-        job_type = (
-            getattr(run, "job_type", None)
-            or getattr(run, "jobType", None)
-            or getattr(run, "_attrs", {}).get("jobType")
-        )
-        if job_type and str(job_type) != TRAINING_JOB_TYPE:
+    for run in api.runs(project):
+
+        # training job?
+        if getattr(run, "job_type") != "training":
             continue
 
+        # inspect run config
+        config = dict(run.config)
+        run_concept = config_get(config, ("hydra", "experiment", "forget_concept"))
+        run_model_name = config_get(config, ("hydra", "model", "name"))
+        run_reward_type = config_get(config, ("hydra", "training", "reward_type"))
+        training_mode = config_get(config, ("hydra", "training", "mode"))
+
+        if (run_concept != forget_concept) | (run_reward_type != reward_type) | (run_model_name != model_name):
+            continue
+
+        # download info
         run_dir = download_dir / f"{run.name or run.id}-{run.id}"
         matched_runs += 1
         run_file_count = 0
         for wandb_file in run.files():
-            if not WANDB_COMPLETION_FILE_RE.search(wandb_file.name):
-                continue
             local_path = run_dir / wandb_file.name
             if not local_path.exists():
                 local_path = Path(wandb_file.download(root=str(run_dir), replace=True).name)
@@ -410,70 +401,8 @@ def download_wandb_completion_files(
             flush=True,
         )
 
-    model_filter = f", hydra.model.name={model_name!r}" if model_name else ""
-    print(
-        f"matched {matched_runs} W&B training run(s) with "
-        f"hydra.experiment.forget_concept={forget_concept!r}{model_filter}",
-        flush=True,
-    )
+    print(f"matched {matched_runs} W&B training run(s)")
     return sorted(downloaded, key=lambda item: str(item.path))
-
-
-def sum_source_rows(summaries: SummaryTables, field_name: str) -> int:
-    return sum(getattr(stats, field_name) for stats in summaries.source.values())
-
-
-def print_report(args: argparse.Namespace, files: list[DownloadedCompletion], result: AnalysisResult) -> None:
-    target_entities = REFUSAL_PATTERNS[args.concept]
-    near_target_rows = sum_source_rows(result.summaries, "near_target_rows")
-    near_without_exact_rows = sum_source_rows(result.summaries, "near_without_exact_rows")
-    exact_entity_rows = sum_source_rows(result.summaries, "exact_entity_rows")
-
-    print(f"concept: {args.concept}")
-    if args.model_name:
-        print(f"model_name filter: {args.model_name}")
-    print(f"target_entities: {len(target_entities)} refusal pattern(s)")
-    print(f"files scanned: {len(files)}")
-    print(f"rows scanned: {result.rows_scanned}")
-    print(f"rows with fuzzy reward match: {near_target_rows}")
-    print(f"rows with fuzzy reward match but no exact target-entity match: {near_without_exact_rows}")
-    print(f"rows with exact reward-list entity match: {exact_entity_rows}")
-
-    print("\nby source kind:")
-    for source_kind, stats in sorted(result.summaries.source.items()):
-        print_summary_line(f"  {source_kind}", stats)
-
-    print("\nby training mode:")
-    for (training_mode, source_kind), stats in sorted(result.summaries.mode.items()):
-        print_summary_line(f"  {training_mode}/{source_kind}", stats)
-
-    if result.entity_counts:
-        print("\ntop exact reward-list entities:")
-        for entity, count in result.entity_counts.most_common(20):
-            print(f"  {entity}: {count}")
-
-    print_examples(result.findings, max_examples=args.max_examples)
-
-
-def print_summary_line(label: str, stats: SummaryRow) -> None:
-    print(
-        f"{label}: rows={stats.matching_filter_rows} "
-        f"near_target={stats.near_target_rows} "
-        f"near_without_exact={stats.near_without_exact_rows} "
-        f"exact_entity={stats.exact_entity_rows}"
-    )
-
-
-def print_examples(findings: list[Finding], max_examples: int) -> None:
-    print("\nexamples:")
-    for finding in findings[:max_examples]:
-        snippet = " ".join(finding.row.text.split())[:300]
-        print(
-            f"- {SOURCE_KIND} {finding.row.source}:{finding.row.row_index} "
-            f"fuzzy_reward={finding.fuzzy_reward:.3f} "
-            f"exact_target={finding.exact_target} "
-            f"exact_entities={finding.exact_entities}\n  {snippet}"
-        )
 
 
 def sorted_summary_rows(summaries: SummaryTables) -> list[SummaryRow]:
@@ -490,10 +419,7 @@ def write_outputs(args: argparse.Namespace, result: AnalysisResult) -> None:
         write_csv(args.output_csv, result.findings)
         print(f"\nwrote matches CSV: {args.output_csv}")
 
-    summary_csv = args.summary_csv or default_summary_path(args.output_csv)
-    if not summary_csv:
-        return
-
+    summary_csv = args.output_csv.with_name(f"{args.output_csv.stem}.summary.csv")
     set_rate_stds(
         source_rows=result.summaries.source.values(),
         mode_rows=result.summaries.mode.values(),
@@ -518,6 +444,12 @@ def parse_args() -> argparse.Namespace:
     parser.add_argument("--max-examples", type=int, default=20)
     parser.add_argument("--model-name", default=None, help="Filter W&B runs by hydra.model.name.")
     parser.add_argument(
+        "--reward-type",
+        default="r1",
+        choices=["r0", "r1", "r2"],
+        help="Which reward to use for fuzzy matching; determines which fuzzy entity list is used.",
+    )
+    parser.add_argument(
         "--wandb-download-dir",
         type=Path,
         default=Path("outputs/completion_analysis/wandb-downloads"),
@@ -527,25 +459,23 @@ def parse_args() -> argparse.Namespace:
 
 
 def main() -> None:
+
     load_dotenv(dotenv_path=REPO_ROOT / ".env", override=False)
     args = parse_args()
     project = os.environ.get("WANDB_PROJECT")
-    if not project:
-        raise SystemExit("WANDB_PROJECT is required in the repository .env file or environment.")
+
     files = download_wandb_completion_files(
-        entity=os.environ.get("WANDB_ENTITY"),
         project=project,
         forget_concept=args.concept,
+        reward_type=args.reward_type,
         model_name=args.model_name,
         download_dir=args.wandb_download_dir,
     )
-    if not files:
-        raise SystemExit(f"No W&B completion tables found for concept {args.concept!r}.")
     result = scan_completion_files(
         files,
         concept=args.concept,
+        reward_type=args.reward_type,
     )
-    print_report(args, files, result)
     write_outputs(args, result)
 
 
