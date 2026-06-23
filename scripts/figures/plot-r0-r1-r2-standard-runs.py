@@ -4,7 +4,8 @@ from __future__ import annotations
 import argparse
 import math
 from pathlib import Path
-
+import wandb
+import pandas as pd
 from dotenv import dotenv_values
 
 
@@ -35,14 +36,9 @@ def parse_args() -> argparse.Namespace:
             "grouped by Hydra reward type and checkpoint token milestone."
         )
     )
-    parser.add_argument("--project", default=None, help="W&B project. Defaults to WANDB_PROJECT from .env.")
     parser.add_argument("--output-dir", default="outputs/wandb-rwku-plots", help="Directory for PNG/CSV outputs.")
     parser.add_argument("--forget-concept", default="Rihanna", help="Filter hydra.experiment.forget_concept.")
-    parser.add_argument(
-        "--model-name",
-        default="Qwen/Qwen2.5-1.5B-Instruct",
-        help="Filter hydra.model.name. Use '' to disable.",
-    )
+    parser.add_argument("--model-name", default="Qwen/Qwen2.5-1.5B-Instruct",)
     parser.add_argument("--metric-prefix", default="rwku/", help="Metric prefix to plot.")
     parser.add_argument("--ncols", type=int, default=3, help="Number of columns in the output plot matrix.")
     return parser.parse_args()
@@ -54,7 +50,6 @@ def is_number(value: object) -> bool:
 
 def collect_eval_rows(
     *,
-    entity: str | None,
     project: str,
     metric_prefix: str,
     forget_concept: str,
@@ -63,7 +58,7 @@ def collect_eval_rows(
     import wandb
 
     api = wandb.Api()
-    path = f"{entity}/{project}" if entity else project
+    path = project
     rows: list[dict[str, object]] = []
 
     for run in api.runs(path):
@@ -76,6 +71,7 @@ def collect_eval_rows(
                 run_model_name = run.config.get("hydra").get("model").get("name")
                 training_mode = run.config.get("hydra").get("training").get("mode")
                 milestone = run.config.get("checkpoint").get("milestone_num_tokens")
+                objective = run.config.get("hydra").get("data_generator").get("data_proposer").get("objective")
                 if milestone is None:
                     milestone = int(NULL_MILESTONE_NUM_TOKENS)
                 else:
@@ -84,13 +80,16 @@ def collect_eval_rows(
                 continue
 
             summary = dict(run.summary or {})
-            if (run_forget_concept == forget_concept) & (run_model_name == model_name):
+            if (run_forget_concept == forget_concept) & (run_model_name == model_name) & (training_mode == "standard"):
                 
+                if (float(run.config.get("hydra").get("training").get("learning_rate")) != 1.0e-4):
+                    continue
+
                 # generator_mode = None if training_mode == "standard" else run.config.get("hydra").get("data_generator").get("data_proposer").get("mode")
                 reward_type = run.config.get("hydra").get("reward").get("type")
 
                 for metric_name, metric_value in summary.items():
-                    if metric_name.startswith(metric_prefix) and is_number(metric_value):
+                    if metric_name.startswith(metric_prefix) and is_number(metric_value) and metric_name in METRIC_DIRECTION_SYMBOLS.keys():
                         rows.append(
                             {
                                 "run_id": run.id,
@@ -205,7 +204,7 @@ def plot_metric_matrix(grouped: object, output_dir: Path, ncols: int, model_name
     fig.suptitle(f"Model: {model_name}, Forget Concept: {forget_concept}, RWKU Evaluation Metrics", y=0.995)
     fig.tight_layout(rect=(0, 0, 1, 0.88))
 
-    output_path = output_dir / "rwku_metrics_matrix.png"
+    output_path = output_dir / f"{model_name.replace("/", "-")}-{forget_concept}-standard.png"
     fig.savefig(output_path, dpi=160)
     plt.close(fig)
     return output_path
@@ -213,12 +212,9 @@ def plot_metric_matrix(grouped: object, output_dir: Path, ncols: int, model_name
 
 def main() -> None:
 
-    import wandb
-
     args = parse_args()
     env = dotenv_values(ENV_FILE)
-    project = args.project or env.get("WANDB_PROJECT")
-    entity = env.get("WANDB_ENTITY")
+    project = env.get("WANDB_PROJECT")
     api_key = env.get("WANDB_API_KEY")
     wandb.login(key=api_key, relogin=True)
 
@@ -226,14 +222,11 @@ def main() -> None:
     output_dir.mkdir(parents=True, exist_ok=True)
 
     rows = collect_eval_rows(
-        entity=entity,
-        project=str(project),
+        project=project,
         metric_prefix=args.metric_prefix,
         forget_concept=args.forget_concept,
         model_name=args.model_name,
     )
-
-    import pandas as pd
 
     all_rows = pd.DataFrame(rows)
     all_rows.to_csv(output_dir / "rwku_eval_points.csv", index=False)
@@ -242,9 +235,6 @@ def main() -> None:
     plot_path = plot_metric_matrix(grouped, output_dir, args.ncols, args.model_name, args.forget_concept)
 
     print(f"Wrote metric matrix plot to {plot_path}")
-    print(f"Wrote raw point table to {output_dir / 'rwku_eval_points.csv'}")
-    print(f"Wrote summary table to {output_dir / 'rwku_eval_metric_summary.csv'}")
-
 
 if __name__ == "__main__":
     main()
