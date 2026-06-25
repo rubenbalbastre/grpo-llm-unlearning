@@ -92,16 +92,18 @@ training:
   steps_per_generation: 16
   num_iterations: 2
   beta: 0.04
-  learning_rate: 1.0e-4 #1.0e-5, 1.0e-4 for 3B model
   max_completion_length: 256
   ddp_find_unused_parameters: false
   remove_unused_columns: false
   log_completions: true
   logging_steps: 5
   save_final_model: false # Set false to keep only checkpoint-* snapshots.
-  max_steps: 300 # too large since token budget callback will stop training when the token budget is reached. Set to -1 to disable.
+  max_steps: 160 # too large since token budget callback will stop training when the token budget is reached. Set to -1 to disable.
   num_epochs: 40 # Applied only when mode is standard and max_steps is -1.
-  lr_scheduler_type: "constant"
+  learning_rate: 5.0e-5 #1.0e-5, 1.0e-4 for 3B model
+  lr_scheduler_type: "cosine_with_min_lr" #"constant"
+  warmup_ratio: 0.05
+
   callback:
     checkpoint_token_milestones: [1_500_000, 3_000_000, 4_500_000, 6_000_000] # Save checkpoints at token counts.
     token_budget: 6_000_000 #3_000_000 # null if not using StopOnTokenBudgetCallback
