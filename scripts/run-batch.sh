@@ -8,13 +8,30 @@ authors=(
   "Justin Timberlake"
 )
 
+rewards=(
+  "r0"
+  "r1"
+  "r2"
+)
+
+# for author in "${authors[@]}"; do
+#   for reward in "${rewards[@]}"; do
+#     sbatch scripts/slurm-run-unlearning.sh "experiment.forget_concept=${author}" "experiment.seed=12" "reward=${reward}"
+#   done
+# done
+sbatch scripts/slurm-run-unlearning.sh "experiment.forget_concept=Confucius" "experiment.seed=12" "reward=r2"
+sbatch scripts/slurm-run-unlearning.sh "experiment.forget_concept=Rihanna" "experiment.seed=12" "reward=r2"
+sbatch scripts/slurm-run-unlearning.sh "experiment.forget_concept=Confucius" "experiment.seed=12" "reward=r1"
+sbatch scripts/slurm-run-unlearning.sh "experiment.forget_concept=Confucius" "experiment.seed=12" "reward=r0"
+sbatch scripts/slurm-run-unlearning.sh "experiment.forget_concept='Karl Marx'" "experiment.seed=1234" "reward=r0"
+sbatch scripts/slurm-run-unlearning.sh "experiment.forget_concept='Nicolas Cage'" "experiment.seed=12" "reward=r0"
 # --------------------------------------------
 # 1st R0 runs:
 # --------------------------------------------
 
-for author in "${authors[@]}"; do
-  sbatch scripts/slurm-run-unlearning.sh "experiment.forget_concept=${author}" "experiment.seed=12"
-done
+# for author in "${authors[@]}"; do
+#   sbatch scripts/slurm-run-unlearning.sh "experiment.forget_concept=${author}" "experiment.seed=12"
+# done
 
 
 # for author in "${authors[@]}"; do
@@ -30,11 +47,11 @@ done
 # 2nd R1 runs:
 # --------------------------------------------
 
-for author in "${authors[@]}"; do
-  sbatch scripts/slurm-run-unlearning.sh "experiment.forget_concept=${author}" \
-    "reward=r1" \
-    "experiment.seed=12"
-done
+# for author in "${authors[@]}"; do
+#   sbatch scripts/slurm-run-unlearning.sh "experiment.forget_concept=${author}" \
+#     "reward=r1" \
+#     "experiment.seed=12"
+# done
 
 # for author in "${authors[@]}"; do
 #   sbatch scripts/slurm-run-unlearning.sh \
@@ -50,11 +67,11 @@ done
 # 3rd R2 runs:
 # --------------------------------------------
 
-for author in "${authors[@]}"; do
-  sbatch scripts/slurm-run-unlearning.sh "experiment.forget_concept=${author}" \
-    "reward=r2"  \
-    "experiment.seed=12"
-done
+# for author in "${authors[@]}"; do
+#   sbatch scripts/slurm-run-unlearning.sh "experiment.forget_concept=${author}" \
+#     "reward=r2"  \
+#     "experiment.seed=12"
+# done
 
 # for author in "${authors[@]}"; do
 #   sbatch scripts/slurm-run-unlearning.sh \
