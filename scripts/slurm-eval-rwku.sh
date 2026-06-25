@@ -70,6 +70,15 @@ checkpoint_milestone_value() {
   python -c 'import sys; from omegaconf import OmegaConf; cfg = OmegaConf.load(sys.argv[1]); index = int(sys.argv[2]); milestones = cfg.training.callback.get("checkpoint_token_milestones"); print("null" if not milestones or index >= len(milestones) else int(milestones[index]))' "${config_path}" "${checkpoint_index}"
 }
 
+training_forget_concept_value() {
+  local config_path="$1"
+  if [[ ! -f "${config_path}" ]]; then
+    echo "null"
+    return
+  fi
+  python -c 'import sys; from omegaconf import OmegaConf; cfg = OmegaConf.load(sys.argv[1]); value = OmegaConf.select(cfg, "experiment.forget_concept"); print("null" if value is None else str(value))' "${config_path}"
+}
+
 if [[ -n "${CHECKPOINT_ROOT:-}" ]]; then
   CHECKPOINT_ROOT="${CHECKPOINT_ROOT%/}"
   if [[ ! -d "${CHECKPOINT_ROOT}" ]]; then
@@ -92,7 +101,13 @@ if [[ -n "${CHECKPOINT_ROOT:-}" ]]; then
 
   RUN_LABEL="$(basename "${CHECKPOINT_ROOT}")"
   TRAINING_CONFIG_PATH="${CHECKPOINT_ROOT}/hydra_config.yaml"
+  EVALUATION_SUBJECTS="$(training_forget_concept_value "${TRAINING_CONFIG_PATH}")"
+  if [[ "${EVALUATION_SUBJECTS}" == "null" ]]; then
+    echo "Could not read experiment.forget_concept from ${TRAINING_CONFIG_PATH}" >&2
+    exit 1
+  fi
   echo "Evaluating ${#CHECKPOINT_DIRS[@]} checkpoint(s) under ${CHECKPOINT_ROOT}"
+  echo "RWKU evaluation subjects from training config: ${EVALUATION_SUBJECTS}"
   CHECKPOINT_INDEX=0
   for MODEL_DIR in "${CHECKPOINT_DIRS[@]}"; do
     CHECKPOINT_LABEL="$(basename "${MODEL_DIR}")"
@@ -112,6 +127,7 @@ if [[ -n "${CHECKPOINT_ROOT:-}" ]]; then
       "${CLI_OVERRIDES[@]}" \
       "evaluation.model_name_or_path=${MODEL_DIR}" \
       "evaluation.output_dir=${EVAL_OUTPUT_DIR}" \
+      "evaluation.subjects=${EVALUATION_SUBJECTS}" \
       "evaluation.model.label=${CHECKPOINT_LABEL}" \
       "evaluation.training_config_path=${TRAINING_CONFIG_PATH}" \
       "evaluation.checkpoint.path=${MODEL_DIR}" \
