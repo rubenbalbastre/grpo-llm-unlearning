@@ -52,7 +52,7 @@ def main(cfg: DictConfig) -> None:
         log_completions=cfg.training.log_completions,
         logging_steps=cfg.training.logging_steps,
         lr_scheduler_type=cfg.training.lr_scheduler_type,
-        lr_scheduler_kwargs={"min_lr_rate": 0.1},
+        lr_scheduler_kwargs={"min_lr_rate": 0.1} if cfg.training.lr_scheduler_type == "cosine_with_min_lr" else None,
         warmup_ratio=cfg.training.warmup_ratio,
         reward_weights=reward_weights,
         ddp_find_unused_parameters=cfg.training.ddp_find_unused_parameters,
