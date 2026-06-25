@@ -42,7 +42,7 @@ standard_data:
   split: train
   subject_column: subject
   prompt_column: instruction
-  dataset_size: 300 # Samples retained after filtering by forget_concept, e.g. 100.
+  dataset_size: 50 # Samples retained after filtering by forget_concept, e.g. 100.
 
 offline_data:
   path: outputs/offline-synthetic/prompts_stephen_king.jsonl
