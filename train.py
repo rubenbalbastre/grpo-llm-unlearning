@@ -46,6 +46,8 @@ def main(cfg: DictConfig) -> None:
         gradient_checkpointing=cfg.training.gradient_checkpointing,
         max_steps=cfg.training.max_steps,
         learning_rate=cfg.training.learning_rate,
+        temperature=cfg.training.temperature,
+        top_p=cfg.training.top_p,
         max_completion_length=cfg.training.max_completion_length,
         remove_unused_columns=cfg.training.remove_unused_columns,
         report_to=["wandb"] if wandb_enabled else [],
