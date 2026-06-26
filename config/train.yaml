@@ -92,6 +92,8 @@ training:
   steps_per_generation: 16
   num_iterations: 2
   beta: 0.04
+  temperature: 1.0
+  top_p: 1.0
   max_completion_length: 256
   ddp_find_unused_parameters: false
   remove_unused_columns: false
