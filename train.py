@@ -50,6 +50,7 @@ def main(cfg: DictConfig) -> None:
         remove_unused_columns=cfg.training.remove_unused_columns,
         report_to=["wandb"] if wandb_enabled else [],
         log_completions=cfg.training.log_completions,
+        num_completions_to_print=0,
         logging_steps=cfg.training.logging_steps,
         # learning rate, scheduler
         learning_rate=cfg.training.learning_rate,

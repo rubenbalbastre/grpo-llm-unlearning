@@ -1,15 +1,17 @@
 from typing import List, Optional
 
 from datasets import load_dataset
+import numpy as np
 
 
 def load_rwku_split(config_name: str):
     loaded = load_dataset("jinzhuoran/RWKU", config_name)
-    if "test" in loaded:
-        return loaded["test"]
-    if "train" in loaded:
-        return loaded["train"]
-    return loaded[next(iter(loaded.keys()))]
+    split = loaded["test"]
+    # remove duplicates
+    if "query" in split.column_names:
+        _, unique_indices = np.unique(split["query"], return_index=True)
+        split = split.select(sorted(unique_indices))
+    return split
 
 
 def filter_subjects(dataset, subjects: Optional[List[str]]):
