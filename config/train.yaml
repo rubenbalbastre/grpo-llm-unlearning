@@ -113,7 +113,7 @@ training:
   ddp_find_unused_parameters: false
   # eval
   eval_strategy: "steps"
-  eval_steps: 5
+  eval_steps: 10
   per_device_eval_batch_size: 8
   eval_accumulation_steps: 16
   num_generations_eval: 8
