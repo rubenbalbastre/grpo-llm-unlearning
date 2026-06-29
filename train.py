@@ -12,8 +12,7 @@ from src.train_setup import (
     finish_training,
     load_model_and_tokenizer,
     setup_run,
-    setup_training_data,
-    standard_training_args,
+    setup_training_data
 )
 from src.trainer_callback import get_training_callbacks
 
@@ -35,36 +34,52 @@ def main(cfg: DictConfig) -> None:
     args = GRPOConfig(
         output_dir=str(paths.output_dir),
         run_name=run_name,
+        # seeds
         seed=cfg.experiment.seed,
         data_seed=cfg.experiment.seed,
+        # batch size
         per_device_train_batch_size=cfg.training.per_device_train_batch_size,
         gradient_accumulation_steps=cfg.training.gradient_accumulation_steps,
         num_generations=cfg.training.num_generations,
         steps_per_generation=cfg.training.steps_per_generation,
-        num_iterations=cfg.training.num_iterations,
-        beta=cfg.training.beta,
-        gradient_checkpointing=cfg.training.gradient_checkpointing,
-        max_steps=cfg.training.max_steps,
-        learning_rate=cfg.training.learning_rate,
+        # sampling
         temperature=cfg.training.temperature,
         top_p=cfg.training.top_p,
         max_completion_length=cfg.training.max_completion_length,
+        # logging
         remove_unused_columns=cfg.training.remove_unused_columns,
         report_to=["wandb"] if wandb_enabled else [],
         log_completions=cfg.training.log_completions,
         logging_steps=cfg.training.logging_steps,
+        # learning rate, scheduler
+        learning_rate=cfg.training.learning_rate,
         lr_scheduler_type=cfg.training.lr_scheduler_type,
         lr_scheduler_kwargs={"min_lr_rate": 0.1} if cfg.training.lr_scheduler_type == "cosine_with_min_lr" else None,
         warmup_ratio=cfg.training.warmup_ratio,
+        # rewards
         reward_weights=reward_weights,
-        ddp_find_unused_parameters=cfg.training.ddp_find_unused_parameters,
-        **standard_training_args(cfg),
+        # eval
+        eval_strategy=cfg.training.eval_strategy,
+        eval_steps=cfg.training.eval_steps,
+        per_device_eval_batch_size=cfg.training.per_device_eval_batch_size,
+        num_generations_eval=cfg.training.num_generations_eval,
+        # eval_on_start=True,
+        # eval_accumulation_steps=1,
+        # do_eval=True,
+        # others
+        num_iterations=cfg.training.num_iterations,
+        beta=cfg.training.beta,
+        gradient_checkpointing=cfg.training.gradient_checkpointing,
+        num_train_epochs=cfg.training.num_train_epochs,
+        max_steps=cfg.training.max_steps,
+        ddp_find_unused_parameters=cfg.training.ddp_find_unused_parameters
     )
 
     trainer = GRPOTrainer(
         model=model,
         args=args,
         train_dataset=data_setup.train_dataset,
+        eval_dataset=data_setup.eval_dataset,
         processing_class=tokenizer,
         reward_funcs=reward_funcs,
         rollout_func=data_setup.rollout_func,
