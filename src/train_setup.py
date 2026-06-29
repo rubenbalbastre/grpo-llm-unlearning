@@ -38,6 +38,7 @@ class RunPaths:
 @dataclass(frozen=True)
 class TrainingDataSetup:
     train_dataset: Dataset
+    eval_dataset: Dataset | None
     rollout_func: Callable | None
     prompt_buffer: PromptBuffer | None
     data_generator: DataGenerator | None
@@ -216,8 +217,15 @@ def setup_training_data(cfg: DictConfig, events_log_path: Path) -> TrainingDataS
             data_generator=build_data_generator(cfg, events_log_path),
         )
     if mode == "standard":
+        dataset = load_standard_dataset(cfg)
+        splits = dataset.train_test_split(
+            test_size=cfg.standard_data.test_size,
+            seed=cfg.standard_data.shuffle_seed,
+            shuffle=True,
+        )
         return TrainingDataSetup(
-            train_dataset=load_standard_dataset(cfg),
+            train_dataset=splits["train"],
+            eval_dataset=splits["test"],
             rollout_func=None,
             prompt_buffer=None,
             data_generator=None,
@@ -230,15 +238,6 @@ def setup_training_data(cfg: DictConfig, events_log_path: Path) -> TrainingDataS
             data_generator=None,
         )
     raise ValueError("training.mode must be one of: 'adaptive', 'standard', or 'offline'.")
-
-
-def standard_training_args(cfg: DictConfig) -> dict[str, Any]:
-    if cfg.training.mode not in {"standard", "offline"}:
-        return {}
-    num_epochs = float(cfg.training.num_epochs)
-    if num_epochs <= 0:
-        raise ValueError("training.num_epochs must be positive in standard/offline mode.")
-    return {"num_train_epochs": num_epochs}
 
 
 def attach_adaptive_state(trainer: GRPOTrainer, data_setup: TrainingDataSetup) -> None:
