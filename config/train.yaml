@@ -43,6 +43,7 @@ standard_data:
   subject_column: subject
   prompt_column: instruction
   dataset_size: 300 # Samples retained after filtering by forget_concept, e.g. 100.
+  shuffle_seed: 42
   test_size: 0.2
 
 offline_data:

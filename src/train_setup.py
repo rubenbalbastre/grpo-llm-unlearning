@@ -220,7 +220,7 @@ def setup_training_data(cfg: DictConfig, events_log_path: Path) -> TrainingDataS
         dataset = load_standard_dataset(cfg)
         splits = dataset.train_test_split(
             test_size=cfg.standard_data.test_size,
-            seed=42,
+            seed=cfg.standard_data.shuffle_seed,
             shuffle=True,
         )
         return TrainingDataSetup(
