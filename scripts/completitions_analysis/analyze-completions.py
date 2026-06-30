@@ -81,16 +81,20 @@ def scan_completion_files(
     agg = df.groupby('prompt', sort=False, as_index=False).agg({'completion': list, 'index': list}).to_dict(orient='records')
     llm_metrics = []
     for prompt_group in agg:
-        llm_metrics.append({
-            'metrics': asyncio.run(llm_completion_classification_tool.classify_batch_completitions(
-                prompt=prompt_group['prompt'],
-                completions=prompt_group['completion']
-            )),
-            'index': prompt_group['index']
-        })
-    llm_metrics_df = pd.DataFrame(llm_metrics).explode(['index', 'metrics'])
-    llm_metrics_df = pd.DataFrame(llm_metrics_df['metrics'].tolist(), index=llm_metrics_df.index)
-    llm_metrics_df['index'] = llm_metrics_df.index
+        group_metrics = asyncio.run(llm_completion_classification_tool.classify_batch_completitions(
+            prompt=prompt_group['prompt'],
+            completions=prompt_group['completion']
+        ))
+        group_metrics_dict = {'index': prompt_group['index'], 'metrics': group_metrics}
+        llm_metrics.append(group_metrics_dict)
+    
+    llm_metrics_expanded = []
+    for group in llm_metrics:
+        for id in range(len(group['index'])):
+            id_info = {'index': group['index'][id]} | group['metrics'][id]
+            llm_metrics_expanded.append(id_info)
+    llm_metrics_df = pd.DataFrame(llm_metrics_expanded)
+    del llm_metrics
     df = df.merge(
         llm_metrics_df,
         on='index',
@@ -187,6 +191,8 @@ def download_wandb_completion_files(
 
 def write_outputs(args: argparse.Namespace, df: pd.DataFrame, analysis: pd.DataFrame) -> None:
     print("Writing csv")
+    if not os.path.isdir(args.output_csv):
+        os.makedirs(args.output_csv)
     df.to_csv(f"{args.output_csv}/metrics.csv")
     analysis.to_csv(f"{args.output_csv}/summary.csv")
 
@@ -203,7 +209,7 @@ def parse_args() -> argparse.Namespace:
     args = parser.parse_args()
 
     if args.output_csv is None:
-        args.output_csv = f"outputs/completion_analysis/{args.model_name.replace("/", "-")}-{args.concept}-{args.reward_type}-wandb-completions.csv"
+        args.output_csv = f"outputs/completion_analysis/{args.model_name.replace("/", "-")}-{args.concept}-{args.reward_type}"
     return args
 
 
