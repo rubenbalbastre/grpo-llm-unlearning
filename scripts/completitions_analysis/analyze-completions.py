@@ -8,6 +8,7 @@ from pathlib import Path
 from dataclasses import dataclass
 import pandas as pd
 from dotenv import load_dotenv
+import asyncio
 
 
 REPO_ROOT = Path(__file__).resolve().parents[2]
@@ -18,6 +19,7 @@ from src.reward.fuzzy import (  # noqa: E402
     compute_fuzzy_reward_per_completion as compute_forgetting_fuzzy_reward_per_completion
 )
 from src.reward.forgetting import build_entity_matchers, binary_forgetting_reward as compute_forgetting_reward_per_completion
+from scripts.completitions_analysis.llm_completion_classification import AsyncCompletionClassificationTool
 
 
 @dataclass(frozen=True)
@@ -36,6 +38,10 @@ def scan_completion_files(
 
     target_matchers = build_entity_matchers(concept)
     fuzzy_entities = build_fuzzy_entities_for_concept(concept)
+    llm_completion_classification_tool = AsyncCompletionClassificationTool(
+        target_concept=concept
+    )
+    llm_judge_metrics = ['lexical_leakage', 'semantic_leakage', 'helpful_relevant_answer', 'refusal', 'unhelpful_or_degenerate', 'language_drift']
 
     dfs = []
 
@@ -47,18 +53,20 @@ def scan_completion_files(
         tmp_df = pd.concat(tmp_dfs)
 
         # filter reward = 1 completions
-        reward_column = "forgetting_reward" if run.reward_type in ["r0", "r1"] else "forgetting_fuzzy_reward"
-        tmp_df = tmp_df[tmp_df[reward_column] == 1.0]
+        # reward_column = "forgetting_reward" if run.reward_type in ["r0", "r1"] else "forgetting_fuzzy_reward"
+        # tmp_df = tmp_df[tmp_df[reward_column] == 1.0]
+        # filter last optimization step
+        tmp_df = tmp_df[tmp_df['step'] == 159]
         
         if "forgetting_reward" not in tmp_df.columns:
             tmp_df['forgetting_reward'] = tmp_df['completion'].apply(
                 lambda x: compute_forgetting_reward_per_completion(x, target_matchers)
             )
         if "forgetting_fuzzy_reward" not in tmp_df.columns:
-            tmp_df['forgetting_fuzzy_rewad'] = tmp_df['completion'].apply(
+            tmp_df['forgetting_fuzzy_reward'] = tmp_df['completion'].apply(
                 lambda x: compute_forgetting_fuzzy_reward_per_completion(x, fuzzy_entities)
             )
-        
+                
         tmp_df['forget_concept'] = concept
         tmp_df['training_mode'] = run.training_mode
         tmp_df['run_name'] = run.run_name
@@ -68,14 +76,42 @@ def scan_completion_files(
 
     # analysis
     df = pd.concat(dfs)
+
+    # compute llm-completions metrics
+    df['index'] = df.index
+    agg = df.groupby('prompt', sort=False, as_index=False).agg({'completion': list, 'index': list}).to_dict(orient='records')
+    llm_metrics = []
+    for prompt_group in agg:
+        llm_metrics.append({
+            'metrics': asyncio.run(llm_completion_classification_tool.classify_batch_completitions(
+                prompt=prompt_group['prompt'],
+                completions=prompt_group['completion']
+            )),
+            'index': prompt_group['index']
+        })
+    llm_metrics_df = pd.DataFrame(llm_metrics).explode(['index', 'metrics'])
+    llm_metrics_df = pd.DataFrame(llm_metrics_df['metrics'].tolist(), index=llm_metrics_df.index)
+    llm_metrics_df['index'] = llm_metrics_df.index
+    df = df.merge(
+        llm_metrics_df,
+        on='index',
+        how='left'
+    )
+
+    return df
+
+
+def aggregate_results(df):
+
+    metrics = ['forgetting_reward', 'forgetting_fuzzy_reward', 'language_reward'] + llm_judge_metrics
     by_run = (
         df.groupby(['forget_concept', 'training_mode', 'run_name', 'reward_type'], as_index=False)
-        [['forgetting_reward', 'forgetting_fuzzy_reward', 'language_reward']]
+        [metrics]
         .agg(['std', 'mean'])
     )
     by_training_mode = (
         df.groupby(['forget_concept', 'training_mode', 'reward_type'], as_index=False)
-        [['forgetting_reward', 'forgetting_fuzzy_reward', 'language_reward']]
+        [metrics]
         .agg(['std', 'mean'])
     )
     by_training_mode['run_name'] = 'all'
@@ -104,6 +140,9 @@ def download_wandb_completion_files(
         # training job?
         if getattr(run, "jobType") == "training":
 
+            if getattr(run, "name") != "unlearning-4551":
+                continue
+
             # inspect run config
             config = dict(run.config)
             try: 
@@ -115,7 +154,7 @@ def download_wandb_completion_files(
             except:
                 continue
 
-            if (run_learning_rate == 1e-4) & (run_concept == forget_concept) & (run_reward_type == reward_type) & (run_model_name == model_name):
+            if (run_learning_rate == 5e-5) & (run_concept == forget_concept) & (run_reward_type == reward_type) & (run_model_name == model_name):
 
                 # download info
                 run_dir = download_dir / f"{run.name or run.id}-{run.id}"
@@ -147,16 +186,17 @@ def download_wandb_completion_files(
     return downloaded_runs
 
 
-def write_outputs(args: argparse.Namespace, result: pd.DataFrame) -> None:
-    summary_csv = f"{args.output_csv}.csv"
-    result.to_csv(summary_csv)
+def write_outputs(args: argparse.Namespace, df: pd.DataFrame, analysis: pd.DataFrame) -> None:
+    print("Writing csv")
+    df.to_csv(f"{args.output_csv}/metrics.csv")
+    analysis.to_csv(f"{args.output_csv}/summary.csv")
 
 
 def parse_args() -> argparse.Namespace:
     parser = argparse.ArgumentParser(
         description="Download W&B training completions and scan them with exact and fuzzy reward matching."
     )
-    parser.add_argument("--concept", default="Confucius")
+    parser.add_argument("--concept", default="Karl Marx")
     parser.add_argument("--output-csv", type=Path, default=None)
     parser.add_argument("--model-name", default="Qwen/Qwen2.5-1.5B-Instruct", help="Filter W&B runs by hydra.model.name.")
     parser.add_argument("--reward-type", default="r0", choices=["r0", "r1", "r2"])
@@ -181,11 +221,12 @@ def main() -> None:
         model_name=args.model_name,
         download_dir=args.wandb_download_dir,
     )
-    result = scan_completion_files(
+    df = scan_completion_files(
         files,
         concept=args.concept,
     )
-    write_outputs(args, result)
+    analysis = aggregate_results(df)
+    write_outputs(args, df, analysis)
 
 
 if __name__ == "__main__":
