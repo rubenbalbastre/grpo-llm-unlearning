@@ -7,6 +7,9 @@ import warnings
 import json
 
 
+llm_judge_metrics = ['lexical_leakage', 'semantic_leakage', 'helpful_relevant_answer', 'refusal', 'unhelpful_or_degenerate', 'language_drift']
+
+
 class CompletionClassification(BaseModel):
     lexical_leakage: bool
     semantic_leakage: bool
