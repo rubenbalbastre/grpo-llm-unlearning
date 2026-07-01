@@ -123,11 +123,11 @@ def parse_args() -> argparse.Namespace:
 
     parser.add_argument("--dataset-path", type=Path, default=Path("data/hold_out_rihanna"), help="Saved Hugging Face dataset path.")
     parser.add_argument("--prompt-column", default="prompt", help="Column containing prompts.")
-    parser.add_argument("--max-examples", type=int, default=20, help="Maximum number of prompts to process (default: all).")
+    parser.add_argument("--max-examples", type=int, default=None, help="Maximum number of prompts to process (default: all).")
     parser.add_argument("--shuffle", action="store_true")
     parser.add_argument("--seed", type=int, default=0)
 
-    parser.add_argument("--batch-size", type=int, default=8)
+    parser.add_argument("--batch-size", type=int, default=32)
     parser.add_argument("--max-new-tokens", type=int, default=128)
     parser.add_argument("--temperature", type=float, default=0.0)
 
