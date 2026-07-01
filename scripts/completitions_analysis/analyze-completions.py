@@ -124,6 +124,7 @@ def download_wandb_completion_files(
         forget_concept: str,
         reward_type: str,
         model_name: str | None,
+        run_name: str | None,
         download_dir: Path,
     ) -> list[DownloadedRun]:
     import wandb
@@ -132,52 +133,49 @@ def download_wandb_completion_files(
     downloaded_runs: list[DownloadedRun] = []
     matched_runs = 0
 
-    for run in api.runs(project):
+    filters = {
+        "jobType": "training",
+        "config.hydra.experiment.forget_concept": forget_concept,
+        "config.hydra.reward.type": reward_type,
+        "config.hydra.training.learning_rate": 5e-5,
+    }
+    if model_name is not None:
+        filters["config.hydra.model.name"] = model_name
+    if run_name is not None:
+        # W&B's public API exposes this value as run.name in Python, but the
+        # server-side filter field is displayName/display_name.
+        filters["displayName"] = run_name
 
-        # training job?
-        if getattr(run, "jobType") == "training":
+    for run in api.runs(project, filters=filters, per_page=100, lazy=True):
+        config = dict(run.config)
+        hydra_config = config.get("hydra", {})
+        training_mode = hydra_config.get("training", {}).get("mode")
 
-            if getattr(run, "name") != "unlearning-4551":
-                continue
+        run_dir = download_dir / f"{run.name or run.id}-{run.id}"
+        matched_runs += 1
+        downloaded_completions_tables = []
+        for wandb_file in run.files(pattern="%completions%.table.json", per_page=100):
+            local_path = Path(
+                wandb_file.download(
+                    root=str(run_dir),
+                    replace=False,
+                    exist_ok=True,
+                ).name
+            )
+            downloaded_completions_tables.append(local_path)
 
-            # inspect run config
-            config = dict(run.config)
-            try: 
-                run_concept = config.get("hydra").get("experiment").get("forget_concept")
-                run_model_name = config.get("hydra").get("model").get("name")
-                run_reward_type = config.get("hydra").get("reward").get("type")
-                training_mode = config.get("hydra").get("training").get("mode")
-                run_learning_rate = config.get("hydra").get("training").get("learning_rate")
-            except:
-                continue
-
-            if (run_learning_rate == 5e-5) & (run_concept == forget_concept) & (run_reward_type == reward_type) & (run_model_name == model_name):
-
-                # download info
-                run_dir = download_dir / f"{run.name or run.id}-{run.id}"
-                matched_runs += 1
-                run_file_count = 0
-                downloaded_completions_tables = []
-                for wandb_file in run.files():
-                    local_path = run_dir / wandb_file.name
-                    if "completions" in getattr(wandb_file, "name"):
-                        if not local_path.exists():
-                            local_path = Path(wandb_file.download(root=str(run_dir), replace=True).name)
-                        downloaded_completions_tables.append(local_path)
-                        run_file_count += 1
-
-                downloaded_runs.append(
-                    DownloadedRun(
-                        run_name=getattr(run, "name"),
-                        completions_tables=downloaded_completions_tables,
-                        training_mode=training_mode,
-                        reward_type=reward_type
-                    )
-                )
-                print(
-                    f"found {run_file_count} W&B completion table(s) for {run.name or run.id}",
-                    flush=True,
-                )
+        downloaded_runs.append(
+            DownloadedRun(
+                run_name=getattr(run, "name"),
+                completions_tables=downloaded_completions_tables,
+                training_mode=training_mode,
+                reward_type=reward_type
+            )
+        )
+        print(
+            f"found {len(downloaded_completions_tables)} W&B completion table(s) for {run.name or run.id}",
+            flush=True,
+        )
 
     print(f"matched {matched_runs} W&B training run(s)")
     return downloaded_runs
@@ -198,6 +196,7 @@ def parse_args() -> argparse.Namespace:
     parser.add_argument("--concept", default="Karl Marx")
     parser.add_argument("--output-csv", type=Path, default=None)
     parser.add_argument("--model-name", default="Qwen/Qwen2.5-1.5B-Instruct", help="Filter W&B runs by hydra.model.name.")
+    parser.add_argument("--run-name", default="unlearning-4551", help="Filter W&B runs by the run.name attribute.")
     parser.add_argument("--reward-type", default="r0", choices=["r0", "r1", "r2"])
     parser.add_argument("--wandb-download-dir", type=Path, default=Path("outputs/completion_analysis/wandb-downloads"))
     args = parser.parse_args()
@@ -218,6 +217,7 @@ def main() -> None:
         forget_concept=args.concept,
         reward_type=args.reward_type,
         model_name=args.model_name,
+        run_name=args.run_name,
         download_dir=args.wandb_download_dir,
     )
     df = scan_completion_files(
