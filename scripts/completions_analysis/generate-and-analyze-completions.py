@@ -116,12 +116,12 @@ def parse_args() -> argparse.Namespace:
             "then evaluate them with local leakage rewards and the async LLM judge."
         )
     )
-    parser.add_argument("--model-name-or-path", default=None, required=True, help="HF model id or local checkpoint path.")
-    parser.add_argument("--concept", required=True, help="Target forget concept used by the judge/rewards.")
+    parser.add_argument("--model-name-or-path", default="./outputs/unlearning-4550/checkpoint-159", help="HF model id or local checkpoint path.")
+    parser.add_argument("--concept", default="Rihanna", help="Target forget concept used by the judge/rewards.")
 
     parser.add_argument("--dataset-path", type=Path, default=Path("data/hold_out_rihanna"), help="Saved Hugging Face dataset path.")
     parser.add_argument("--prompt-column", default="prompt", help="Column containing prompts.")
-    parser.add_argument("--max-examples", type=int, default=1)
+    parser.add_argument("--max-examples", type=int, default=None, help="Maximum number of prompts to process (default: all).")
     parser.add_argument("--shuffle", action="store_true")
     parser.add_argument("--seed", type=int, default=0)
 
