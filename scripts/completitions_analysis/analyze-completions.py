@@ -74,19 +74,13 @@ def scan_completion_files(
         dfs.append(tmp_df)
 
     # analysis
-    df = pd.concat(dfs)
-
-    # compute llm-completions metrics
+    df = pd.concat(dfs, ignore_index=True)
     df['index'] = df.index
+    # compute llm-completions metrics
     agg = df.groupby('prompt', sort=False, as_index=False).agg({'completion': list, 'index': list}).to_dict(orient='records')
-    llm_metrics = []
-    for prompt_group in agg:
-        group_metrics = asyncio.run(llm_completion_classification_tool.classify_batch_completitions(
-            prompt=prompt_group['prompt'],
-            completions=prompt_group['completion']
-        ))
-        group_metrics_dict = {'index': prompt_group['index'], 'metrics': group_metrics}
-        llm_metrics.append(group_metrics_dict)
+    llm_metrics = asyncio.run(
+        llm_completion_classification_tool.classify_prompt_groups_completitions(agg)
+    )
     
     llm_metrics_expanded = []
     for group in llm_metrics:

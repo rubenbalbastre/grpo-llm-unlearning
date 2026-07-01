@@ -1,7 +1,7 @@
 from textwrap import dedent
 from pydantic import BaseModel
 from dotenv import load_dotenv
-from typing import List, Dict
+from typing import Any, List, Dict
 import asyncio
 import warnings
 import json
@@ -88,12 +88,38 @@ class AsyncCompletionClassificationTool:
         return json.dumps(payload, indent=2)
         
 
-    async def classify_batch_completitions(self, prompt: str, completions: List[str]) -> CompletionClassification:
-        
+    async def classify_batch_completitions(self, prompt: str, completions: List[str]) -> List[Dict[str, bool]]:
         request_specs = [self._build_request_spec(prompt, completion) for completion in completions]
         semaphore = asyncio.Semaphore(self._max_concurrent_request)
 
-        async def run_request(request_specs):
+        return await self._classify_request_specs(request_specs, semaphore)
+
+    async def classify_prompt_groups_completitions(
+        self,
+        prompt_groups: List[Dict[str, Any]],
+    ) -> List[Dict[str, Any]]:
+        semaphore = asyncio.Semaphore(self._max_concurrent_request)
+
+        async def classify_group(prompt_group: Dict[str, Any]) -> Dict[str, Any]:
+            request_specs = [
+                self._build_request_spec(prompt_group["prompt"], completion)
+                for completion in prompt_group["completion"]
+            ]
+            return {
+                "index": prompt_group["index"],
+                "metrics": await self._classify_request_specs(request_specs, semaphore),
+            }
+
+        return await asyncio.gather(
+            *[classify_group(prompt_group) for prompt_group in prompt_groups]
+        )
+
+    async def _classify_request_specs(
+        self,
+        request_specs: List[List[Dict[str, str]]],
+        semaphore: asyncio.Semaphore,
+    ) -> List[Dict[str, bool]]:
+        async def run_request(request_spec: List[Dict[str, str]]) -> Dict[str, bool]:
             async with semaphore:
                 with warnings.catch_warnings():
                     warnings.filterwarnings(
@@ -103,16 +129,15 @@ class AsyncCompletionClassificationTool:
                     )
                     response = await self._async_client.responses.parse(
                         model=self._model_name,
-                        input=request_specs,
+                        input=request_spec,
                         text_format=self.structured_response_format,
                         temperature=0
                     )
                     return response.output_parsed.model_dump()
 
-        results = await asyncio.gather(
+        return await asyncio.gather(
             *[run_request(request_spec) for request_spec in request_specs]
         )
-        return results
     
     def _build_request_spec(self, prompt: str, completion: str) -> List[Dict[str, str]]:
         return [
