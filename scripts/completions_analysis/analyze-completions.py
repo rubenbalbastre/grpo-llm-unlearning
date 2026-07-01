@@ -19,7 +19,7 @@ from src.reward.fuzzy import (  # noqa: E402
     compute_fuzzy_reward_per_completion as compute_forgetting_fuzzy_reward_per_completion
 )
 from src.reward.forgetting import build_entity_matchers, binary_forgetting_reward as compute_forgetting_reward_per_completion
-from scripts.completitions_analysis.llm_completion_classification import AsyncCompletionClassificationTool, llm_judge_metrics
+from scripts.completions_analysis.llm_completion_classification import AsyncCompletionClassificationTool, llm_judge_metrics
 
 
 @dataclass(frozen=True)
