@@ -7,7 +7,7 @@ from pathlib import Path
 
 import pandas as pd
 from dotenv import load_dotenv
-from datasets import load_dataset
+from datasets import load_from_disk
 from tqdm import tqdm
 from transformers import AutoModelForCausalLM, AutoTokenizer
 
@@ -24,21 +24,10 @@ from scripts.completions_analysis.analysis_utils import (  # noqa: E402
 
 
 def load_prompt_dataframe(args: argparse.Namespace) -> pd.DataFrame:
-    dataset_cache_dir = args.output_dir / "hf-datasets-cache"
-    dataset_cache_dir.mkdir(parents=True, exist_ok=True)
-
-    dataset_kwargs = {}
-    if args.data_files is not None:
-        dataset_kwargs["data_files"] = args.data_files
-    if args.dataset_config is not None:
-        dataset_kwargs["name"] = args.dataset_config
-
-    dataset = load_dataset(
-        args.dataset_name,
-        split=args.dataset_split,
-        cache_dir=str(dataset_cache_dir),
-        **dataset_kwargs,
-    )
+    dataset_path = Path(args.dataset_path)
+    if not dataset_path.exists():
+        raise FileNotFoundError(f"Saved Hugging Face dataset not found: {dataset_path}")
+    dataset = load_from_disk(str(dataset_path))
     df = dataset.to_pandas()
 
     if args.prompt_column not in df.columns:
@@ -127,15 +116,12 @@ def parse_args() -> argparse.Namespace:
             "then evaluate them with local leakage rewards and the async LLM judge."
         )
     )
-    parser.add_argument("--model-name-or-path", required=True, help="HF model id or local checkpoint path.")
+    parser.add_argument("--model-name-or-path", default=None, required=True, help="HF model id or local checkpoint path.")
     parser.add_argument("--concept", required=True, help="Target forget concept used by the judge/rewards.")
 
-    parser.add_argument("--dataset-name", required=True, help="Hugging Face dataset name or loader, e.g. json/csv/parquet.")
-    parser.add_argument("--dataset-config", default=None, help="Optional Hugging Face dataset config.")
-    parser.add_argument("--data-files", default=None, help="Optional local/remote data_files passed to load_dataset.")
-    parser.add_argument("--dataset-split", default="train", help="Dataset split for Hugging Face datasets.")
+    parser.add_argument("--dataset-path", type=Path, default=Path("data/hold_out_rihanna"), help="Saved Hugging Face dataset path.")
     parser.add_argument("--prompt-column", default="prompt", help="Column containing prompts.")
-    parser.add_argument("--max-examples", type=int, default=None)
+    parser.add_argument("--max-examples", type=int, default=1)
     parser.add_argument("--shuffle", action="store_true")
     parser.add_argument("--seed", type=int, default=0)
 
