@@ -26,6 +26,7 @@ from src.logging import (
     setup_huggingface_hub,
     setup_wandb,
 )
+from src.prompt_formatting import render_chat_prompt, render_dataset_prompts
 
 
 @dataclass(frozen=True)
@@ -75,7 +76,8 @@ def adaptive_rollout_func(prompts: list[str], trainer) -> dict[str, Any]:
     if len(final) != batch_size:
         raise RuntimeError(f"Adaptive rollout selected {len(final)} prompts, expected {batch_size}.")
 
-    prompt_ids, images, multimodal_fields = trainer._tokenize_prompts(final)
+    rendered = [render_chat_prompt(trainer.processing_class, prompt) for prompt in final]
+    prompt_ids, images, multimodal_fields = trainer._tokenize_prompts(rendered)
     completion_ids, logprobs = trainer._generate_single_turn(prompt_ids, images, multimodal_fields)
 
     if len(completion_ids) != len(prompt_ids):
@@ -205,7 +207,7 @@ def build_data_generator(cfg: DictConfig, events_log_path: Path) -> DataGenerato
     )
 
 
-def setup_training_data(cfg: DictConfig, events_log_path: Path) -> TrainingDataSetup:
+def setup_training_data(cfg: DictConfig, events_log_path: Path, tokenizer) -> TrainingDataSetup:
     mode = cfg.training.mode
     if mode == "adaptive":
         buffer = build_prompt_buffer(cfg)
@@ -217,7 +219,7 @@ def setup_training_data(cfg: DictConfig, events_log_path: Path) -> TrainingDataS
             data_generator=build_data_generator(cfg, events_log_path),
         )
     if mode == "standard":
-        dataset = load_standard_dataset(cfg)
+        dataset = render_dataset_prompts(load_standard_dataset(cfg), tokenizer)
         splits = dataset.train_test_split(
             test_size=cfg.standard_data.test_size,
             seed=cfg.standard_data.shuffle_seed,
@@ -232,7 +234,7 @@ def setup_training_data(cfg: DictConfig, events_log_path: Path) -> TrainingDataS
         )
     if mode == "offline":
         return TrainingDataSetup(
-            train_dataset=load_offline_dataset(cfg),
+            train_dataset=render_dataset_prompts(load_offline_dataset(cfg), tokenizer),
             rollout_func=None,
             prompt_buffer=None,
             data_generator=None,
