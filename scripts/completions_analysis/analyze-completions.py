@@ -8,18 +8,16 @@ from pathlib import Path
 from dataclasses import dataclass
 import pandas as pd
 from dotenv import load_dotenv
-import asyncio
 
 
 REPO_ROOT = Path(__file__).resolve().parents[2]
 sys.path.insert(0, str(REPO_ROOT))
 
-from src.reward.fuzzy import (  # noqa: E402
-    build_fuzzy_entities_for_concept,
-    compute_fuzzy_reward_per_completion as compute_forgetting_fuzzy_reward_per_completion
+from scripts.completions_analysis.analysis_utils import (  # noqa: E402
+    add_llm_judge_metrics,
+    add_local_reward_metrics,
+    llm_judge_metrics,
 )
-from src.reward.forgetting import build_entity_matchers, binary_forgetting_reward as compute_forgetting_reward_per_completion
-from scripts.completions_analysis.llm_completion_classification import AsyncCompletionClassificationTool, llm_judge_metrics
 
 
 @dataclass(frozen=True)
@@ -36,12 +34,6 @@ def scan_completion_files(
     concept: str,
 ) -> pd.DataFrame:
 
-    target_matchers = build_entity_matchers(concept)
-    fuzzy_entities = build_fuzzy_entities_for_concept(concept)
-    llm_completion_classification_tool = AsyncCompletionClassificationTool(
-        target_concept=concept
-    )
-
     dfs = []
 
     for run in files:
@@ -57,14 +49,7 @@ def scan_completion_files(
         # filter last optimization step
         tmp_df = tmp_df[tmp_df['step'] == 159]
         
-        if "forgetting_reward" not in tmp_df.columns:
-            tmp_df['forgetting_reward'] = tmp_df['completion'].apply(
-                lambda x: compute_forgetting_reward_per_completion(x, target_matchers)
-            )
-        if "forgetting_fuzzy_reward" not in tmp_df.columns:
-            tmp_df['forgetting_fuzzy_reward'] = tmp_df['completion'].apply(
-                lambda x: compute_forgetting_fuzzy_reward_per_completion(x, fuzzy_entities)
-            )
+        tmp_df = add_local_reward_metrics(tmp_df, concept)
                 
         tmp_df['forget_concept'] = concept
         tmp_df['training_mode'] = run.training_mode
@@ -75,25 +60,7 @@ def scan_completion_files(
 
     # analysis
     df = pd.concat(dfs, ignore_index=True)
-    df['index'] = df.index
-    # compute llm-completions metrics
-    agg = df.groupby('prompt', sort=False, as_index=False).agg({'completion': list, 'index': list}).to_dict(orient='records')
-    llm_metrics = asyncio.run(
-        llm_completion_classification_tool.classify_prompt_groups_completitions(agg)
-    )
-    
-    llm_metrics_expanded = []
-    for group in llm_metrics:
-        for id in range(len(group['index'])):
-            id_info = {'index': group['index'][id]} | group['metrics'][id]
-            llm_metrics_expanded.append(id_info)
-    llm_metrics_df = pd.DataFrame(llm_metrics_expanded)
-    del llm_metrics
-    df = df.merge(
-        llm_metrics_df,
-        on='index',
-        how='left'
-    )
+    df = add_llm_judge_metrics(df, concept=concept)
 
     return df
 
