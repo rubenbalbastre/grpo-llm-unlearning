@@ -10,6 +10,7 @@ from dotenv import load_dotenv
 from datasets import load_from_disk
 from tqdm import tqdm
 from transformers import AutoModelForCausalLM, AutoTokenizer
+import torch
 
 
 REPO_ROOT = Path(__file__).resolve().parents[2]
@@ -61,6 +62,7 @@ def load_model_and_tokenizer(args: argparse.Namespace):
 
     model = AutoModelForCausalLM.from_pretrained(args.model_name_or_path)
     model.eval()
+    model.to("cuda" if torch.cuda.is_available() else "cpu")
     return model, tokenizer
 
 
@@ -121,7 +123,7 @@ def parse_args() -> argparse.Namespace:
 
     parser.add_argument("--dataset-path", type=Path, default=Path("data/hold_out_rihanna"), help="Saved Hugging Face dataset path.")
     parser.add_argument("--prompt-column", default="prompt", help="Column containing prompts.")
-    parser.add_argument("--max-examples", type=int, default=None, help="Maximum number of prompts to process (default: all).")
+    parser.add_argument("--max-examples", type=int, default=20, help="Maximum number of prompts to process (default: all).")
     parser.add_argument("--shuffle", action="store_true")
     parser.add_argument("--seed", type=int, default=0)
 
