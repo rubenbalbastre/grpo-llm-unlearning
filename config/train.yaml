@@ -59,7 +59,6 @@ buffer:
   high_mean_reward_threshold: 0.3
 
 reward:
-  log_events: false # Set false to skip per-sample reward rows in events.jsonl.
   functions:
     simple_match:
       mode: binary
@@ -70,6 +69,10 @@ reward:
       uncertain_confidence_threshold: 0.6 # 0 when top prediction confidence is below this value; otherwise non-English is -1.
     fuzzy_match:
       mode: binary
+    llm-judge-soft-terms:
+      model_name: gpt-5.4-nano
+      temperature: 0.0
+      max_concurrent_requests: 4
 
 peft:
   lora:

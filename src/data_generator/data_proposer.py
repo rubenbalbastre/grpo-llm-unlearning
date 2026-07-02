@@ -1,12 +1,8 @@
 from __future__ import annotations
 
-import json
-from pathlib import Path
-from typing import Any, Literal
+from typing import Literal
 from pydantic import BaseModel
 from textwrap import dedent
-
-from src.logging import log_event
 
 
 GeneratorMode = Literal[

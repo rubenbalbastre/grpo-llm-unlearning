@@ -4,22 +4,21 @@ import re
 from pathlib import Path
 
 from src.data_generator.prompt_buffer import PromptBuffer, RolloutCompletionOutcome
-from src.logging import log_event
-from src.reward.refusal_patterns import REFUSAL_PATTERNS
+from src.reward.components.constants.target_patterns import TARGET_PATTERNS
 
 
 def build_entity_matchers(forget_concept: str) -> list[tuple[str, re.Pattern]]:
-    if forget_concept not in REFUSAL_PATTERNS:
+    if forget_concept not in TARGET_PATTERNS:
         raise ValueError(
-            "No refusal patterns configured for "
-            f"{forget_concept!r}. Available options: {list(REFUSAL_PATTERNS)}."
+            "No target patterns configured for "
+            f"{forget_concept!r}. Available options: {list(TARGET_PATTERNS)}."
         )
     return [
         (
             entity,
             re.compile(rf"(?<!\w){re.escape(entity)}(?!\w)", flags=re.IGNORECASE),
         )
-        for entity in REFUSAL_PATTERNS[forget_concept]
+        for entity in TARGET_PATTERNS[forget_concept]
     ]
 
 
@@ -48,7 +47,6 @@ def make_forgetting_reward_func(
     log_path: Path,
     forget_concept: str,
     reward_mode: str = "entity_count",
-    log_events: bool = True,
 ):
     reward_functions = {
         "binary": binary_forgetting_reward,
@@ -91,25 +89,21 @@ def make_forgetting_reward_func(
                     ),
                 )
             rewards.append(reward)
-            if log_events:
-                log_event(
-                    log_path,
-                    {
-                        "type": "reward",
-                        "reward_component": "forgetting",
-                        "prompt": str(prompt),
-                        "completion": str(completion),
-                        "reward": reward,
-                        "reward_mode": reward_mode,
-                        "forget_concept": forget_concept,
-                        "matched_entities": entities,
-                        "matched_entity_count": len(entities),
-                        "step": step,
-                    },
-                )
 
         return rewards
 
     return forgetting_reward
 
 
+def build_simple_match_reward(
+    config,
+    *,
+    forget_concept: str,
+    log_path: Path,
+):
+    return make_forgetting_reward_func(
+        buffer=None,
+        log_path=log_path,
+        forget_concept=forget_concept,
+        reward_mode=config.get("mode", "binary"),
+    )

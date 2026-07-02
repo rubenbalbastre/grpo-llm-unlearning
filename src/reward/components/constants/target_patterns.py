@@ -1,7 +1,7 @@
 from __future__ import annotations
 
 
-REFUSAL_PATTERNS = {
+TARGET_PATTERNS = {
     "Stephen King": [
         "Stephen King",
         "Carrie",

@@ -1,3 +1,2 @@
 # @package reward
 type: r1
-reward_weights: [0.0, 0.0, 0.0, 1.0] # simple_match, language, fuzzy_match, avoid_refusal

@@ -2,30 +2,41 @@
 
 authors=(
   "Rihanna"
-  "Karl Marx"
+  # "Karl Marx"
   # "Confucius"
-  "Nicolas Cage"
-  "Justin Timberlake"
+  # "Nicolas Cage"
+  # "Justin Timberlake"
 )
 
 rewards=(
-  "r0"
+  # "r0"
   "r1"
-  "r2"
+  # "r2"
 )
 
-# for author in "${authors[@]}"; do
-#   for reward in "${rewards[@]}"; do
-#     sbatch scripts/slurm-run-unlearning.sh "experiment.forget_concept=${author}" "experiment.seed=12" "reward=${reward}"
-#   done
-# done
-sbatch scripts/slurm-run-unlearning.sh "experiment.forget_concept=Confucius" "experiment.seed=12" "reward=r2"
-sbatch scripts/slurm-run-unlearning.sh "experiment.forget_concept=Rihanna" "experiment.seed=12" "reward=r2"
-sbatch scripts/slurm-run-unlearning.sh "experiment.forget_concept=Confucius" "experiment.seed=12" "reward=r1"
-sbatch scripts/slurm-run-unlearning.sh "experiment.forget_concept=Confucius" "experiment.seed=12" "reward=r0"
-sbatch scripts/slurm-run-unlearning.sh "experiment.forget_concept='Karl Marx'" "experiment.seed=1234" "reward=r0"
-sbatch scripts/slurm-run-unlearning.sh "experiment.forget_concept='Nicolas Cage'" "experiment.seed=12" "reward=r0"
-# --------------------------------------------
+seeds=(
+  12
+  # 1234
+  # 42
+)
+
+for author in "${authors[@]}"; do
+  for reward in "${rewards[@]}"; do
+    for seed in "${seeds[@]}"; do
+      sbatch scripts/slurm-run-unlearning.sh "experiment.forget_concept=${author}" "experiment.seed=${seed}" "reward=${reward}"
+    done
+  done
+done
+
+# sbatch scripts/slurm-run-unlearning.sh
+
+# sbatch scripts/slurm-run-unlearning.sh "experiment.forget_concept=Confucius" "experiment.seed=12" "reward=r2"
+# sbatch scripts/slurm-run-unlearning.sh "experiment.forget_concept=Rihanna" "experiment.seed=12" "reward=r2"
+# sbatch scripts/slurm-run-unlearning.sh "experiment.forget_concept=Confucius" "experiment.seed=12" "reward=r1"
+# sbatch scripts/slurm-run-unlearning.sh "experiment.forget_concept=Confucius" "experiment.seed=12" "reward=r0"
+# sbatch scripts/slurm-run-unlearning.sh "experiment.forget_concept='Karl Marx'" "experiment.seed=1234" "reward=r0"
+# sbatch scripts/slurm-run-unlearning.sh "experiment.forget_concept='Nicolas Cage'" "experiment.seed=12" "reward=r0"
+# # --------------------------------------------
 # 1st R0 runs:
 # --------------------------------------------
 

@@ -4,59 +4,10 @@ import re
 from pathlib import Path
 from typing import Any
 
-
-DEFAULT_REFUSAL_PATTERNS = [
-    "I can't",
-    "I cannot",
-    "I can’t",
-    "I'm sorry",
-    "I’m sorry",
-    "I regret",
-    "I am sorry",
-    "I apologize",
-    "as an AI",
-    "as a language model",
-    "I don't know",
-    "I don’t know",
-    "I do not know",
-    "I don't have",
-    "I don’t have",
-    "I do not have",
-    "I can't provide",
-    "I can’t provide",
-    "I cannot provide",
-    "I can't answer",
-    "I can’t answer",
-    "I cannot answer",
-    "I can't assist",
-    "I can’t assist",
-    "I cannot assist",
-    "I'm unable",
-    "I’m unable",
-    "I am unable",
-    "I won't",
-    "I won’t",
-    "I will not",
-    "I must refuse",
-    "I can't help",
-    "I can’t help",
-    "I cannot help",
-]
-
-
-REDIRECTION_MARKERS = [
-    "but i can",
-    "however, i can",
-    "i can discuss",
-    "i can provide general",
-    "more broadly",
-    "in general",
-    "broader context",
-    "historical context",
-    "related topic",
-    "without discussing",
-    "without providing target-specific",
-]
+from src.reward.components.constants.refusal_patterns import (
+    DEFAULT_REFUSAL_PATTERNS,
+    REDIRECTION_MARKERS,
+)
 
 
 def build_rediction_matchers(markers: list[str]) -> list[tuple[str, re.Pattern]]:
@@ -105,7 +56,6 @@ def avoid_refusal_reward(
 def make_avoid_refusal_reward_func(
     config: Any,
     log_path: Path,
-    log_events: bool = True,
 ):
     patterns = list(config.get("patterns", DEFAULT_REFUSAL_PATTERNS))
     if not patterns:
@@ -140,29 +90,21 @@ def make_avoid_refusal_reward_func(
             reward = reward * redirection_reward
             rewards.append(reward)
 
-        
-            if log_events:
-                from src.logging import log_event
-
-                log_event(
-                    log_path,
-                    {
-                        "type": "reward",
-                        "reward_component": "avoid_refusal",
-                        "prompt": str(prompt),
-                        "completion": str(completion),
-                        "reward": reward,
-                        "matched_refusal_patterns": matches,
-                        "matched_refusal_pattern_count": len(matches),
-                        "matched_redirection_markers": redirection_matches,
-                        "matched_redirection_marker_count": len(redirection_matches),
-                        "step": step,
-                    },
-                )
-
-        log_extra("refusal_reward", rewards)
+        if log_extra is not None:
+            log_extra("refusal_reward", rewards)
 
         return rewards
 
     avoid_refusal_reward_func.__name__ = "avoid_refusal_reward"
     return avoid_refusal_reward_func
+
+
+def build_avoid_refusal_reward(
+    config: Any,
+    *,
+    log_path: Path,
+):
+    return make_avoid_refusal_reward_func(
+        config,
+        log_path,
+    )
