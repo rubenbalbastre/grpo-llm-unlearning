@@ -4,14 +4,15 @@ defaults:
 
 experiment:
   seed: 42 # 1, 1234, 42
-  forget_concept: Rihanna # Rihanna #Confucius # Stephen King
+  forget_concept: Confucius # Rihanna #Confucius # Stephen King
   push_to_hub: false
+  notes: apply-chat-template
 
 paths:
   output_root: outputs
 
 model:
-  name: "Qwen/Qwen2.5-0.5B-Instruct" # "microsoft/Phi-3-mini-4k-instruct", Qwen/Qwen2.5-3B-Instruct, Qwen/Qwen2.5-1.5B-Instruct
+  name: "Qwen/Qwen2.5-1.5B-Instruct" # "microsoft/Phi-3-mini-4k-instruct", Qwen/Qwen2.5-3B-Instruct, Qwen/Qwen2.5-1.5B-Instruct
 
 wandb:
   # Used by direct `python train.py` runs. `scripts/slurm-run-unlearning.sh`
@@ -90,9 +91,9 @@ training:
   # batch size
   per_device_train_batch_size: 8
   num_generations: 8
-  gradient_accumulation_steps: 16
+  gradient_accumulation_steps: 8
   gradient_checkpointing: false
-  steps_per_generation: 16
+  steps_per_generation: 8
   # sampling
   temperature: 1.0
   top_p: 1.0
@@ -100,28 +101,28 @@ training:
   # logging
   remove_unused_columns: false
   log_completions: true
-  logging_steps: 5
+  logging_steps: 3
   save_final_model: false # Set false to keep only checkpoint-* snapshots.
   # learning rate, scheduler
   num_train_epochs: 40
-  max_steps: 160 # too large since token budget callback will stop training when the token budget is reached. Set to -1 to disable.
+  max_steps: 70 # too large since token budget callback will stop training when the token budget is reached. Set to -1 to disable.
   learning_rate: 5.0e-5 #1.0e-5, 1.0e-4 for 3B model
-  lr_scheduler_type: "cosine_with_min_lr" #"constant"
-  warmup_ratio: 0.05
+  lr_scheduler_type: "constant" #"constant"
+  warmup_ratio: 0 #0.05
   # others
   num_iterations: 2
   beta: 0.04
   ddp_find_unused_parameters: false
   # eval
   eval_strategy: "steps"
-  eval_steps: 10
+  eval_steps: 100
   per_device_eval_batch_size: 8
   eval_accumulation_steps: 16
   num_generations_eval: 8
   # callbacks
   callback:
-    checkpoint_token_milestones: [1_500_000, 3_000_000, 4_500_000, 6_000_000] # Save checkpoints at token counts.
-    token_budget: 6_000_000 #3_000_000 # null if not using StopOnTokenBudgetCallback
+    checkpoint_token_milestones: [100_000, 200_000, 300_000, 400_000] # Save checkpoints at token counts.
+    token_budget: 400_000 #3_000_000 # null if not using StopOnTokenBudgetCallback
 
 hydra:
   job:
