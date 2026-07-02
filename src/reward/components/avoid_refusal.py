@@ -79,6 +79,8 @@ def make_avoid_refusal_reward_func(
             )
 
         rewards: list[float] = []
+        refusal_matches_log: list[str] = []
+        redirection_matches_log: list[str] = []
         for prompt, completion in zip(prompts_list, completions_list, strict=True):
 
             # compute rewards
@@ -89,9 +91,13 @@ def make_avoid_refusal_reward_func(
             # Combine refusal and redirection rewards (both must be satisfied).
             reward = reward * redirection_reward
             rewards.append(reward)
+            refusal_matches_log.append("|".join(matches))
+            redirection_matches_log.append("|".join(redirection_matches))
 
         if log_extra is not None:
             log_extra("refusal_reward", rewards)
+            log_extra("refusal_matches", refusal_matches_log)
+            log_extra("redirection_matches", redirection_matches_log)
 
         return rewards
 

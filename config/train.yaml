@@ -62,6 +62,7 @@ reward:
   functions:
     simple_match:
       mode: binary
+      pattern_splits: ["hard", "soft"]
     language:
       model_path: ${oc.env:FASTTEXT_LID_PATH,null} # Path to fastText lid.176.ftz or lid.176.bin.
       min_chars: 20 # Short completions are scored neutral because language ID is unreliable.

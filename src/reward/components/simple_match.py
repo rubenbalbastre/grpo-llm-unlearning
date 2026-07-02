@@ -1,24 +1,24 @@
 from __future__ import annotations
 
 import re
+from collections.abc import Iterable
 from pathlib import Path
 
 from src.data_generator.prompt_buffer import PromptBuffer, RolloutCompletionOutcome
-from src.reward.components.constants.target_patterns import TARGET_PATTERNS
+from src.reward.components.constants.target_patterns import get_target_patterns
 
 
-def build_entity_matchers(forget_concept: str) -> list[tuple[str, re.Pattern]]:
-    if forget_concept not in TARGET_PATTERNS:
-        raise ValueError(
-            "No target patterns configured for "
-            f"{forget_concept!r}. Available options: {list(TARGET_PATTERNS)}."
-        )
+def build_entity_matchers(
+    forget_concept: str,
+    pattern_splits: str | Iterable[str] = ("hard", "soft"),
+) -> list[tuple[str, re.Pattern]]:
+    target_patterns = get_target_patterns(forget_concept, pattern_splits)
     return [
         (
             entity,
             re.compile(rf"(?<!\w){re.escape(entity)}(?!\w)", flags=re.IGNORECASE),
         )
-        for entity in TARGET_PATTERNS[forget_concept]
+        for entity in target_patterns
     ]
 
 
@@ -47,6 +47,7 @@ def make_forgetting_reward_func(
     log_path: Path,
     forget_concept: str,
     reward_mode: str = "entity_count",
+    pattern_splits: str | Iterable[str] = ("hard", "soft"),
 ):
     reward_functions = {
         "binary": binary_forgetting_reward,
@@ -58,12 +59,13 @@ def make_forgetting_reward_func(
         )
 
     compute_reward = reward_functions[reward_mode]
-    entity_matchers = build_entity_matchers(forget_concept)
+    entity_matchers = build_entity_matchers(forget_concept, pattern_splits)
 
     def forgetting_reward(prompts, completions, **kwargs) -> list[float]:
         rewards: list[float] = []
         trainer_state = kwargs.get("trainer_state")
         step = getattr(trainer_state, "global_step", None)
+        log_extra = kwargs.get("log_extra")
 
         selected_prompts = kwargs.get("selected_prompt", prompts)
         prompts_list = list(selected_prompts) if selected_prompts is not None else []
@@ -76,6 +78,7 @@ def make_forgetting_reward_func(
         if not prompts_list:
             return rewards
 
+        matched_entities_log: list[str] = []
         for prompt, completion in zip(prompts_list, completions_list, strict=True):
             reward, entities = compute_reward(str(completion), entity_matchers)
 
@@ -89,7 +92,11 @@ def make_forgetting_reward_func(
                     ),
                 )
             rewards.append(reward)
+            matched_entities_log.append("|".join(entities))
 
+        if log_extra is not None:
+            log_extra("forgetting_entities", matched_entities_log)
+            log_extra("forgetting_reward", rewards)
         return rewards
 
     return forgetting_reward
@@ -106,4 +113,5 @@ def build_simple_match_reward(
         log_path=log_path,
         forget_concept=forget_concept,
         reward_mode=config.get("mode", "binary"),
+        pattern_splits=config.get("pattern_splits", ["hard", "soft"]),
     )
