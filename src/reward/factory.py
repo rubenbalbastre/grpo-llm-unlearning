@@ -56,12 +56,21 @@ def build_reward_funcs(reward_config: Any, forget_concept: str) -> list[Callable
     reward_funcs.append(fuzzy_reward)
 
     avoid_refusal_config = reward_config.get("functions").get("avoid_refusal", {})
-    reward_funcs.append(
-        make_avoid_refusal_reward_func(
-            avoid_refusal_config,
-            Path("events.jsonl"),
-            log_events=log_events,
-        )
+    refusal_reward = make_avoid_refusal_reward_func(
+        avoid_refusal_config,
+        Path("events.jsonl"),
+        log_events=log_events,
     )
+    # reward_funcs.append(refusal_reward)
+
+    # NOTE: custom modification
+    import numpy as np
+    def refusal_function(prompts, completions, **kwargs) -> list[float]:
+        forg_reward = forgetting_reward(prompts, completions, **kwargs)
+        refu_reward = refusal_reward(prompts, completions, **kwargs)
+        return (np.array(forg_reward) * (0.7 + 0.3 * np.array(refu_reward))).tolist()
+        
+    refusal_function.__name__ = "avoid_refusal_reward"
+    reward_funcs.append(refusal_function)
 
     return reward_funcs
