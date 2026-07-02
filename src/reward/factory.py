@@ -4,11 +4,12 @@ from collections.abc import Callable
 from pathlib import Path
 from typing import Any
 
+from src.reward.avoid_refusal import make_avoid_refusal_reward_func
 from src.reward.forgetting import make_forgetting_reward_func
 from src.reward.language import build_language_reward, make_language_reward_func
 from src.reward.fuzzy import make_forgetting_fuzzy_reward_func
 
-REWARD_NAMES = ("simple_match", "language", "fuzzy_match")
+REWARD_NAMES = ("simple_match", "language", "fuzzy_match", "avoid_refusal")
 
 
 def get_reward_weights(reward_config: Any) -> list[float]:
@@ -53,5 +54,14 @@ def build_reward_funcs(reward_config: Any, forget_concept: str) -> list[Callable
         log_events=log_events,
     )
     reward_funcs.append(fuzzy_reward)
+
+    avoid_refusal_config = reward_config.get("functions").get("avoid_refusal", {})
+    reward_funcs.append(
+        make_avoid_refusal_reward_func(
+            avoid_refusal_config,
+            Path("events.jsonl"),
+            log_events=log_events,
+        )
+    )
 
     return reward_funcs
