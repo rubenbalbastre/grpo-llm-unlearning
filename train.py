@@ -26,7 +26,7 @@ def main(cfg: DictConfig) -> None:
     forget_concept = cfg.experiment.forget_concept
     model, tokenizer = load_model_and_tokenizer(model_name)
     peft_config = get_peft_config(cfg, num_hidden_layers=model.config.num_hidden_layers)
-    data_setup = setup_training_data(cfg, paths.events_log_path)
+    data_setup = setup_training_data(cfg, paths.events_log_path, tokenizer)
 
     reward_funcs = build_reward_funcs(forget_concept=forget_concept, reward_config=cfg.reward)
     reward_weights = get_reward_weights(reward_config=cfg.reward)
@@ -64,9 +64,9 @@ def main(cfg: DictConfig) -> None:
         eval_steps=cfg.training.eval_steps,
         per_device_eval_batch_size=cfg.training.per_device_eval_batch_size,
         num_generations_eval=cfg.training.num_generations_eval,
-        eval_on_start=True,
+        # eval_on_start=True,
         # eval_accumulation_steps=1,
-        do_eval=True,
+        # do_eval=True,
         # others
         num_iterations=cfg.training.num_iterations,
         beta=cfg.training.beta,

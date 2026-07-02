@@ -1,4 +1,8 @@
 #!/bin/bash -l
+#SBATCH --job-name=evals
+#SBATCH --output=logs/evals-%j.log
+#SBATCH --time=00:30:00
+#SBATCH --partition=sc-gpu
 set -euo pipefail
 
 REPO_DIR="${REPO_DIR:-/home/balalru/machine-unlearning-llm}"
@@ -7,64 +11,32 @@ cd "${REPO_DIR}"
 EVAL_SCRIPT="${EVAL_SLURM_SCRIPT:-${REPO_DIR}/scripts/slurm-eval-rwku.sh}"
 INCLUDE_FINAL_MODEL="${INCLUDE_FINAL_MODEL:-true}"
 
+get_experiment_value() {
+  local key="$1"
+  local config_path="$2"
 
-run_names=(
-  # "unlearning-4162"
-  # "unlearning-4106"
-  # "unlearning-4112"
-  # "unlearning-4114"
-  # "unlearning-4164"
-  # "unlearning-4058"
-  # "unlearning-4161"
-  # "unlearning-4099"
-  # "unlearning-4111"
-  # "unlearning-4113"
-  # "unlearning-4085"  
-  # "unlearning-4163"
-  # "unlearning-4083"
-  # "unlearning-4160"
-  # "unlearning-4110"
-  # "unlearning-4208"
-  # "unlearning-4207"
-  # "unlearning-4206"
-  # "unlearning-4205"
-  # "unlearning-4204"
-  # "unlearning-4203"
-  # "unlearning-4202"
-  # "unlearning-4201"
-  # "unlearning-4200"
-  # "unlearning-4199"
-  # "unlearning-4198"
-  # "unlearning-4197"
-  # "unlearning-4196"
-  # "unlearning-4194"
-  # "unlearning-4260"
-  # "unlearning-4261"
-  # "unlearning-4307"
-  # "unlearning-4308"
-  # "unlearning-4309"
-  # "unlearning-4310"
-  # "unlearning-4311" run 
-  # "unlearning-4312" run
-  # "unlearning-4095"
-  # "unlearning-4101"
-  # "unlearning-4087"
-  # "unlearning-4089"
-  # "unlearning-4097"
-  # "unlearning-4103"
-  # "unlearning-4098"
-  # "unlearning-4090"
-  # "unlearning-4104"
-  # "unlearning-4096"
-  # "unlearning-4102"
-  # "unlearning-4088"
-  # "unlearning-4107"
-  # "unlearning-4109"
-)
+  awk -v key="${key}" '
+    /^experiment:/ { in_experiment = 1; next }
+    /^[^[:space:]]/ { in_experiment = 0 }
+    in_experiment && $1 == key ":" {
+      sub("^[[:space:]]*" key ":[[:space:]]*", "")
+      print
+      exit
+    }
+  ' "${config_path}"
+}
 
-for RUN_NAME in "${run_names[@]}"; do
+matched_runs=0
 
-  CHECKPOINT_ROOT="outputs/${RUN_NAME}"
+while IFS= read -r hydra_config; do
+  notes="$(get_experiment_value "notes" "${hydra_config}")"
+  if [[ "${notes}" != "apply-chat-template" ]]; then
+    continue
+  fi
+
+  CHECKPOINT_ROOT="$(dirname "${hydra_config}")"
+  RUN_NAME="$(basename "${CHECKPOINT_ROOT}")"
+  CONCEPT="$(get_experiment_value "forget_concept" "${hydra_config}")"
 
   EVAL_JOB_ID="$(
     sbatch --parsable \
@@ -73,6 +45,11 @@ for RUN_NAME in "${run_names[@]}"; do
       "$@"
   )"
 
-  echo "Submitted RWKU eval job: ${EVAL_JOB_ID}"
+  echo "Submitted RWKU eval job: ${EVAL_JOB_ID} (${RUN_NAME}, concept=${CONCEPT})"
+  matched_runs=$((matched_runs + 1))
+done < <(find outputs -mindepth 2 -maxdepth 2 -type f -name 'hydra_config.yaml' | sort -V)
 
-done
+if [[ "${matched_runs}" -eq 0 ]]; then
+  echo "No runs found with hydra.experiment.notes=apply-chat-template" >&2
+  exit 1
+fi
