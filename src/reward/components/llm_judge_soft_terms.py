@@ -63,14 +63,10 @@ def make_llm_judge_soft_terms_reward_func(
         )
 
     load_dotenv()
-    try:
-        import openai
 
-        client = openai.AsyncOpenAI()
-    except Exception as e:
-        raise RuntimeError(
-            "OpenAI client is not available. Configure OPENAI_API_KEY in environment."
-        ) from e
+    import openai
+
+    client = openai.AsyncOpenAI()
 
     def build_input(prompt: str, completion: str) -> list[dict[str, str]]:
         payload = {
