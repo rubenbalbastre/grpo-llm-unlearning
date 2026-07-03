@@ -140,12 +140,7 @@ def make_garak_avoid_refusal_reward_func(
     config: Any,
     log_path: Path,
 ):
-    try:
-        from transformers import pipeline
-    except ImportError as exc:
-        raise ImportError(
-            "The garak avoid-refusal reward requires transformers to be installed."
-        ) from exc
+    from transformers import pipeline
 
     model_name = config.get("model_name", DEFAULT_GARAK_REFUSAL_MODEL)
     batch_size = int(config.get("batch_size", 32))
@@ -167,13 +162,6 @@ def make_garak_avoid_refusal_reward_func(
         selected_prompts = kwargs.get("selected_prompt", prompts)
         prompts_list = list(selected_prompts) if selected_prompts is not None else []
         completions_list = list(completions) if completions is not None else []
-        if len(prompts_list) != len(completions_list):
-            raise ValueError(
-                f"Garak avoid-refusal reward input mismatch: {len(prompts_list)} prompts, "
-                f"{len(completions_list)} completions."
-            )
-        if not completions_list:
-            return []
 
         classify_kwargs: dict[str, Any] = {
             "batch_size": batch_size,

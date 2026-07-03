@@ -32,11 +32,6 @@ def build_reward_funcs(reward_config: Any, forget_concept: str) -> list[Callable
         selected_prompts = kwargs.get("selected_prompt", prompts)
         prompts_list = list(selected_prompts) if selected_prompts is not None else []
         completions_list = list(completions) if completions is not None else []
-        if len(prompts_list) != len(completions_list):
-            raise ValueError(
-                f"r1 reward input mismatch: {len(prompts_list)} prompts, "
-                f"{len(completions_list)} completions."
-            )
 
         component_kwargs = dict(kwargs)
         component_kwargs["selected_prompt"] = prompts_list
