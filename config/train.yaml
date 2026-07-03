@@ -74,7 +74,7 @@ reward:
       model_name: gpt-5.4-nano
       temperature: 0.0
       max_concurrent_requests: 4
-    garak_avoid_refusal:
+    avoid_refusal_reward_classifier:
       model_name: garak-llm/garak-refusal-detector
       batch_size: 32
       truncation: true
@@ -98,7 +98,7 @@ training:
   mode: standard # adaptive, standard, or offline
   # batch size
   per_device_train_batch_size: 8
-  num_generations: 8
+  num_generations: 16
   gradient_accumulation_steps: 8
   gradient_checkpointing: false
   steps_per_generation: 8
