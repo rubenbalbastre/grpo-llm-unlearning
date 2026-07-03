@@ -50,7 +50,7 @@ def build_reward_funcs(reward_config: Any, forget_concept: str) -> list[Callable
         judge_indices = [
             index
             for index, forgetting_reward in enumerate(forgetting_rewards)
-            if forgetting_reward == 1.0
+            if forgetting_reward == 1.0 and refusal_rewards[index] == 1.0
         ]
         llm_judge_rewards = [0.0 for _ in completions_list]
         if judge_indices:
@@ -72,7 +72,7 @@ def build_reward_funcs(reward_config: Any, forget_concept: str) -> list[Callable
             log_extra("llm_judge_soft_terms_reward", llm_judge_rewards)
 
         return [
-            forgetting_reward * (0.7 + 0.3 * refusal_reward) * llm_judge_reward
+            0.6 * forgetting_reward + 0.2 * refusal_reward + 0.2 * llm_judge_reward
             for forgetting_reward, refusal_reward, llm_judge_reward in zip(
                 forgetting_rewards,
                 refusal_rewards,
