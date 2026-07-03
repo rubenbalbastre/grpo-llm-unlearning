@@ -10,11 +10,15 @@ from src.reward.components.constants.refusal_patterns import (
 )
 
 
+DEFAULT_GARAK_REFUSAL_MODEL = "garak-llm/garak-refusal-detector"
+
+
 def build_rediction_matchers(markers: list[str]) -> list[tuple[str, re.Pattern]]:
     return [
         (marker, re.compile(re.escape(marker), flags=re.IGNORECASE))
         for marker in markers
     ]
+
 
 def matched_redirection_markers(
     completion: str,
@@ -111,6 +115,106 @@ def build_avoid_refusal_reward(
     log_path: Path,
 ):
     return make_avoid_refusal_reward_func(
+        config,
+        log_path,
+    )
+
+
+def _is_garak_refusal_label(label: str) -> bool:
+    normalized_label = label.lower().replace("_", "-").strip()
+    if normalized_label == "refusal":
+        return True
+    if normalized_label == "non-refusal":
+        return False
+    if "non" in normalized_label and "refusal" in normalized_label:
+        return False
+    if "refusal" in normalized_label:
+        return True
+    raise ValueError(
+        "Unexpected garak refusal detector label "
+        f"{label!r}; expected 'refusal' or 'non-refusal'."
+    )
+
+
+def make_garak_avoid_refusal_reward_func(
+    config: Any,
+    log_path: Path,
+):
+    try:
+        from transformers import pipeline
+    except ImportError as exc:
+        raise ImportError(
+            "The garak avoid-refusal reward requires transformers to be installed."
+        ) from exc
+
+    model_name = config.get("model_name", DEFAULT_GARAK_REFUSAL_MODEL)
+    batch_size = int(config.get("batch_size", 32))
+    truncation = bool(config.get("truncation", True))
+    max_length = config.get("max_length")
+    trust_remote_code = bool(config.get("trust_remote_code", False))
+
+    pipeline_kwargs: dict[str, Any] = {
+        "task": "text-classification",
+        "model": model_name,
+        "trust_remote_code": trust_remote_code,
+    }
+    if "device" in config:
+        pipeline_kwargs["device"] = config["device"]
+
+    classifier = pipeline(**pipeline_kwargs)
+
+    def garak_avoid_refusal_reward_func(prompts, completions, **kwargs) -> list[float]:
+        selected_prompts = kwargs.get("selected_prompt", prompts)
+        prompts_list = list(selected_prompts) if selected_prompts is not None else []
+        completions_list = list(completions) if completions is not None else []
+        if len(prompts_list) != len(completions_list):
+            raise ValueError(
+                f"Garak avoid-refusal reward input mismatch: {len(prompts_list)} prompts, "
+                f"{len(completions_list)} completions."
+            )
+        if not completions_list:
+            return []
+
+        classify_kwargs: dict[str, Any] = {
+            "batch_size": batch_size,
+            "truncation": truncation,
+        }
+        if max_length is not None:
+            classify_kwargs["max_length"] = int(max_length)
+
+        outputs = classifier(
+            [str(completion) for completion in completions_list],
+            **classify_kwargs,
+        )
+        rewards: list[float] = []
+        labels: list[str] = []
+        scores: list[float] = []
+        for output in outputs:
+            prediction = output[0] if isinstance(output, list) else output
+            label = str(prediction["label"])
+            score = float(prediction["score"])
+            labels.append(label)
+            scores.append(score)
+            rewards.append(0.0 if _is_garak_refusal_label(label) else 1.0)
+
+        log_extra = kwargs.get("log_extra")
+        if log_extra is not None:
+            log_extra("garak_refusal_reward", rewards)
+            log_extra("garak_refusal_label", labels)
+            log_extra("garak_refusal_score", scores)
+
+        return rewards
+
+    garak_avoid_refusal_reward_func.__name__ = "garak_avoid_refusal_reward"
+    return garak_avoid_refusal_reward_func
+
+
+def build_garak_avoid_refusal_reward(
+    config: Any,
+    *,
+    log_path: Path,
+):
+    return make_garak_avoid_refusal_reward_func(
         config,
         log_path,
     )

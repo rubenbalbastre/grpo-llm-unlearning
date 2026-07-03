@@ -4,7 +4,7 @@ defaults:
 
 experiment:
   seed: 42 # 1, 1234, 42
-  forget_concept: Confucius # Rihanna #Confucius # Stephen King
+  forget_concept: Rihanna # Rihanna #Confucius # Stephen King
   push_to_hub: false
   notes: apply-chat-template
 
@@ -74,6 +74,10 @@ reward:
       model_name: gpt-5.4-nano
       temperature: 0.0
       max_concurrent_requests: 4
+    garak_avoid_refusal:
+      model_name: garak-llm/garak-refusal-detector
+      batch_size: 32
+      truncation: true
 
 peft:
   lora:

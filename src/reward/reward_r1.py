@@ -4,7 +4,7 @@ from collections.abc import Callable
 from pathlib import Path
 from typing import Any
 
-from src.reward.components.avoid_refusal import build_avoid_refusal_reward
+from src.reward.components.avoid_refusal import build_garak_avoid_refusal_reward
 from src.reward.components.llm_judge_soft_terms import build_llm_judge_soft_terms_reward
 from src.reward.components.simple_match import build_simple_match_reward
 
@@ -18,8 +18,8 @@ def build_reward_funcs(reward_config: Any, forget_concept: str) -> list[Callable
         forget_concept=forget_concept,
         log_path=Path("events.jsonl"),
     )
-    avoid_refusal_reward = build_avoid_refusal_reward(
-        functions_config.get("avoid_refusal", {}),
+    avoid_refusal_reward = build_garak_avoid_refusal_reward(
+        functions_config.get("garak_avoid_refusal", {}),
         log_path=Path("events.jsonl"),
     )
     llm_judge_soft_terms_reward = build_llm_judge_soft_terms_reward(
