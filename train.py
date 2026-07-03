@@ -1,12 +1,13 @@
 from __future__ import annotations
 
+from importlib import import_module
+
 import hydra
 from omegaconf import DictConfig
 from transformers import set_seed
 from trl import GRPOConfig, GRPOTrainer
 
 from src.peft import get_peft_config
-from src.reward.factory import build_reward_funcs, get_reward_weights
 from src.train_setup import (
     attach_adaptive_state,
     finish_training,
@@ -15,6 +16,27 @@ from src.train_setup import (
     setup_training_data
 )
 from src.trainer_callback import get_training_callbacks
+
+
+def build_reward_funcs(reward_config: DictConfig, forget_concept: str):
+    reward_type = str(reward_config.get("type", "")).strip()
+    if not reward_type:
+        raise ValueError("reward.type must be configured.")
+
+    module_name = f"src.reward.reward_{reward_type}"
+    try:
+        reward_module = import_module(module_name)
+    except ModuleNotFoundError as e:
+        if e.name != module_name:
+            raise
+        raise ValueError(
+            f"Unsupported reward.type={reward_type!r}; expected module {module_name}."
+        ) from e
+
+    return reward_module.build_reward_funcs(
+        reward_config=reward_config,
+        forget_concept=forget_concept,
+    )
 
 
 @hydra.main(version_base=None, config_path="config", config_name="train")
@@ -29,7 +51,6 @@ def main(cfg: DictConfig) -> None:
     data_setup = setup_training_data(cfg, paths.events_log_path, tokenizer)
 
     reward_funcs = build_reward_funcs(forget_concept=forget_concept, reward_config=cfg.reward)
-    reward_weights = get_reward_weights(reward_config=cfg.reward)
 
     args = GRPOConfig(
         output_dir=str(paths.output_dir),
@@ -57,8 +78,6 @@ def main(cfg: DictConfig) -> None:
         lr_scheduler_type=cfg.training.lr_scheduler_type,
         lr_scheduler_kwargs={"min_lr_rate": 0.1} if cfg.training.lr_scheduler_type == "cosine_with_min_lr" else None,
         warmup_ratio=cfg.training.warmup_ratio,
-        # rewards
-        reward_weights=reward_weights,
         # eval
         eval_strategy=cfg.training.eval_strategy,
         eval_steps=cfg.training.eval_steps,

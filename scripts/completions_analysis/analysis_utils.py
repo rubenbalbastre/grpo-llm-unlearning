@@ -8,11 +8,11 @@ from scripts.completions_analysis.llm_completion_classification import (
     AsyncCompletionClassificationTool,
     llm_judge_metrics,
 )
-from src.reward.forgetting import (
+from src.reward.components.simple_match import (
     binary_forgetting_reward as compute_forgetting_reward_per_completion,
     build_entity_matchers,
 )
-from src.reward.fuzzy import (
+from src.reward.components.fuzzy_match import (
     build_fuzzy_entities_for_concept,
     compute_fuzzy_reward_per_completion as compute_forgetting_fuzzy_reward_per_completion,
 )

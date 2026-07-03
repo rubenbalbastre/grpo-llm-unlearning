@@ -106,10 +106,7 @@ def build_language_reward(config: Any) -> FastTextLanguageReward:
 def make_language_reward_func(
     language_reward: FastTextLanguageReward,
     log_path: Path,
-    log_events: bool = True,
 ):
-    from src.logging import log_event
-
     def language_reward_func(prompts, completions, **kwargs) -> list[float]:
         trainer_state = kwargs.get("trainer_state")
         step = getattr(trainer_state, "global_step", None)
@@ -141,30 +138,19 @@ def make_language_reward_func(
             log_metric("language/english_rate", english_rate)
             log_metric("language/confident_non_english_rate", non_english_rate)
 
-        if log_events:
-            for prompt, completion, result in zip(
-                prompts_list,
-                completions_list,
-                results,
-                strict=True,
-            ):
-                log_event(
-                    log_path,
-                    {
-                        "type": "reward",
-                        "reward_component": "language",
-                        "prompt": str(prompt),
-                        "completion": str(completion),
-                        "reward": result.reward,
-                        "language_predicted": result.predicted_language,
-                        "language_confidence": result.confidence,
-                        "language_is_english": result.is_english,
-                        "language_reason": result.reason,
-                        "step": step,
-                    },
-                )
-
         return rewards
 
     language_reward_func.__name__ = "language_reward"
     return language_reward_func
+
+
+def build_language_reward_func(
+    config: Any,
+    *,
+    log_path: Path,
+):
+    language_reward = build_language_reward(config)
+    return make_language_reward_func(
+        language_reward,
+        log_path,
+    )

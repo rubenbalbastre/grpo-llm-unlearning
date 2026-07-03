@@ -6,7 +6,7 @@ from pathlib import Path
 from typing import Iterable
 
 from src.data_generator.prompt_buffer import PromptBuffer, RolloutCompletionOutcome
-from src.reward.refusal_patterns import REFUSAL_PATTERNS
+from src.reward.components.constants.target_patterns import get_target_patterns
 
 EntityLike = str | tuple[str, re.Pattern]
 FUZZY_SIMILARITY_THRESHOLD = 85.0
@@ -47,12 +47,7 @@ def build_fuzzy_entities(forbidden_entities: Iterable[EntityLike]) -> list[Fuzzy
 
 
 def build_fuzzy_entities_for_concept(forget_concept: str) -> list[FuzzyEntity]:
-    if forget_concept not in REFUSAL_PATTERNS:
-        raise ValueError(
-            "No refusal patterns configured for "
-            f"{forget_concept!r}. Available options: {list(REFUSAL_PATTERNS)}."
-        )
-    return build_fuzzy_entities(REFUSAL_PATTERNS[forget_concept])
+    return build_fuzzy_entities(get_target_patterns(forget_concept))
 
 
 def has_normalized_match(normalized_output: str, entity: FuzzyEntity) -> bool:
@@ -86,7 +81,6 @@ def make_forgetting_fuzzy_reward_func(
     log_path: Path,
     forget_concept: str,
     reward_mode: str = "entity_count",
-    log_events: bool = True,
 ):
 
     entity_matchers = build_fuzzy_entities_for_concept(forget_concept)
@@ -155,3 +149,17 @@ def compute_fuzzy_reward_per_completion(
             return 0.0
 
     return 1.0
+
+
+def build_fuzzy_match_reward(
+    config,
+    *,
+    forget_concept: str,
+    log_path: Path,
+):
+    return make_forgetting_fuzzy_reward_func(
+        buffer=None,
+        log_path=log_path,
+        forget_concept=forget_concept,
+        reward_mode=config.get("mode", "binary"),
+    )

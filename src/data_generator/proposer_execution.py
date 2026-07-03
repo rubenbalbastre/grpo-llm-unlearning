@@ -15,7 +15,6 @@ from src.data_generator.data_proposer import (
     ExecutionMode,
     GeneratorMode,
     build_data_generator_prompt,
-    log_event,
 )
 
 from src.data_generator.general_data_proposer import build_data_generator_prompt_general_objective, GeneralDataProposerResponse
@@ -133,30 +132,6 @@ class BaseProposerExecution:
             raise ValueError(f"Unknown objective: {self.objective}")
         return out
 
-    def _log_shortfall(
-        self,
-        *,
-        requested_prompts: int,
-        returned_prompts: int,
-        accepted_prompts: int,
-        num_requests: int | None = None,
-    ) -> None:
-        event = {
-            "type": "data_generator_shortfall",
-            "requested_prompts": requested_prompts,
-            "returned_prompts": returned_prompts,
-            "accepted_prompts": accepted_prompts,
-            "missing_prompts": requested_prompts - accepted_prompts,
-            "model_name": self.model_name,
-            "mode": self.mode,
-            "context_mode": self.context_mode,
-            "execution_mode": self.execution_mode,
-        }
-        if num_requests is not None:
-            event["num_requests"] = num_requests
-        log_event(self.log_path, event)
-
-
 class BatchProposerExecution(BaseProposerExecution):
     def __init__(self, **kwargs: Any) -> None:
         super().__init__(**kwargs)
@@ -198,12 +173,6 @@ class BatchProposerExecution(BaseProposerExecution):
                 )
             prompts = self._parse_response_prompts(response, num_prompts)
             out = self._format_output(prompts)
-            if len(out) < num_prompts:
-                self._log_shortfall(
-                    requested_prompts=num_prompts,
-                    returned_prompts=len(prompts),
-                    accepted_prompts=len(out),
-                )
             return out
         except Exception as e:
             raise RuntimeError(f"DataGenerator generation failed: {e}") from e
@@ -326,29 +295,6 @@ class AsyncIndividualProposerExecution(BaseProposerExecution):
             if len(out) >= num_prompts:
                 break
         out = out[:num_prompts]
-        if len(out) < num_prompts:
-            self._log_shortfall(
-                requested_prompts=num_prompts,
-                returned_prompts=len(out),
-                accepted_prompts=len(out),
-                num_requests=len(request_specs),
-            )
-        log_event(
-            self.log_path,
-            {
-                "type": "data_proposer_async_individual_batch",
-                "requested_prompts": num_prompts,
-                "accepted_prompts": len(out),
-                "num_requests": len(request_specs),
-                "max_concurrent_requests": self.max_concurrent_requests,
-                "prompts_per_context_item": self.prompts_per_context_item,
-                "context_items": len(high_variance_items),
-                "model_name": self.model_name,
-                "mode": self.mode,
-                "context_mode": self.context_mode,
-                "execution_mode": self.execution_mode,
-            },
-        )
         return out
 
     def _build_request_specs(

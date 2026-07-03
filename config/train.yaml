@@ -4,7 +4,7 @@ defaults:
 
 experiment:
   seed: 42 # 1, 1234, 42
-  forget_concept: Confucius # Rihanna #Confucius # Stephen King
+  forget_concept: Rihanna # Rihanna #Confucius # Stephen King
   push_to_hub: false
   notes: apply-chat-template
 
@@ -59,10 +59,10 @@ buffer:
   high_mean_reward_threshold: 0.3
 
 reward:
-  log_events: false # Set false to skip per-sample reward rows in events.jsonl.
   functions:
     simple_match:
       mode: binary
+      pattern_splits: ["hard", "soft"]
     language:
       model_path: ${oc.env:FASTTEXT_LID_PATH,null} # Path to fastText lid.176.ftz or lid.176.bin.
       min_chars: 20 # Short completions are scored neutral because language ID is unreliable.
@@ -70,6 +70,14 @@ reward:
       uncertain_confidence_threshold: 0.6 # 0 when top prediction confidence is below this value; otherwise non-English is -1.
     fuzzy_match:
       mode: binary
+    llm-judge-soft-terms:
+      model_name: gpt-5.4-nano
+      temperature: 0.0
+      max_concurrent_requests: 4
+    garak_avoid_refusal:
+      model_name: garak-llm/garak-refusal-detector
+      batch_size: 32
+      truncation: true
 
 peft:
   lora:

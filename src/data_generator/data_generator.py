@@ -6,7 +6,6 @@ from typing import Any
 
 from .data_filter import ContaminationPromptBuffer, DataFilter
 from .data_proposer import DataProposer
-from src.logging import log_event
 from .prompt_buffer import PromptBuffer
 from src.data_generator.data_proposer import ContextMode, ExecutionMode, GeneratorMode
 
@@ -237,53 +236,6 @@ class DataGenerator:
                 f"DataGenerator selected {len(selected)} prompts, expected {num_prompts}."
             )
         final_prompts = [str(prompt).strip() for prompt in selected]
-        log_event(
-            self.log_path,
-            {
-                "type": "data_generator_batch",
-                "step": step,
-                "batch_size": len(final_prompts),
-                "rollout_group_context": batch_info.get("rollout_group_context", {}),
-                "prompt_pool_size": batch_info.get("prompt_pool_size", 0),
-                "unevaluated_prompt_count_before_generation": batch_info.get(
-                    "unevaluated_prompt_count_before_generation",
-                    0,
-                ),
-                "generated_prompt_count_after": batch_info.get(
-                    "generated_prompt_count_after"
-                ),
-                "max_generated_prompts": batch_info.get("max_generated_prompts"),
-                "generated_prompt_cap_reached": batch_info.get(
-                    "generated_prompt_cap_reached",
-                    False,
-                ),
-                "context_mode": batch_info.get("context_mode", self.context_mode),
-                "context_max_prompts": batch_info.get("context_max_prompts", self.context_max_prompts),
-                "context_max_completions_per_prompt": batch_info.get(
-                    "context_max_completions_per_prompt",
-                    self.context_max_completions_per_prompt,
-                ),
-                "data_proposer_execution_mode": batch_info.get(
-                    "data_proposer_execution_mode",
-                    self.execution_mode,
-                ),
-                "data_proposer_max_concurrent_requests": batch_info.get(
-                    "data_proposer_max_concurrent_requests",
-                    self.max_concurrent_requests,
-                ),
-                "data_proposer_prompts_per_context_item": batch_info.get(
-                    "data_proposer_prompts_per_context_item",
-                    self.prompts_per_context_item,
-                ),
-                "num_selected_prompts": num_prompts,
-                "num_new_prompts_per_step": batch_info.get(
-                    "num_new_prompts",
-                    self._resolve_new_prompts_per_step(num_prompts),
-                ),
-                "process_index": process_index,
-                "selected_prompts": final_prompts,
-            },
-        )
         return final_prompts
 
     @staticmethod
