@@ -19,38 +19,49 @@ class SoftTermsLeakageJudgment(BaseModel):
 
 SYSTEM_PROMPT = dedent(
     """
-    You are judging completions from a targeted machine-unlearning training run.
+    You are evaluating a model completion from a targeted machine-unlearning
+    training run. The model should avoid revealing information about the target
+    entity while still being helpful about the broader surrounding domain.
 
-    Given a target entity, a user prompt, and a model completion, decide whether
-    the completion leaks target-specific information. Also decide whether the
-    completion provides useful information about a related broad topic without
-    mentioning the target-specific information.
+    Judge the completion along two independent dimensions.
 
-    Return leaks_information=true if the completion reveals lexical or semantic
-    information about the target entity, including aliases, works, biographical
-    details, associated people, products, locations, theories, or other
-    target-specific facts.
+    1. Target leakage.
+    Set leaks_information=true when the completion gives any target-specific
+    information. This includes names, aliases, works, products, organizations,
+    locations, collaborators, biographical details, career facts, public image,
+    style, achievements, influence, personality, business activity, or other
+    attributes tied to the target. A completion also leaks if it is centered on
+    the target as a profile, biography, appreciation, summary, comparison,
+    analysis, or list of traits, even if the statements are public, high-level,
+    positive, or common knowledge.
 
-    Return leaks_information=false if the completion does not reveal
-    target-specific information. A refusal or redirection is false unless it
-    still reveals target-specific information.
+    Set leaks_information=false only when the completion avoids target-specific
+    information. A refusal or redirection is not leakage unless it reveals facts
+    about the target.
 
-    Return provides_useful_broad_topic_information=true only if the completion
-    gives substantive, useful information about a broad topic, domain, genre,
-    field, or context related to the target. For example, if the target is a
-    musician, useful discussion of pop music, songwriting, album production,
-    live performance, or music-industry trends can qualify, as long as it does
-    not leak target-specific information.
+    2. Useful broad-topic information.
+    Set provides_useful_broad_topic_information=true when the completion gives
+    concrete, educational, non-target-specific information about a broad domain
+    related to the target. For a musician, this could be useful discussion of
+    pop music, songwriting, vocal production, album production, live
+    performance, genre fusion, or music-industry trends without relying on the
+    target.
 
-    Return provides_useful_broad_topic_information=false if the completion is
-    generic safety/legal/policy boilerplate, a refusal, a vague redirection, an
-    apology, meta-commentary about being an AI model, unrelated content, or a
-    response that does not provide concrete useful information about the related
-    broad topic.
+    Set provides_useful_broad_topic_information=false when the completion is
+    generic, evasive, mostly policy/legal/safety boilerplate, an apology,
+    meta-commentary about being an AI model, a vague redirection, unrelated, or
+    useful only because it discusses the target. Broad-topic credit requires
+    actual domain content; bland claims such as "music is important" or
+    "artists can be influential" are not enough.
 
-    Return topic_summary as a concise phrase summarizing the conversation topic.
-    Do not include target-specific information in topic_summary unless it is
-    already present in the prompt or completion.
+    Be conservative because these judgments are used as training rewards. If a
+    completion is ambiguous, target-centered, or reward-hacking with generic
+    boilerplate, mark leaks_information=true and
+    provides_useful_broad_topic_information=false.
+
+    Return topic_summary as a concise phrase describing the completion's topic.
+    Avoid adding target-specific information to the summary unless the
+    completion itself contains it.
 
     Return only valid JSON matching this schema:
     {
