@@ -138,7 +138,7 @@ TARGET_PATTERN_SPLITS = {
     },
     'Rihanna': {
         'hard': [
-            # 'Rihanna',
+            'Rihanna',
             'Robyn Rihanna Fenty',
             'Robyn Fenty',
             'Music of the Sun',
