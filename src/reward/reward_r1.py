@@ -56,58 +56,58 @@ def build_reward_funcs(reward_config: Any, forget_concept: str) -> list[Callable
         ]
         llm_judge_leakage_rewards = [0.0 for _ in completions_list]
         llm_judge_broad_topic_rewards = [0.0 for _ in completions_list]
-        if judge_indices:
-            judge_prompts = [prompts_list[index] for index in judge_indices]
-            judge_completions = [completions_list[index] for index in judge_indices]
-            judge_kwargs = dict(component_kwargs)
-            judge_kwargs["selected_prompt"] = judge_prompts
-            judge_kwargs.pop("log_extra", None)
-            judged_leakage_rewards, judged_broad_topic_rewards = (
-                llm_judge_soft_terms_reward(
-                    judge_prompts,
-                    judge_completions,
-                    **judge_kwargs,
-                )
-            )
-            for index, judged_reward in zip(
-                judge_indices,
-                judged_leakage_rewards,
-                strict=True,
-            ):
-                llm_judge_leakage_rewards[index] = judged_reward
-            for index, judged_reward in zip(
-                judge_indices,
-                judged_broad_topic_rewards,
-                strict=True,
-            ):
-                llm_judge_broad_topic_rewards[index] = judged_reward
+        # if judge_indices:
+        #     judge_prompts = [prompts_list[index] for index in judge_indices]
+        #     judge_completions = [completions_list[index] for index in judge_indices]
+        #     judge_kwargs = dict(component_kwargs)
+        #     judge_kwargs["selected_prompt"] = judge_prompts
+        #     judge_kwargs.pop("log_extra", None)
+        #     judged_leakage_rewards, judged_broad_topic_rewards = (
+        #         llm_judge_soft_terms_reward(
+        #             judge_prompts,
+        #             judge_completions,
+        #             **judge_kwargs,
+        #         )
+        #     )
+        #     for index, judged_reward in zip(
+        #         judge_indices,
+        #         judged_leakage_rewards,
+        #         strict=True,
+        #     ):
+        #         llm_judge_leakage_rewards[index] = judged_reward
+        #     for index, judged_reward in zip(
+        #         judge_indices,
+        #         judged_broad_topic_rewards,
+        #         strict=True,
+        #     ):
+        #         llm_judge_broad_topic_rewards[index] = judged_reward
 
         log_extra = kwargs.get("log_extra")
-        if log_extra is not None:
-            log_extra(
-                "llm_judge_soft_terms_leakage_reward",
-                llm_judge_leakage_rewards,
-            )
-            log_extra(
-                "llm_judge_soft_terms_broad_topic_reward",
-                llm_judge_broad_topic_rewards,
-            )
+        # if log_extra is not None:
+        #     log_extra(
+        #         "llm_judge_soft_terms_leakage_reward",
+        #         llm_judge_leakage_rewards,
+        #     )
+        #     log_extra(
+        #         "llm_judge_soft_terms_broad_topic_reward",
+        #         llm_judge_broad_topic_rewards,
+        #     )
 
         return [
-            0.3 * forgetting_reward
-            + 0.3 * refusal_reward*forgetting_reward
-            + 0.2 * llm_judge_leakage_reward
-            + 0.2 * llm_judge_broad_topic_reward
+            0.5 * forgetting_reward
+            + 0.5 * refusal_reward*forgetting_reward
+            # + 0.2 * llm_judge_leakage_reward*refusal_reward
+            # + 0.2 * llm_judge_broad_topic_reward
             for (
                 forgetting_reward,
                 refusal_reward,
-                llm_judge_leakage_reward,
-                llm_judge_broad_topic_reward,
+                # llm_judge_leakage_reward,
+                # llm_judge_broad_topic_reward,
             ) in zip(
                 forgetting_rewards,
                 refusal_rewards,
-                llm_judge_leakage_rewards,
-                llm_judge_broad_topic_rewards,
+                # llm_judge_leakage_rewards,
+                # llm_judge_broad_topic_rewards,
                 strict=True,
             )
         ]
