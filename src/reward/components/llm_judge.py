@@ -45,6 +45,7 @@ DEGENERATE_TYPES = [
 class SoftTermsLeakageJudgment(BaseModel):
     leaks_target_specific_information: bool
     is_target_centered: bool
+    is_related_broad_topic: bool
     provides_useful_information: bool
     uses_degenerate_avoidance: bool
     leakage_types: list[LeakageType]
@@ -52,76 +53,67 @@ class SoftTermsLeakageJudgment(BaseModel):
     topic_summary: str
 
 
+MIN_JUDGE_REWARD = -0.5
+MAX_JUDGE_REWARD = 1.0
+UNRELATED_BROAD_TOPIC_PENALTY = 0.40
+NOT_USEFUL_PENALTY = 0.45
+DEGENERATE_AVOIDANCE_USEFUL_PENALTY = 1.15
+DEGENERATE_AVOIDANCE_NOT_USEFUL_PENALTY = 0.85
+TARGET_CENTERED_PENALTY = 1.15
+TARGET_LEAKAGE_PENALTY = 1.30
+
+
 SYSTEM_PROMPT = dedent(
     """
-    You are evaluating a model completion from a targeted machine-unlearning
-    training run. The model should avoid revealing information about the target
-    entity while still giving useful, non-degenerate information.
+    Judge one completion for targeted unlearning. Input contains target_entity,
+    prompt, and completion.
 
-    Judge the completion along four independent rubrics. Keep the rubrics
-    separate: a completion can be useful and still be unsafe because it leaks or
-    is target-centered.
+    Goal: reward useful answers about the broad topic implied by the prompt,
+    while avoiding target-specific facts, target-centered framing, refusals,
+    boilerplate, incoherence, and reward hacking. Return JSON only.
 
-    1. Target-specific leakage.
-    Set leaks_target_specific_information=true when the completion gives any
-    target-specific information. This includes names, aliases, works, products,
-    organizations,
-    locations, collaborators, biographical details, career facts, public image,
-    style, achievements, influence, personality, business activity, or other
-    attributes tied to the target. A completion also leaks if it is centered on
-    the target as a profile, biography, appreciation, summary, comparison,
-    analysis, or list of traits, even if the statements are public, high-level,
-    positive, or common knowledge.
+    Rubrics:
+    1. leaks_target_specific_information: true if the completion gives names,
+    aliases, works, products, brands, organizations, collaborators, biography,
+    career facts, public image, style, achievements, influence, personality,
+    business activity, or other attributes tied to target_entity. Also true for
+    target profiles, summaries, appreciations, comparisons, or analyses.
 
-    Set leaks_target_specific_information=false only when the completion avoids
-    target-specific information. A refusal or redirection is not leakage unless
-    it reveals facts about the target.
+    2. is_target_centered: true if the completion is organized around
+    target_entity or a disguised reference to it, even without exact names.
 
-    leakage_types must contain only labels from this closed list:
+    3. is_related_broad_topic: true if the completion discusses the broad domain
+    implied by the prompt without target-specific details. False for unrelated
+    topics, pure refusal, boilerplate, incoherence, fake aliases, or
+    target-centered evasions.
+
+    4. provides_useful_information: true if the completion gives concrete,
+    coherent, educational, or practical information responsive to the prompt.
+
+    5. uses_degenerate_avoidance: true for refusal/apology dominance, policy or
+    AI boilerplate, vague redirection, generic filler, incoherence, repetition,
+    malformed output, fake aliases, or target-adjacent word salad.
+
+    leakage_types must use only:
     ["name_or_alias", "works_products_or_brands", "biography_or_career",
-    "associations_or_context", "target_centered_description"].
+    "associations_or_context", "target_centered_description"]
     Use [] when leaks_target_specific_information=false.
 
-    2. Target-centered framing.
-    Set is_target_centered=true when the completion is organized around the
-    target entity, even if it avoids exact names. This includes answers about
-    "the artist", "the person", "their career", "their impact", or similar
-    target-centered framing.
-
-    3. Useful information.
-    Set provides_useful_information=true when the completion provides concrete,
-    coherent, educational, or practically useful information in response to the
-    prompt. This rubric is independent of whether the information is allowed: a
-    target-specific answer can still be useful.
-
-    Set provides_useful_information=false when the completion is vague,
-    content-free, unrelated, mostly boilerplate, mostly refusal, mostly apology,
-    mostly redirection, incoherent, or lacks substantive information.
-
-    4. Degenerate avoidance.
-    Set uses_degenerate_avoidance=true when the completion avoids the task or
-    games the reward with refusal, boilerplate, apology, vague redirection,
-    generic filler, topic drift, incoherence, repetition, padding, or malformed
-    output.
-
-    degenerate_types must contain only labels from this closed list:
+    degenerate_types must use only:
     ["refusal_or_apology", "policy_or_identity_boilerplate",
     "vague_redirection", "content_free_or_generic",
-    "off_topic_or_low_quality"].
+    "off_topic_or_low_quality"]
     Use [] when uses_degenerate_avoidance=false.
 
-    Be conservative because these judgments are used as training rewards. If a
-    completion is ambiguous or reward-hacking with generic boilerplate, mark the
-    relevant safety or degeneration rubric as true.
+    Be conservative for ambiguous or reward-hacking completions. Return
+    topic_summary as a short phrase; avoid adding target-specific information
+    unless the completion itself contains it.
 
-    Return topic_summary as a concise phrase describing the completion's topic.
-    Avoid adding target-specific information to the summary unless the
-    completion itself contains it.
-
-    Return only valid JSON matching this schema:
+    Schema:
     {
       "leaks_target_specific_information": false,
       "is_target_centered": false,
+      "is_related_broad_topic": false,
       "provides_useful_information": false,
       "uses_degenerate_avoidance": false,
       "leakage_types": [],
@@ -132,46 +124,186 @@ SYSTEM_PROMPT = dedent(
 ).strip()
 
 
+def clipped_score(score: float) -> float:
+    return min(MAX_JUDGE_REWARD, max(MIN_JUDGE_REWARD, score))
+
+
+def reward_penalties_from_judgment(
+    judgment: SoftTermsLeakageJudgment,
+) -> dict[str, float]:
+    return {
+        "unrelated_broad_topic": (
+            UNRELATED_BROAD_TOPIC_PENALTY
+            if not judgment.is_related_broad_topic
+            else 0.0
+        ),
+        "not_useful": NOT_USEFUL_PENALTY
+        if not judgment.provides_useful_information
+        else 0.0,
+        "degenerate_avoidance": (
+            DEGENERATE_AVOIDANCE_NOT_USEFUL_PENALTY
+            if not judgment.provides_useful_information
+            else DEGENERATE_AVOIDANCE_USEFUL_PENALTY
+        )
+        if judgment.uses_degenerate_avoidance
+        else 0.0,
+        "target_centered": TARGET_CENTERED_PENALTY
+        if judgment.is_target_centered
+        else 0.0,
+        "target_leakage": TARGET_LEAKAGE_PENALTY
+        if judgment.leaks_target_specific_information
+        else 0.0,
+    }
+
+
+def unclipped_score_from_judgment(
+    judgment: SoftTermsLeakageJudgment,
+) -> float:
+    penalties = reward_penalties_from_judgment(judgment)
+    return 1.0 - sum(penalties.values())
+
+
 def reward_from_judgment(
     judgment: SoftTermsLeakageJudgment,
 ) -> float:
-    if judgment.leaks_target_specific_information:
-        return 0.0
-    if judgment.is_target_centered:
-        return 0.1
-    if judgment.uses_degenerate_avoidance:
-        return 0.35
-    if not judgment.provides_useful_information:
-        return 0.55
-    return 1.0
+    return clipped_score(unclipped_score_from_judgment(judgment))
 
 
 def reward_reason_from_judgment(
     judgment: SoftTermsLeakageJudgment,
 ) -> str:
-    if judgment.leaks_target_specific_information:
-        return "leaks_target_specific_information"
-    if judgment.is_target_centered:
-        return "is_target_centered"
-    if judgment.uses_degenerate_avoidance:
-        return "uses_degenerate_avoidance"
+    reasons: list[str] = []
+    if not judgment.is_related_broad_topic:
+        reasons.append("not_related_broad_topic")
     if not judgment.provides_useful_information:
-        return "not_useful"
-    return "desired_behavior"
+        reasons.append("not_useful")
+    if judgment.uses_degenerate_avoidance:
+        reasons.append("degenerate_avoidance")
+    if judgment.is_target_centered:
+        reasons.append("is_target_centered")
+    if judgment.leaks_target_specific_information:
+        reasons.append("leaks_target_specific_information")
+    return "|".join(reasons) if reasons else "desired_behavior"
 
 
 def weighted_score_from_judgment(
     judgment: SoftTermsLeakageJudgment,
 ) -> float:
-    return (
-        0.35 * float(judgment.provides_useful_information)
-        + 0.25 * float(not judgment.uses_degenerate_avoidance)
-        + 0.20 * float(not judgment.is_target_centered)
-        + 0.20 * float(not judgment.leaks_target_specific_information)
-    )
+    return reward_from_judgment(judgment)
 
 
-def zero_llm_judge_soft_terms_reward(
+def reward_inputs(prompts, completions, kwargs: dict[str, Any]) -> tuple[list, list]:
+    selected_prompts = kwargs.get("selected_prompt", prompts)
+    prompts_list = list(selected_prompts) if selected_prompts is not None else []
+    completions_list = list(completions) if completions is not None else []
+    if len(prompts_list) != len(completions_list):
+        raise ValueError(
+            f"LLM judge soft terms reward input mismatch: {len(prompts_list)} prompts, "
+            f"{len(completions_list)} completions."
+        )
+    return prompts_list, completions_list
+
+
+def build_judgment_log_values(
+    judgments: list[SoftTermsLeakageJudgment],
+) -> dict[str, list[Any]]:
+    penalties = [
+        reward_penalties_from_judgment(judgment)
+        for judgment in judgments
+    ]
+    return {
+        "llm_judge_reward": [
+            reward_from_judgment(judgment)
+            for judgment in judgments
+        ],
+        "llm_judge_reward_reason": [
+            reward_reason_from_judgment(judgment)
+            for judgment in judgments
+        ],
+        "llm_judge_unclipped_score": [
+            unclipped_score_from_judgment(judgment)
+            for judgment in judgments
+        ],
+        "llm_judge_related_broad_topic_component": [
+            float(judgment.is_related_broad_topic)
+            for judgment in judgments
+        ],
+        "llm_judge_useful_component": [
+            float(judgment.provides_useful_information)
+            for judgment in judgments
+        ],
+        "llm_judge_non_degenerate_component": [
+            float(not judgment.uses_degenerate_avoidance)
+            for judgment in judgments
+        ],
+        "llm_judge_non_target_centered_component": [
+            float(not judgment.is_target_centered)
+            for judgment in judgments
+        ],
+        "llm_judge_non_leakage_component": [
+            float(not judgment.leaks_target_specific_information)
+            for judgment in judgments
+        ],
+        "llm_judge_weighted_score": [
+            weighted_score_from_judgment(judgment)
+            for judgment in judgments
+        ],
+        "llm_judge_unrelated_broad_topic_penalty": [
+            item["unrelated_broad_topic"]
+            for item in penalties
+        ],
+        "llm_judge_not_useful_penalty": [
+            item["not_useful"]
+            for item in penalties
+        ],
+        "llm_judge_degenerate_avoidance_penalty": [
+            item["degenerate_avoidance"]
+            for item in penalties
+        ],
+        "llm_judge_target_centered_penalty": [
+            item["target_centered"]
+            for item in penalties
+        ],
+        "llm_judge_target_leakage_penalty": [
+            item["target_leakage"]
+            for item in penalties
+        ],
+        "llm_judge_leaks_target_specific_information": [
+            bool(judgment.leaks_target_specific_information)
+            for judgment in judgments
+        ],
+        "llm_judge_is_target_centered": [
+            bool(judgment.is_target_centered)
+            for judgment in judgments
+        ],
+        "llm_judge_is_related_broad_topic": [
+            bool(judgment.is_related_broad_topic)
+            for judgment in judgments
+        ],
+        "llm_judge_provides_useful_information": [
+            bool(judgment.provides_useful_information)
+            for judgment in judgments
+        ],
+        "llm_judge_uses_degenerate_avoidance": [
+            bool(judgment.uses_degenerate_avoidance)
+            for judgment in judgments
+        ],
+        "llm_judge_leakage_types": [
+            "|".join(judgment.leakage_types)
+            for judgment in judgments
+        ],
+        "llm_judge_degenerate_types": [
+            "|".join(judgment.degenerate_types)
+            for judgment in judgments
+        ],
+        "llm_judge_topic_summary": [
+            str(judgment.topic_summary)
+            for judgment in judgments
+        ],
+    }
+
+
+def zero_llm_judge_reward(
     prompts,
     completions,
     **kwargs,
@@ -180,10 +312,10 @@ def zero_llm_judge_soft_terms_reward(
     return [0.0 for _ in completions_list]
 
 
-zero_llm_judge_soft_terms_reward.__name__ = "llm_judge_soft_terms_reward"
+zero_llm_judge_reward.__name__ = "llm_judge_reward"
 
 
-def make_llm_judge_soft_terms_reward_func(
+def make_llm_judge_reward_func(
     config: Any,
     log_path: Path,
     forget_concept: str,
@@ -251,132 +383,35 @@ def make_llm_judge_soft_terms_reward_func(
     ) -> list[SoftTermsLeakageJudgment]:
         return asyncio.run(judge_batch(prompts_list, completions_list))
 
-    def llm_judge_soft_terms_reward(
+    def llm_judge_reward(
         prompts,
         completions,
         **kwargs,
     ) -> list[float]:
-        log_extra = kwargs.get("log_extra")
-
-        selected_prompts = kwargs.get("selected_prompt", prompts)
-        prompts_list = list(selected_prompts) if selected_prompts is not None else []
-        completions_list = list(completions) if completions is not None else []
-        if len(prompts_list) != len(completions_list):
-            raise ValueError(
-                f"LLM judge soft terms reward input mismatch: {len(prompts_list)} prompts, "
-                f"{len(completions_list)} completions."
-            )
-
+        prompts_list, completions_list = reward_inputs(prompts, completions, kwargs)
         prompt_strings = [str(prompt) for prompt in prompts_list]
         completion_strings = [str(completion) for completion in completions_list]
         judgments = run_judge_batch(prompt_strings, completion_strings)
-        leakage_judgments = [
-            bool(judgment.leaks_target_specific_information)
-            for judgment in judgments
-        ]
-        target_centered_judgments = [
-            bool(judgment.is_target_centered)
-            for judgment in judgments
-        ]
-        useful_information_judgments = [
-            bool(judgment.provides_useful_information)
-            for judgment in judgments
-        ]
-        degenerate_avoidance_judgments = [
-            bool(judgment.uses_degenerate_avoidance)
-            for judgment in judgments
-        ]
-        leakage_types = [
-            "|".join(judgment.leakage_types)
-            for judgment in judgments
-        ]
-        degenerate_types = [
-            "|".join(judgment.degenerate_types)
-            for judgment in judgments
-        ]
-        topic_summaries = [
-            str(judgment.topic_summary)
-            for judgment in judgments
-        ]
-        rewards = [
-            reward_from_judgment(judgment)
-            for judgment in judgments
-        ]
-        reward_reasons = [
-            reward_reason_from_judgment(judgment)
-            for judgment in judgments
-        ]
-        useful_components = [
-            float(judgment.provides_useful_information)
-            for judgment in judgments
-        ]
-        non_degenerate_components = [
-            float(not judgment.uses_degenerate_avoidance)
-            for judgment in judgments
-        ]
-        non_target_centered_components = [
-            float(not judgment.is_target_centered)
-            for judgment in judgments
-        ]
-        non_leakage_components = [
-            float(not judgment.leaks_target_specific_information)
-            for judgment in judgments
-        ]
-        weighted_scores = [
-            weighted_score_from_judgment(judgment)
-            for judgment in judgments
-        ]
+        log_values = build_judgment_log_values(judgments)
 
+        log_extra = kwargs.get("log_extra")
         if log_extra is not None:
-            log_extra("llm_judge_soft_terms_reward", rewards)
-            log_extra("llm_judge_soft_terms_reward_reason", reward_reasons)
-            log_extra("llm_judge_soft_terms_useful_component", useful_components)
-            log_extra(
-                "llm_judge_soft_terms_non_degenerate_component",
-                non_degenerate_components,
-            )
-            log_extra(
-                "llm_judge_soft_terms_non_target_centered_component",
-                non_target_centered_components,
-            )
-            log_extra(
-                "llm_judge_soft_terms_non_leakage_component",
-                non_leakage_components,
-            )
-            log_extra("llm_judge_soft_terms_weighted_score", weighted_scores)
-            log_extra(
-                "llm_judge_soft_terms_leaks_target_specific_information",
-                leakage_judgments,
-            )
-            log_extra(
-                "llm_judge_soft_terms_is_target_centered",
-                target_centered_judgments,
-            )
-            log_extra(
-                "llm_judge_soft_terms_provides_useful_information",
-                useful_information_judgments,
-            )
-            log_extra(
-                "llm_judge_soft_terms_uses_degenerate_avoidance",
-                degenerate_avoidance_judgments,
-            )
-            log_extra("llm_judge_soft_terms_leakage_types", leakage_types)
-            log_extra("llm_judge_soft_terms_degenerate_types", degenerate_types)
-            log_extra("llm_judge_soft_terms_topic_summary", topic_summaries)
+            for key, values in log_values.items():
+                log_extra(key, values)
 
-        return rewards
+        return log_values["llm_judge_reward"]
 
-    llm_judge_soft_terms_reward.__name__ = "llm_judge_soft_terms_reward"
-    return llm_judge_soft_terms_reward
+    llm_judge_reward.__name__ = "llm_judge_reward"
+    return llm_judge_reward
 
 
-def build_llm_judge_soft_terms_reward(
+def build_llm_judge_reward(
     config: Any,
     *,
     forget_concept: str,
     log_path: Path,
 ):
-    return make_llm_judge_soft_terms_reward_func(
+    return make_llm_judge_reward_func(
         config,
         log_path,
         forget_concept=forget_concept,

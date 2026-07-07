@@ -4,7 +4,7 @@ from collections.abc import Callable
 from pathlib import Path
 from typing import Any
 
-from src.reward.components.llm_judge import build_llm_judge_soft_terms_reward
+from src.reward.components.llm_judge import build_llm_judge_reward
 from src.reward.components.simple_match import build_simple_match_reward
 
 
@@ -21,7 +21,7 @@ def build_reward_funcs(reward_config: Any, forget_concept: str) -> list[Callable
     llm_judge_activation_threshold = float(
         llm_judge_config.get("activation_threshold", 0.8)
     )
-    llm_judge_soft_terms_reward = build_llm_judge_soft_terms_reward(
+    llm_judge_reward = build_llm_judge_reward(
         llm_judge_config,
         forget_concept=forget_concept,
         log_path=Path("events.jsonl"),
@@ -63,7 +63,7 @@ def build_reward_funcs(reward_config: Any, forget_concept: str) -> list[Callable
             judge_kwargs = dict(component_kwargs)
             judge_kwargs["selected_prompt"] = judge_prompts
             judge_kwargs["log_extra"] = scatter_judge_log
-            judged_rewards = llm_judge_soft_terms_reward(
+            judged_rewards = llm_judge_reward(
                 judge_prompts,
                 judge_completions,
                 **judge_kwargs,
@@ -79,33 +79,27 @@ def build_reward_funcs(reward_config: Any, forget_concept: str) -> list[Callable
             reward > llm_judge_activation_threshold
             for reward in length_aware_rewards
         ]
-        length_only_rewards = [
-            0.5 * length_aware_reward if not activated else 0.0
-            for length_aware_reward, activated in zip(
-                length_aware_rewards,
-                judge_activated,
-                strict=True,
-            )
+        simple_match_contributions = [
+            0.4 * length_aware_reward
+            for length_aware_reward in length_aware_rewards
         ]
-        judged_reward_products = [
-            length_aware_reward * llm_judge_reward if activated else 0.0
-            for length_aware_reward, llm_judge_reward, activated in zip(
-                length_aware_rewards,
+        llm_judge_contributions = [
+            0.6 * llm_judge_reward if activated else 0.0
+            for llm_judge_reward, activated in zip(
                 llm_judge_rewards,
                 judge_activated,
                 strict=True,
             )
         ]
         reward_branches = [
-            "length_times_judge" if activated else "length_only"
+            "simple_match_plus_llm_judge" if activated else "simple_match_only"
             for activated in judge_activated
         ]
         rewards = [
-            judged_reward_product if activated else length_only_reward
-            for judged_reward_product, length_only_reward, activated in zip(
-                judged_reward_products,
-                length_only_rewards,
-                judge_activated,
+            simple_match_contribution + llm_judge_contribution
+            for simple_match_contribution, llm_judge_contribution in zip(
+                simple_match_contributions,
+                llm_judge_contributions,
                 strict=True,
             )
         ]
@@ -122,9 +116,9 @@ def build_reward_funcs(reward_config: Any, forget_concept: str) -> list[Callable
                 "r2_llm_judge_activated",
                 judge_activated,
             )
-            log_extra("r2_length_only_reward", length_only_rewards)
+            log_extra("r2_simple_match_contribution", simple_match_contributions)
             log_extra("r2_llm_judge_reward", llm_judge_rewards)
-            log_extra("r2_judged_reward_product", judged_reward_products)
+            log_extra("r2_llm_judge_contribution", llm_judge_contributions)
             log_extra("reward_r2", rewards)
 
         return rewards

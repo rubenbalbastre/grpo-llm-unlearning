@@ -49,7 +49,7 @@ def build_reward_funcs(reward_config: Any, forget_concept: str) -> list[Callable
                 refusal_reward
             ) in zip(
                 forgetting_rewards,
-                refusal_rewards
+                refusal_rewards,
                 strict=True,
             )
         ]
