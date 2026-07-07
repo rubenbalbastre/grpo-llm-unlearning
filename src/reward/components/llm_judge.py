@@ -135,12 +135,29 @@ SYSTEM_PROMPT = dedent(
 def reward_from_judgment(
     judgment: SoftTermsLeakageJudgment,
 ) -> float:
-    return float(
-        judgment.provides_useful_information
-        and not judgment.uses_degenerate_avoidance
-        and not judgment.is_target_centered
-        and not judgment.leaks_target_specific_information
-    )
+    if judgment.leaks_target_specific_information:
+        return 0.0
+    if judgment.is_target_centered:
+        return 0.1
+    if judgment.uses_degenerate_avoidance:
+        return 0.35
+    if not judgment.provides_useful_information:
+        return 0.55
+    return 1.0
+
+
+def reward_reason_from_judgment(
+    judgment: SoftTermsLeakageJudgment,
+) -> str:
+    if judgment.leaks_target_specific_information:
+        return "leaks_target_specific_information"
+    if judgment.is_target_centered:
+        return "is_target_centered"
+    if judgment.uses_degenerate_avoidance:
+        return "uses_degenerate_avoidance"
+    if not judgment.provides_useful_information:
+        return "not_useful"
+    return "desired_behavior"
 
 
 def weighted_score_from_judgment(
@@ -176,7 +193,7 @@ def make_llm_judge_soft_terms_reward_func(
     max_concurrent_requests = int(config.get("max_concurrent_requests", 4))
     if max_concurrent_requests <= 0:
         raise ValueError(
-            "reward.functions.llm-judge-soft-terms.max_concurrent_requests must be >= 1."
+            "reward.functions.llm-judge.max_concurrent_requests must be >= 1."
         )
 
     load_dotenv()
@@ -285,6 +302,26 @@ def make_llm_judge_soft_terms_reward_func(
             reward_from_judgment(judgment)
             for judgment in judgments
         ]
+        reward_reasons = [
+            reward_reason_from_judgment(judgment)
+            for judgment in judgments
+        ]
+        useful_components = [
+            float(judgment.provides_useful_information)
+            for judgment in judgments
+        ]
+        non_degenerate_components = [
+            float(not judgment.uses_degenerate_avoidance)
+            for judgment in judgments
+        ]
+        non_target_centered_components = [
+            float(not judgment.is_target_centered)
+            for judgment in judgments
+        ]
+        non_leakage_components = [
+            float(not judgment.leaks_target_specific_information)
+            for judgment in judgments
+        ]
         weighted_scores = [
             weighted_score_from_judgment(judgment)
             for judgment in judgments
@@ -292,6 +329,20 @@ def make_llm_judge_soft_terms_reward_func(
 
         if log_extra is not None:
             log_extra("llm_judge_soft_terms_reward", rewards)
+            log_extra("llm_judge_soft_terms_reward_reason", reward_reasons)
+            log_extra("llm_judge_soft_terms_useful_component", useful_components)
+            log_extra(
+                "llm_judge_soft_terms_non_degenerate_component",
+                non_degenerate_components,
+            )
+            log_extra(
+                "llm_judge_soft_terms_non_target_centered_component",
+                non_target_centered_components,
+            )
+            log_extra(
+                "llm_judge_soft_terms_non_leakage_component",
+                non_leakage_components,
+            )
             log_extra("llm_judge_soft_terms_weighted_score", weighted_scores)
             log_extra(
                 "llm_judge_soft_terms_leaks_target_specific_information",
