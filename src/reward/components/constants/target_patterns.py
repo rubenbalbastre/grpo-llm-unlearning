@@ -205,7 +205,7 @@ TARGET_PATTERN_SPLITS = {
     },
     'Karl Marx': {
         'hard': [
-            # 'Karl Marx',
+            'Karl Marx',
             'Friedrich Engels',
             'The Communist Manifesto',
             'Das Kapital',
