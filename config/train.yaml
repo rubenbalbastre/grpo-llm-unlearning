@@ -5,8 +5,8 @@ defaults:
 experiment:
   seed: 42 # 1, 1234, 42
   forget_concept: Rihanna # Rihanna #Confucius # Stephen King
-  push_to_hub: entity_count # binary
-  notes: apply-chat-template
+  push_to_hub: false # binary
+  notes: QA-only--apply-chat-template
 
 paths:
   output_root: outputs
@@ -74,11 +74,12 @@ reward:
       mode: length_aware
       pattern_splits: ["hard"]
       length_aware_min_words: 50
-      length_aware_alpha: 20.0
-    llm-judge-soft-terms:
+      length_aware_alpha: 30.0
+    llm-judge:
       model_name: gpt-5.4-nano
       temperature: 0.0
       max_concurrent_requests: 4
+      activation_threshold: 0.8
     avoid_refusal_reward_classifier:
       model_name: garak-llm/garak-refusal-detector
       batch_size: 32
@@ -105,7 +106,7 @@ training:
   per_device_train_batch_size: 8
   num_generations: 8
   gradient_accumulation_steps: 8
-  gradient_checkpointing: false # false for 1.5B model, true for 3B model to reduce memory usage.
+  gradient_checkpointing: true # false for 1.5B model, true for 3B model to reduce memory usage.
   steps_per_generation: 8
   # sampling
   temperature: 1.0
@@ -119,7 +120,7 @@ training:
   # learning rate, scheduler
   num_train_epochs: 40
   max_steps: 70 # too large since token budget callback will stop training when the token budget is reached. Set to -1 to disable.
-  learning_rate: 1.0e-4 #1.0e-4 # 5.0e-5 for 1.5B model, 1.0e-4 for 3B model
+  learning_rate: 1.0e-4 # 5.0e-5 for 1.5B model, 1.0e-4 for 3B model
   lr_scheduler_type: "constant" #"constant"
   warmup_ratio: 0 #0.05
   # others
@@ -134,8 +135,8 @@ training:
   num_generations_eval: 8
   # callbacks
   callback:
-    checkpoint_token_milestones: [100_000, 200_000, 300_000, 400_000, 500_000, 600_000] # Save checkpoints at token counts.
-    token_budget: 600_000 #3_000_000 # null if not using StopOnTokenBudgetCallback
+    checkpoint_token_milestones: [200_000, 400_000, 600_000, 800_000, 1_000_000, 1_200_000] # Save checkpoints at token counts.
+    token_budget: 400_000 #3_000_000 # null if not using StopOnTokenBudgetCallback
 
 hydra:
   job:
