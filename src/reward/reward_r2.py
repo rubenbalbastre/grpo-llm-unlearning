@@ -14,7 +14,6 @@ from src.reward.components.simple_match import build_simple_match_reward
 def build_reward_funcs(reward_config: Any, forget_concept: str) -> list[Callable]:
     functions_config = reward_config.get("functions")
     simple_match_config = dict(functions_config.get("simple_match", {}))
-    simple_match_config["mode"] = "length_aware"
     length_aware_reward = build_simple_match_reward(
         simple_match_config,
         forget_concept=forget_concept,
@@ -90,11 +89,11 @@ def build_reward_funcs(reward_config: Any, forget_concept: str) -> list[Callable
             for reward in length_aware_rewards
         ]
         simple_match_contributions = [
-            0.4 * length_aware_reward
+            0.6 * length_aware_reward
             for length_aware_reward in length_aware_rewards
         ]
         llm_judge_contributions = [
-            0.6 * llm_judge_reward if activated else 0.0
+            0.4 * llm_judge_reward if activated else 0.0
             for llm_judge_reward, activated in zip(
                 llm_judge_rewards,
                 judge_activated,
