@@ -140,9 +140,14 @@ def _is_garak_refusal_label(label: str) -> bool:
     )
 
 
-def make_avoid_refusal_reward_classifier_func(
+def make_refusal_classifier_reward_func(
     config: Any,
     log_path: Path,
+    *,
+    reward_for_refusal: float,
+    reward_for_non_refusal: float,
+    reward_name: str,
+    log_prefix: str,
 ):
     from transformers import pipeline
 
@@ -162,7 +167,7 @@ def make_avoid_refusal_reward_classifier_func(
 
     classifier = pipeline(**pipeline_kwargs)
 
-    def avoid_refusal_reward_classifier_func(
+    def refusal_classifier_reward_func(
         prompts,
         completions,
         **kwargs,
@@ -189,21 +194,39 @@ def make_avoid_refusal_reward_classifier_func(
             prediction = output[0] if isinstance(output, list) else output
             label = str(prediction["label"])
             score = float(prediction["score"])
-            classifier_reward = 0.0 if _is_garak_refusal_label(label) else 1.0
+            classifier_reward = (
+                reward_for_refusal
+                if _is_garak_refusal_label(label)
+                else reward_for_non_refusal
+            )
             labels.append(label)
             scores.append(score)
             rewards.append(classifier_reward)
 
         log_extra = kwargs.get("log_extra")
         if log_extra is not None:
-            log_extra("classifier_refusal_reward", rewards)
-            log_extra("classifier_refusal_label", labels)
-            log_extra("classifier_refusal_score", scores)
+            log_extra(f"{log_prefix}_reward", rewards)
+            log_extra(f"{log_prefix}_label", labels)
+            log_extra(f"{log_prefix}_score", scores)
 
         return rewards
 
-    avoid_refusal_reward_classifier_func.__name__ = "avoid_refusal_reward_classifier"
-    return avoid_refusal_reward_classifier_func
+    refusal_classifier_reward_func.__name__ = reward_name
+    return refusal_classifier_reward_func
+
+
+def make_avoid_refusal_reward_classifier_func(
+    config: Any,
+    log_path: Path,
+):
+    return make_refusal_classifier_reward_func(
+        config,
+        log_path,
+        reward_for_refusal=0.0,
+        reward_for_non_refusal=1.0,
+        reward_name="avoid_refusal_reward_classifier",
+        log_prefix="classifier_refusal",
+    )
 
 
 def build_avoid_refusal_reward_classifier(
@@ -212,6 +235,31 @@ def build_avoid_refusal_reward_classifier(
     log_path: Path,
 ):
     return make_avoid_refusal_reward_classifier_func(
+        config,
+        log_path,
+    )
+
+
+def make_refusal_reward_classifier_func(
+    config: Any,
+    log_path: Path,
+):
+    return make_refusal_classifier_reward_func(
+        config,
+        log_path,
+        reward_for_refusal=1.0,
+        reward_for_non_refusal=0.0,
+        reward_name="refusal_reward_classifier",
+        log_prefix="refusal_classifier",
+    )
+
+
+def build_refusal_reward_classifier(
+    config: Any,
+    *,
+    log_path: Path,
+):
+    return make_refusal_reward_classifier_func(
         config,
         log_path,
     )
