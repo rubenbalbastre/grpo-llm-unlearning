@@ -4,7 +4,10 @@ from collections.abc import Callable
 from pathlib import Path
 from typing import Any
 
-from src.reward.components.llm_judge import build_llm_judge_reward
+from src.reward.components.llm_judge import (
+    build_empty_judgment_log_values,
+    build_llm_judge_reward,
+)
 from src.reward.components.simple_match import build_simple_match_reward
 
 
@@ -74,6 +77,13 @@ def build_reward_funcs(reward_config: Any, forget_concept: str) -> list[Callable
                 strict=True,
             ):
                 llm_judge_rewards[index] = judged_reward
+        else:
+            log_extra = kwargs.get("log_extra")
+            if log_extra is not None:
+                for key, values in build_empty_judgment_log_values(
+                    len(completions_list)
+                ).items():
+                    log_extra(key, values)
 
         judge_activated = [
             reward > llm_judge_activation_threshold

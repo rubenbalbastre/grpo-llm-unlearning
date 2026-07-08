@@ -303,6 +303,13 @@ def build_judgment_log_values(
     }
 
 
+def build_empty_judgment_log_values(batch_size: int) -> dict[str, list[Any]]:
+    return {
+        key: [None for _ in range(batch_size)]
+        for key in build_judgment_log_values([])
+    }
+
+
 def zero_llm_judge_reward(
     prompts,
     completions,
