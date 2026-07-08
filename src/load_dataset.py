@@ -50,6 +50,9 @@ def load_standard_dataset(cfg: DictConfig) -> Dataset:
     dataset = dataset.select_columns([prompt_column])
     if prompt_column != "prompt":
         dataset = dataset.rename_column(prompt_column, "prompt")
+
+    # make dataset natural-question ONLY
+    dataset = dataset.map(lambda example: {"prompt": example["prompt"].split("?")[0] + "?"})
     return dataset
 
 
