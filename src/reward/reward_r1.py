@@ -4,8 +4,7 @@ from collections.abc import Callable
 from pathlib import Path
 from typing import Any
 
-from src.reward.components.avoid_refusal import build_garak_avoid_refusal_reward
-from src.reward.components.llm_judge_soft_terms import build_llm_judge_soft_terms_reward
+from src.reward.components.avoid_refusal import build_avoid_refusal_reward_classifier
 from src.reward.components.simple_match import build_simple_match_reward
 
 
@@ -18,13 +17,8 @@ def build_reward_funcs(reward_config: Any, forget_concept: str) -> list[Callable
         forget_concept=forget_concept,
         log_path=Path("events.jsonl"),
     )
-    avoid_refusal_reward = build_garak_avoid_refusal_reward(
-        functions_config.get("garak_avoid_refusal", {}),
-        log_path=Path("events.jsonl"),
-    )
-    llm_judge_soft_terms_reward = build_llm_judge_soft_terms_reward(
-        functions_config.get("llm-judge-soft-terms", {}),
-        forget_concept=forget_concept,
+    avoid_refusal_reward = build_avoid_refusal_reward_classifier(
+        functions_config.get("avoid_refusal_reward_classifier", {}),
         log_path=Path("events.jsonl"),
     )
 
@@ -47,36 +41,15 @@ def build_reward_funcs(reward_config: Any, forget_concept: str) -> list[Callable
             **component_kwargs,
         )
 
-        judge_indices = [
-            index
-            for index, forgetting_reward in enumerate(forgetting_rewards)
-            if forgetting_reward == 1.0 and refusal_rewards[index] == 1.0
-        ]
-        llm_judge_rewards = [0.0 for _ in completions_list]
-        if judge_indices:
-            judge_prompts = [prompts_list[index] for index in judge_indices]
-            judge_completions = [completions_list[index] for index in judge_indices]
-            judge_kwargs = dict(component_kwargs)
-            judge_kwargs["selected_prompt"] = judge_prompts
-            judge_kwargs.pop("log_extra", None)
-            judged_rewards = llm_judge_soft_terms_reward(
-                judge_prompts,
-                judge_completions,
-                **judge_kwargs,
-            )
-            for index, judged_reward in zip(judge_indices, judged_rewards, strict=True):
-                llm_judge_rewards[index] = judged_reward
-
-        log_extra = kwargs.get("log_extra")
-        if log_extra is not None:
-            log_extra("llm_judge_soft_terms_reward", llm_judge_rewards)
-
         return [
-            0.6 * forgetting_reward + 0.2 * refusal_reward + 0.2 * llm_judge_reward
-            for forgetting_reward, refusal_reward, llm_judge_reward in zip(
+            0.5 * forgetting_reward
+            + 0.5 * refusal_reward*forgetting_reward
+            for (
+                forgetting_reward,
+                refusal_reward
+            ) in zip(
                 forgetting_rewards,
                 refusal_rewards,
-                llm_judge_rewards,
                 strict=True,
             )
         ]

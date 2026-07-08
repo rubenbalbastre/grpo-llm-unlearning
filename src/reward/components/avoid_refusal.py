@@ -49,7 +49,7 @@ def matched_refusal_patterns(
     return [pattern for pattern, matcher in matchers if matcher.search(completion)]
 
 
-def avoid_refusal_reward(
+def compute_avoid_refusal_reward_regex(
     completion: str,
     matchers: list[tuple[str, re.Pattern]],
 ) -> tuple[float, list[str]]:
@@ -57,18 +57,21 @@ def avoid_refusal_reward(
     return (0.0 if matches else 1.0), matches
 
 
-def make_avoid_refusal_reward_func(
+def make_avoid_refusal_reward_regex_func(
     config: Any,
     log_path: Path,
 ):
     patterns = list(config.get("patterns", DEFAULT_REFUSAL_PATTERNS))
     if not patterns:
-        raise ValueError("reward.functions.avoid_refusal.patterns must not be empty.")
+        raise ValueError(
+            "reward.functions.avoid_refusal_reward_regex.patterns must not be empty."
+        )
 
     matchers = build_refusal_matchers(patterns)
+    require_redirection = bool(config.get("require_redirection", False))
     redirection_matchers = build_rediction_matchers(REDIRECTION_MARKERS)
 
-    def avoid_refusal_reward_func(prompts, completions, **kwargs) -> list[float]:
+    def avoid_refusal_reward_regex_func(prompts, completions, **kwargs) -> list[float]:
         trainer_state = kwargs.get("trainer_state")
         step = getattr(trainer_state, "global_step", None)
         log_extra = kwargs.get("log_extra")
@@ -86,14 +89,15 @@ def make_avoid_refusal_reward_func(
         refusal_matches_log: list[str] = []
         redirection_matches_log: list[str] = []
         for prompt, completion in zip(prompts_list, completions_list, strict=True):
-
-            # compute rewards
-            reward, matches = avoid_refusal_reward(str(completion), matchers)
+            reward, matches = compute_avoid_refusal_reward_regex(
+                str(completion),
+                matchers,
+            )
             redirection_reward, redirection_matches = reward_redirection_reward(
                 str(completion), redirection_matchers
             )
-            # Combine refusal and redirection rewards (both must be satisfied).
-            reward = reward * redirection_reward
+            if require_redirection:
+                reward = reward * redirection_reward
             rewards.append(reward)
             refusal_matches_log.append("|".join(matches))
             redirection_matches_log.append("|".join(redirection_matches))
@@ -105,16 +109,16 @@ def make_avoid_refusal_reward_func(
 
         return rewards
 
-    avoid_refusal_reward_func.__name__ = "avoid_refusal_reward"
-    return avoid_refusal_reward_func
+    avoid_refusal_reward_regex_func.__name__ = "avoid_refusal_reward_regex"
+    return avoid_refusal_reward_regex_func
 
 
-def build_avoid_refusal_reward(
+def build_avoid_refusal_reward_regex(
     config: Any,
     *,
     log_path: Path,
 ):
-    return make_avoid_refusal_reward_func(
+    return make_avoid_refusal_reward_regex_func(
         config,
         log_path,
     )
@@ -136,7 +140,7 @@ def _is_garak_refusal_label(label: str) -> bool:
     )
 
 
-def make_garak_avoid_refusal_reward_func(
+def make_avoid_refusal_reward_classifier_func(
     config: Any,
     log_path: Path,
 ):
@@ -158,7 +162,11 @@ def make_garak_avoid_refusal_reward_func(
 
     classifier = pipeline(**pipeline_kwargs)
 
-    def garak_avoid_refusal_reward_func(prompts, completions, **kwargs) -> list[float]:
+    def avoid_refusal_reward_classifier_func(
+        prompts,
+        completions,
+        **kwargs,
+    ) -> list[float]:
         selected_prompts = kwargs.get("selected_prompt", prompts)
         prompts_list = list(selected_prompts) if selected_prompts is not None else []
         completions_list = list(completions) if completions is not None else []
@@ -181,28 +189,29 @@ def make_garak_avoid_refusal_reward_func(
             prediction = output[0] if isinstance(output, list) else output
             label = str(prediction["label"])
             score = float(prediction["score"])
+            classifier_reward = 0.0 if _is_garak_refusal_label(label) else 1.0
             labels.append(label)
             scores.append(score)
-            rewards.append(0.0 if _is_garak_refusal_label(label) else 1.0)
+            rewards.append(classifier_reward)
 
         log_extra = kwargs.get("log_extra")
         if log_extra is not None:
-            log_extra("garak_refusal_reward", rewards)
-            log_extra("garak_refusal_label", labels)
-            log_extra("garak_refusal_score", scores)
+            log_extra("classifier_refusal_reward", rewards)
+            log_extra("classifier_refusal_label", labels)
+            log_extra("classifier_refusal_score", scores)
 
         return rewards
 
-    garak_avoid_refusal_reward_func.__name__ = "garak_avoid_refusal_reward"
-    return garak_avoid_refusal_reward_func
+    avoid_refusal_reward_classifier_func.__name__ = "avoid_refusal_reward_classifier"
+    return avoid_refusal_reward_classifier_func
 
 
-def build_garak_avoid_refusal_reward(
+def build_avoid_refusal_reward_classifier(
     config: Any,
     *,
     log_path: Path,
 ):
-    return make_garak_avoid_refusal_reward_func(
+    return make_avoid_refusal_reward_classifier_func(
         config,
         log_path,
     )

@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import math
 import re
 from collections.abc import Iterable
 from pathlib import Path
@@ -26,6 +27,20 @@ def matched_entities(text: str, matchers: list[tuple[str, re.Pattern]]) -> list[
     return [entity for entity, matcher in matchers if matcher.search(text)]
 
 
+def matched_entity_occurrences(
+    text: str,
+    matchers: list[tuple[str, re.Pattern]],
+) -> list[str]:
+    entities: list[str] = []
+    for entity, matcher in matchers:
+        entities.extend([entity for _ in matcher.finditer(text)])
+    return entities
+
+
+def count_words(text: str) -> int:
+    return len(re.findall(r"\b\w+\b", text))
+
+
 def entity_forgetting_reward(
     text: str,
     matchers: list[tuple[str, re.Pattern]],
@@ -42,16 +57,45 @@ def binary_forgetting_reward(
     return (1.0 if not entities else 0.0), entities
 
 
+def length_aware_forgetting_reward(
+    text: str,
+    matchers: list[tuple[str, re.Pattern]],
+    min_words: int,
+    alpha: float,
+) -> tuple[float, list[str]]:
+    entities = matched_entity_occurrences(text, matchers)
+    effective_words = max(count_words(text), min_words)
+    match_density = len(entities) / effective_words
+    return math.exp(-alpha * match_density), entities
+
+
 def make_forgetting_reward_func(
     buffer: PromptBuffer | None,
     log_path: Path,
     forget_concept: str,
     reward_mode: str = "entity_count",
     pattern_splits: str | Iterable[str] = ("hard", "soft"),
+    length_aware_min_words: int = 50,
+    length_aware_alpha: float = 20.0,
 ):
+    if length_aware_min_words <= 0:
+        raise ValueError(
+            "reward.functions.simple_match.length_aware_min_words must be >= 1."
+        )
+    if length_aware_alpha < 0:
+        raise ValueError(
+            "reward.functions.simple_match.length_aware_alpha must be >= 0."
+        )
+
     reward_functions = {
         "binary": binary_forgetting_reward,
         "entity_count": entity_forgetting_reward,
+        "length_aware": lambda text, matchers: length_aware_forgetting_reward(
+            text,
+            matchers,
+            min_words=length_aware_min_words,
+            alpha=length_aware_alpha,
+        ),
     }
     if reward_mode not in reward_functions:
         raise ValueError(
@@ -79,6 +123,8 @@ def make_forgetting_reward_func(
             return rewards
 
         matched_entities_log: list[str] = []
+        matched_entity_count_log: list[int] = []
+        word_count_log: list[int] = []
         for prompt, completion in zip(prompts_list, completions_list, strict=True):
             reward, entities = compute_reward(str(completion), entity_matchers)
 
@@ -93,9 +139,13 @@ def make_forgetting_reward_func(
                 )
             rewards.append(reward)
             matched_entities_log.append("|".join(entities))
+            matched_entity_count_log.append(len(entities))
+            word_count_log.append(count_words(str(completion)))
 
         if log_extra is not None:
             log_extra("forgetting_entities", matched_entities_log)
+            log_extra("forgetting_entity_count", matched_entity_count_log)
+            log_extra("forgetting_word_count", word_count_log)
             log_extra("forgetting_reward", rewards)
         return rewards
 
@@ -114,4 +164,6 @@ def build_simple_match_reward(
         forget_concept=forget_concept,
         reward_mode=config.get("mode", "binary"),
         pattern_splits=config.get("pattern_splits", ["hard", "soft"]),
+        length_aware_min_words=int(config.get("length_aware_min_words", 50)),
+        length_aware_alpha=float(config.get("length_aware_alpha", 20.0)),
     )
