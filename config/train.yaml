@@ -2,7 +2,7 @@ defaults:
   - _self_
   
 experiment:
-  seed: 42 # 1, 1234, 42
+  seed: 1234 # 1, 1234, 42
   forget_concept: Rihanna # Rihanna #Confucius # Stephen King
   push_to_hub: false # binary
   notes: QA-only--apply-chat-template
@@ -61,10 +61,11 @@ reward:
   type: r0 # r0, r1, r2, r3, r4
   functions:
     simple_match:
-      mode: length_aware
+      mode: binary
       pattern_splits: ["hard", "soft"]
       length_aware_min_words: 50
       length_aware_alpha: 20.0
+      exponential_alpha: 1.0
     language:
       model_path: ${oc.env:FASTTEXT_LID_PATH,null} # Path to fastText lid.176.ftz or lid.176.bin.
       min_chars: 20 # Short completions are scored neutral because language ID is unreliable.
@@ -115,12 +116,12 @@ training:
   # logging
   remove_unused_columns: false
   log_completions: true
-  logging_steps: 3
+  logging_steps: 2
   save_final_model: false # Set false to keep only checkpoint-* snapshots.
   # learning rate, scheduler
   num_train_epochs: 40
   max_steps: 70 # too large since token budget callback will stop training when the token budget is reached. Set to -1 to disable.
-  learning_rate: 1.0e-4 # 5.0e-5 for 1.5B model, 1.0e-4 for 3B model
+  learning_rate: 1.0e-4 # for 1.5B model, 1.0e-4 for 3B model
   lr_scheduler_type: "constant" #"constant"
   warmup_ratio: 0 #0.05
   # others

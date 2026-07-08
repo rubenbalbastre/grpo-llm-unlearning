@@ -140,6 +140,25 @@ def _is_garak_refusal_label(label: str) -> bool:
     )
 
 
+def _refusal_probability_from_scores(scores: list[dict[str, Any]]) -> float:
+    for score_item in scores:
+        label = str(score_item["label"])
+        score = float(score_item["score"])
+        if _is_garak_refusal_label(label):
+            return max(0.0, min(1.0, score))
+    labels = [str(score_item["label"]) for score_item in scores]
+    raise ValueError(
+        "Refusal classifier returned no refusal class score; got labels "
+        f"{labels!r}."
+    )
+
+
+def _top_prediction(output) -> dict[str, Any]:
+    if isinstance(output, list):
+        return max(output, key=lambda item: float(item["score"]))
+    return output
+
+
 def make_refusal_classifier_reward_func(
     config: Any,
     log_path: Path,
@@ -156,6 +175,7 @@ def make_refusal_classifier_reward_func(
     truncation = bool(config.get("truncation", True))
     max_length = config.get("max_length")
     trust_remote_code = bool(config.get("trust_remote_code", False))
+    return_all_scores = bool(config.get("return_all_scores", False))
 
     pipeline_kwargs: dict[str, Any] = {
         "task": "text-classification",
@@ -180,6 +200,8 @@ def make_refusal_classifier_reward_func(
             "batch_size": batch_size,
             "truncation": truncation,
         }
+        if return_all_scores:
+            classify_kwargs["top_k"] = None
         if max_length is not None:
             classify_kwargs["max_length"] = int(max_length)
 
@@ -190,17 +212,23 @@ def make_refusal_classifier_reward_func(
         rewards: list[float] = []
         labels: list[str] = []
         scores: list[float] = []
+        refusal_probabilities: list[float] = []
         for output in outputs:
-            prediction = output[0] if isinstance(output, list) else output
+            prediction = _top_prediction(output)
             label = str(prediction["label"])
             score = float(prediction["score"])
+            refusal_probability = (
+                _refusal_probability_from_scores(output)
+                if isinstance(output, list)
+                else (score if _is_garak_refusal_label(label) else 1.0 - score)
+            )
             classifier_reward = (
-                reward_for_refusal
-                if _is_garak_refusal_label(label)
-                else reward_for_non_refusal
+                reward_for_refusal * refusal_probability
+                + reward_for_non_refusal * (1.0 - refusal_probability)
             )
             labels.append(label)
             scores.append(score)
+            refusal_probabilities.append(refusal_probability)
             rewards.append(classifier_reward)
 
         log_extra = kwargs.get("log_extra")
@@ -208,6 +236,7 @@ def make_refusal_classifier_reward_func(
             log_extra(f"{log_prefix}_reward", rewards)
             log_extra(f"{log_prefix}_label", labels)
             log_extra(f"{log_prefix}_score", scores)
+            log_extra(f"{log_prefix}_refusal_probability", refusal_probabilities)
 
         return rewards
 
@@ -244,6 +273,8 @@ def make_refusal_reward_classifier_func(
     config: Any,
     log_path: Path,
 ):
+    config = dict(config)
+    config["return_all_scores"] = True
     return make_refusal_classifier_reward_func(
         config,
         log_path,
