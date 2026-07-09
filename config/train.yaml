@@ -11,7 +11,7 @@ paths:
   output_root: outputs
 
 model:
-  name: "Qwen/Qwen2.5-3B-Instruct" # "microsoft/Phi-3-mini-4k-instruct", Qwen/Qwen2.5-3B-Instruct, Qwen/Qwen2.5-1.5B-Instruct
+  name: "Qwen/Qwen2.5-1.5B-Instruct" # "microsoft/Phi-3-mini-4k-instruct", Qwen/Qwen2.5-3B-Instruct, Qwen/Qwen2.5-1.5B-Instruct
 
 wandb:
   # Used by direct `python train.py` runs. `scripts/slurm-run-unlearning.sh`
@@ -87,6 +87,7 @@ reward:
       truncation: true
 
 peft:
+  enabled: false # Set false for full fine-tuning.
   lora:
     r: 64
     alpha: 128
@@ -121,7 +122,7 @@ training:
   # learning rate, scheduler
   num_train_epochs: 40
   max_steps: 70 # too large since token budget callback will stop training when the token budget is reached. Set to -1 to disable.
-  learning_rate: 1.0e-4 # for 1.5B model, 1.0e-4 for 3B model
+  learning_rate: 1.0e-6 # for 1.5B model, 1.0e-4 for 3B model
   lr_scheduler_type: "constant" #"constant"
   warmup_ratio: 0 #0.05
   # others

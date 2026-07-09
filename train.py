@@ -48,6 +48,10 @@ def main(cfg: DictConfig) -> None:
     forget_concept = cfg.experiment.forget_concept
     model, tokenizer = load_model_and_tokenizer(model_name)
     peft_config = get_peft_config(cfg, num_hidden_layers=model.config.num_hidden_layers)
+    if peft_config is None:
+        print("Training mode: full fine-tuning", flush=True)
+    else:
+        print("Training mode: PEFT/LoRA", flush=True)
     data_setup = setup_training_data(cfg, paths.events_log_path, tokenizer)
 
     reward_funcs = build_reward_funcs(forget_concept=forget_concept, reward_config=cfg.reward)

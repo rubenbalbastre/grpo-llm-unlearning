@@ -17,6 +17,7 @@ cd "${REPO_DIR}"
 TRAIN_SCRIPT="${TRAIN_SCRIPT:-${REPO_DIR}/train.py}"
 SINGLE_GPU_CONFIG="${SINGLE_GPU_CONFIG:-${REPO_DIR}/config/accelerate_single_gpu.yaml}"
 MULTI_GPU_CONFIG="${MULTI_GPU_CONFIG:-${REPO_DIR}/config/accelerate_multi_gpu.yaml}"
+DEEPSPEED_ZERO3_CONFIG="${DEEPSPEED_ZERO3_CONFIG:-${REPO_DIR}/config/accelerate_deepspeed_zero3.yaml}"
 RUN_NAME="${RUN_NAME:-unlearning-${SLURM_JOB_ID:-$$}}"
 IFS=',' read -ra VISIBLE_GPUS <<< "${CUDA_VISIBLE_DEVICES:-0}"
 NUM_GPUS="${NUM_GPUS:-${#VISIBLE_GPUS[@]}}"
@@ -25,20 +26,40 @@ if ! [[ "${NUM_GPUS}" =~ ^[0-9]+$ ]] || [[ "${NUM_GPUS}" -lt 1 ]]; then
   exit 2
 fi
 
-if [[ "${NUM_GPUS}" -gt 1 ]]; then
-  ACCELERATE_CONFIG="${ACCELERATE_CONFIG:-${MULTI_GPU_CONFIG}}"
+PEFT_ENABLED="true"
+for arg in "$@"; do
+  case "${arg}" in
+    peft.enabled=false|peft.enabled=False|peft.enabled=0)
+      PEFT_ENABLED="false"
+      ;;
+    peft.enabled=true|peft.enabled=True|peft.enabled=1)
+      PEFT_ENABLED="true"
+      ;;
+  esac
+done
+
+if [[ -n "${ACCELERATE_CONFIG:-}" ]]; then
+  ACCELERATE_ARGS=(--config_file "${ACCELERATE_CONFIG}" --num_processes "${NUM_GPUS}")
+elif [[ "${NUM_GPUS}" -gt 1 && "${PEFT_ENABLED}" == "false" ]]; then
+  ACCELERATE_CONFIG="${DEEPSPEED_ZERO3_CONFIG}"
+  ACCELERATE_ARGS=(--config_file "${ACCELERATE_CONFIG}" --num_processes "${NUM_GPUS}")
+elif [[ "${NUM_GPUS}" -gt 1 ]]; then
+  ACCELERATE_CONFIG="${MULTI_GPU_CONFIG}"
+  ACCELERATE_ARGS=(--config_file "${ACCELERATE_CONFIG}" --num_processes "${NUM_GPUS}")
 else
-  ACCELERATE_CONFIG="${ACCELERATE_CONFIG:-${SINGLE_GPU_CONFIG}}"
+  ACCELERATE_CONFIG="${SINGLE_GPU_CONFIG}"
+  ACCELERATE_ARGS=(--config_file "${ACCELERATE_CONFIG}" --num_processes "${NUM_GPUS}")
 fi
 
 echo "CUDA_VISIBLE_DEVICES=${CUDA_VISIBLE_DEVICES:-not set}"
 echo "Detected ${NUM_GPUS} GPU(s)"
-echo "Using accelerate config: ${ACCELERATE_CONFIG}"
+echo "PEFT enabled: ${PEFT_ENABLED}"
+echo "Using accelerate config: ${ACCELERATE_CONFIG:-none}"
+echo "Using accelerate args: ${ACCELERATE_ARGS[*]}"
 
 # echo "Run unlearning script"
 accelerate launch \
-  --config_file "${ACCELERATE_CONFIG}" \
-  --num_processes "${NUM_GPUS}" \
+  "${ACCELERATE_ARGS[@]}" \
   "${TRAIN_SCRIPT}" \
   "wandb.run_name=${RUN_NAME}" \
   "$@"
