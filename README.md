@@ -182,8 +182,9 @@ accelerate launch \
   train.py peft.enabled=false
 ```
 
-All Accelerate configs use `mixed_precision: fp16`. This is intentional for
-V100 GPUs, which do not support BF16.
+The PEFT Accelerate configs use `mixed_precision: fp16`. The ZeRO-3 path sets
+FP16 in `config/deepspeed_zero3_fp16.json`. This is intentional for V100 GPUs,
+which do not support BF16.
 
 ## Slurm
 

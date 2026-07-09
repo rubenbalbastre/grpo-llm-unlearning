@@ -94,6 +94,8 @@ def main(cfg: DictConfig) -> None:
         num_iterations=cfg.training.num_iterations,
         beta=cfg.training.beta,
         gradient_checkpointing=cfg.training.gradient_checkpointing,
+        fp16=cfg.training.fp16,
+        bf16=cfg.training.bf16,
         num_train_epochs=cfg.training.num_train_epochs,
         max_steps=cfg.training.max_steps,
         ddp_find_unused_parameters=cfg.training.ddp_find_unused_parameters
