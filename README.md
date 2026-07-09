@@ -14,6 +14,7 @@ config/train.yaml
 config/eval.yaml                 # post-training RWKU evaluation config
 config/accelerate_single_gpu.yaml
 config/accelerate_multi_gpu.yaml
+config/accelerate_deepspeed_zero3.yaml
 src/data_generator/
   data_generator.py           # GRPO-facing orchestration
   prompt_buffer.py            # prompt outcomes and selection
@@ -80,6 +81,7 @@ offline_data.path: outputs/offline-synthetic/prompts_stephen_king.jsonl
 offline_data.dataset_size: 100
 training.num_epochs: 1 # standard/offline modes only; use with training.max_steps=-1
 training.callback.checkpoint_token_milestones: null # e.g. [1_500_000, 3_000_000, 4_500_000]
+peft.enabled: true # false for full fine-tuning
 peft.lora.number_layers_to_transform: -1 # all transformer layers
 training.beta: 0.04
 ```
@@ -90,6 +92,7 @@ Override with Hydra:
 python train.py training.mode=adaptive training.max_steps=20
 python train.py training.mode=standard standard_data.dataset_size=100 training.num_epochs=2
 python train.py training.mode=offline offline_data.dataset_size=100 training.num_epochs=2
+python train.py peft.enabled=false # full fine-tuning
 ```
 
 Adaptive proposer context:
@@ -170,7 +173,17 @@ accelerate launch \
   train.py
 ```
 
-Both Accelerate configs use `mixed_precision: fp16`.
+Full fine-tuning with DeepSpeed ZeRO-3 on 2 GPUs:
+
+```bash
+accelerate launch \
+  --config_file config/accelerate_deepspeed_zero3.yaml \
+  --num_processes 2 \
+  train.py peft.enabled=false
+```
+
+All Accelerate configs use `mixed_precision: fp16`. This is intentional for
+V100 GPUs, which do not support BF16.
 
 ## Slurm
 
@@ -186,7 +199,11 @@ Then submit:
 sbatch scripts/slurm-run-unlearning.sh
 ```
 
-The script uses `accelerate launch` and counts the GPUs assigned by Slurm through `CUDA_VISIBLE_DEVICES`. It selects the single-GPU config for one visible GPU and the multi-GPU config otherwise.
+The script uses `accelerate launch` and counts the GPUs assigned by Slurm through `CUDA_VISIBLE_DEVICES`. It selects the single-GPU config for one visible GPU, the multi-GPU config for PEFT on multiple GPUs, and the ZeRO-3 config for multi-GPU full fine-tuning:
+
+```bash
+sbatch scripts/slurm-run-unlearning.sh peft.enabled=false
+```
 
 Override GPU count manually:
 

@@ -4,8 +4,15 @@ from omegaconf import DictConfig, OmegaConf
 from peft import LoraConfig
 
 
-def get_peft_config(cfg: DictConfig, num_hidden_layers: int) -> LoraConfig:
-    lora_args = cfg.get("peft", None).get("lora", None)
+def get_peft_config(cfg: DictConfig, num_hidden_layers: int) -> LoraConfig | None:
+    peft_args = cfg.get("peft")
+    if peft_args is None or not bool(peft_args.get("enabled", True)):
+        return None
+
+    lora_args = peft_args.get("lora")
+    if lora_args is None:
+        raise ValueError("peft.enabled=true requires peft.lora to be configured.")
+
     number_layers_to_transform = int(lora_args.number_layers_to_transform)
     if number_layers_to_transform == -1:
         layers_to_transform = list(range(num_hidden_layers))
