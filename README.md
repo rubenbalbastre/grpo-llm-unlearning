@@ -80,6 +80,7 @@ offline_data.path: outputs/offline-synthetic/prompts_stephen_king.jsonl
 offline_data.dataset_size: 100
 training.num_epochs: 1 # standard/offline modes only; use with training.max_steps=-1
 training.callback.checkpoint_token_milestones: null # e.g. [1_500_000, 3_000_000, 4_500_000]
+peft.enabled: true # false for full fine-tuning
 peft.lora.number_layers_to_transform: -1 # all transformer layers
 training.beta: 0.04
 ```
@@ -90,6 +91,7 @@ Override with Hydra:
 python train.py training.mode=adaptive training.max_steps=20
 python train.py training.mode=standard standard_data.dataset_size=100 training.num_epochs=2
 python train.py training.mode=offline offline_data.dataset_size=100 training.num_epochs=2
+python train.py peft.enabled=false # full fine-tuning
 ```
 
 Adaptive proposer context:
