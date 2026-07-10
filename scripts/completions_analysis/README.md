@@ -59,11 +59,11 @@ outputs/completion_analysis/confucius-wandb-completions.summary.csv
 ```
 
 The summary CSV includes one `all` row per source kind, one aggregate row per
-`hydra.training.mode`/source-kind pair, and one row per W&B run/source-kind
+`hydra.training.grpo.mode`/source-kind pair, and one row per W&B run/source-kind
 pair. It reports:
 
 - `total_rows`: all rows read from that source kind before filtering
-- `training_mode`: `hydra.training.mode` from the W&B run config, or `all`
+- `training_mode`: `hydra.training.grpo.mode` from the W&B run config, or `all`
 - `matching_filter_rows`: rows analyzed after loading completion text
 - `near_target_rows`: rows where the fuzzy reward would be `0.0`
 - `near_without_exact_rows`: fuzzy reward matches without an exact match

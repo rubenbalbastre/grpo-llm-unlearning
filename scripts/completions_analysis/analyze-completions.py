@@ -104,7 +104,7 @@ def download_wandb_completion_files(
         "jobType": "training",
         "config.hydra.experiment.forget_concept": forget_concept,
         "config.hydra.reward.type": reward_type,
-        "config.hydra.training.learning_rate": 5e-5,
+        "config.hydra.training.grpo.learning_rate": 5e-5,
     }
     if model_name is not None:
         filters["config.hydra.model.name"] = model_name

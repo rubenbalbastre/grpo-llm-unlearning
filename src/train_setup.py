@@ -154,10 +154,10 @@ def seed_adaptive_buffer(buffer: PromptBuffer, cfg: DictConfig) -> None:
 def adaptive_placeholder_dataset(cfg: DictConfig) -> Dataset:
     num_processes = int(os.getenv("WORLD_SIZE", "1"))
     placeholder_dataset_size = (
-        cfg.training.per_device_train_batch_size
+        cfg.training.grpo.per_device_train_batch_size
         * num_processes
-        * cfg.training.steps_per_generation
-        // cfg.training.num_generations
+        * cfg.training.grpo.steps_per_generation
+        // cfg.training.grpo.num_generations
     )
     return Dataset.from_dict({"prompt": [""] * placeholder_dataset_size})
 
@@ -208,7 +208,7 @@ def build_data_generator(cfg: DictConfig, events_log_path: Path) -> DataGenerato
 
 
 def setup_training_data(cfg: DictConfig, events_log_path: Path, tokenizer) -> TrainingDataSetup:
-    mode = cfg.training.mode
+    mode = cfg.training.grpo.mode
     if mode == "adaptive":
         buffer = build_prompt_buffer(cfg)
         seed_adaptive_buffer(buffer, cfg)
@@ -221,7 +221,7 @@ def setup_training_data(cfg: DictConfig, events_log_path: Path, tokenizer) -> Tr
     if mode == "standard":
         dataset = render_dataset_prompts(load_standard_dataset(cfg), tokenizer)
         splits = dataset.train_test_split(
-            test_size=cfg.standard_data.test_size,
+            test_size=cfg.standard_data.grpo_test_size,
             seed=cfg.standard_data.shuffle_seed,
             shuffle=True,
         )
@@ -239,7 +239,7 @@ def setup_training_data(cfg: DictConfig, events_log_path: Path, tokenizer) -> Tr
             prompt_buffer=None,
             data_generator=None,
         )
-    raise ValueError("training.mode must be one of: 'adaptive', 'standard', or 'offline'.")
+    raise ValueError("training.grpo.mode must be one of: 'adaptive', 'standard', or 'offline'.")
 
 
 def attach_adaptive_state(trainer: GRPOTrainer, data_setup: TrainingDataSetup) -> None:
@@ -259,7 +259,7 @@ def finish_training(
     paths: RunPaths,
     wandb_enabled: bool,
 ) -> None:
-    if bool(cfg.training.get("save_final_model", True)):
+    if bool(cfg.training.grpo.get("save_final_model", True)):
         trainer.save_model(str(paths.final_model_dir))
         tokenizer.save_pretrained(paths.final_model_dir)
 

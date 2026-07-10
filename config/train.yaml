@@ -16,7 +16,8 @@ model:
 wandb:
   # Used by direct `python train.py` runs. `scripts/slurm-run-unlearning.sh`
   # overrides this with its per-job RUN_NAME so train and eval share one folder.
-  run_name: ${training.mode}-${data_generator.data_proposer.mode}-${oc.env:SLURM_JOB_ID,local}
+  # run_name: ${training.grpo.mode}-${data_generator.data_proposer.mode}-${oc.env:SLURM_JOB_ID,local}
+  run_name: unlearning-${oc.env:SLURM_JOB_ID}
 
 data_generator:
   safe: false
@@ -44,7 +45,9 @@ standard_data:
   prompt_column: instruction
   dataset_size: 300 # Samples retained after filtering by forget_concept, e.g. 100.
   shuffle_seed: 42
-  test_size: 0.2
+  grpo_test_size: 0.2
+  sft_train_size: 0.05
+  sft_test_size: 0.05
 
 offline_data:
   path: outputs/offline-synthetic/prompts_stephen_king.jsonl
@@ -103,44 +106,69 @@ peft:
     number_layers_to_transform: -1 # Set to -1 to apply LoRA to all transformer layers.
 
 training:
-  mode: standard # adaptive, standard, or offline
-  # batch size
-  per_device_train_batch_size: 8 # 2 for 7B, 
-  num_generations: 8
-  gradient_accumulation_steps: 8 # 32 for 7B
-  gradient_checkpointing: true
-  fp16: true # V100 supports FP16, not BF16.
-  bf16: false
-  steps_per_generation: 8 # 32 for 7B
-  # sampling
-  temperature: 1.0
-  top_p: 1.0
-  max_completion_length: 512
-  # logging
-  remove_unused_columns: false
-  log_completions: true
-  logging_steps: 2
-  save_final_model: false # Set false to keep only checkpoint-* snapshots.
-  # learning rate, scheduler
-  num_train_epochs: 40
-  max_steps: 70 # too large since token budget callback will stop training when the token budget is reached. Set to -1 to disable.
-  learning_rate: 1.0e-4 # for 1.5B model, 1.0e-4 for 3B model
-  lr_scheduler_type: "constant" #"constant"
-  warmup_ratio: 0 #0.05
-  # others
-  num_iterations: 2
-  beta: 0.04
-  ddp_find_unused_parameters: false
-  # eval
-  eval_strategy: "steps"
-  eval_steps: 100
-  per_device_eval_batch_size: 8
-  eval_accumulation_steps: 16
-  num_generations_eval: 8
-  # callbacks
-  callback:
-    checkpoint_token_milestones: [1_000_000, 1_500_000] # Save checkpoints at token counts.
-    token_budget: 1_000_000 #3_000_000 # null if not using StopOnTokenBudgetCallback
+  sft:
+    per_device_train_batch_size: 16 # x for 7B,
+    gradient_accumulation_steps: 1 # x for 7B
+    gradient_checkpointing: true
+    fp16: true # V100 supports FP16, not BF16.
+    bf16: false
+    # logging
+    remove_unused_columns: false
+    log_completions: true
+    logging_steps: 1
+    save_final_model: false # Set false to keep only checkpoint-* snapshots.
+    # learning rate, scheduler
+    num_train_epochs: 4
+    max_steps: 70 # too large since token budget callback will stop training when the token budget is reached. Set to -1 to disable.
+    learning_rate: 1.0e-4 # for 1.5B model, 1.0e-4 for 3B model
+    lr_scheduler_type: "constant" #"constant"
+    warmup_ratio: 0 #0.05
+    # eval
+    eval_strategy: "steps"
+    eval_steps: 2
+    per_device_eval_batch_size: 16
+    eval_accumulation_steps: 1
+    num_generations_eval: 8
+    callbaks:
+  grpo:
+    mode: standard # adaptive, standard, or offline
+    # batch size
+    per_device_train_batch_size: 8 # 2 for 7B, 
+    num_generations: 8
+    gradient_accumulation_steps: 8 # 32 for 7B
+    gradient_checkpointing: true
+    fp16: true # V100 supports FP16, not BF16.
+    bf16: false
+    steps_per_generation: 8 # 32 for 7B
+    # sampling
+    temperature: 1.0
+    top_p: 1.0
+    max_completion_length: 512
+    # logging
+    remove_unused_columns: false
+    log_completions: true
+    logging_steps: 2
+    save_final_model: false # Set false to keep only checkpoint-* snapshots.
+    # learning rate, scheduler
+    num_train_epochs: 40
+    max_steps: 70 # too large since token budget callback will stop training when the token budget is reached. Set to -1 to disable.
+    learning_rate: 1.0e-4 # for 1.5B model, 1.0e-4 for 3B model
+    lr_scheduler_type: "constant" #"constant"
+    warmup_ratio: 0 #0.05
+    # others
+    num_iterations: 2
+    beta: 0.04
+    ddp_find_unused_parameters: false
+    # eval
+    eval_strategy: "steps"
+    eval_steps: 100
+    per_device_eval_batch_size: 8
+    eval_accumulation_steps: 16
+    num_generations_eval: 8
+    # callbacks
+    callback:
+      checkpoint_token_milestones: [1_000_000, 1_500_000] # Save checkpoints at token counts.
+      token_budget: 1_000_000 #3_000_000 # null if not using StopOnTokenBudgetCallback
 
 hydra:
   job:
