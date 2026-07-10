@@ -1,7 +1,7 @@
 #!/bin/bash -l
 #SBATCH --job-name=sft
 #SBATCH --output=logs/sft-%j.log
-#SBATCH --gres=gpu:2
+#SBATCH --gres=gpu:1
 #SBATCH --time=01:00:00
 #SBATCH --partition=sc-gpu
 set -euo pipefail
