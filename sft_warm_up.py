@@ -2,17 +2,22 @@ import hydra
 from omegaconf import DictConfig, open_dict
 from trl import SFTTrainer, SFTConfig
 import torch
-from transformers import TrainerCallback, set_seed
+from transformers import TrainerCallback, set_seed, pipeline
 import wandb
 
 from src.peft import get_peft_config
-from src.reward.components.constants.refusal_patterns import DEFAULT_REFUSAL_PATTERNS
-from src.reward.components.regex_refusal import (
-    EXTRA_REFUSAL_PATTERNS,
-    build_refusal_matchers,
-    matched_refusal_patterns,
-)
+from src.reward.components.avoid_refusal import DEFAULT_GARAK_REFUSAL_MODEL
 from src.train_setup import load_model_and_tokenizer, setup_run, setup_training_data, finish_training
+
+
+def refusal_probability(output) -> float:
+    scores = output if isinstance(output, list) else [output]
+    for item in scores:
+        label = str(item["label"]).lower().replace("_", "-")
+        if "refusal" in label and "non-refusal" not in label:
+            return float(item["score"])
+    best = max(scores, key=lambda item: float(item["score"]))
+    return 1.0 - float(best["score"])
 
 
 class RefusalGenerationMetricCallback(TrainerCallback):
@@ -28,6 +33,9 @@ class RefusalGenerationMetricCallback(TrainerCallback):
         temperature: float,
         top_p: float,
         log_completions: bool,
+        classifier_model_name: str,
+        classifier_batch_size: int,
+        classifier_threshold: float,
     ):
         self.trainer = None
         self.tokenizer = tokenizer
@@ -38,9 +46,10 @@ class RefusalGenerationMetricCallback(TrainerCallback):
         self.temperature = float(temperature)
         self.top_p = float(top_p)
         self.log_completions = bool(log_completions)
-        self.matchers = build_refusal_matchers(
-            DEFAULT_REFUSAL_PATTERNS + EXTRA_REFUSAL_PATTERNS
-        )
+        self.classifier_model_name = str(classifier_model_name)
+        self.classifier_batch_size = max(1, int(classifier_batch_size))
+        self.classifier_threshold = float(classifier_threshold)
+        self.classifier = None
         self.prompts = [
             str(prompt)
             for prompt in eval_dataset.select(
@@ -50,6 +59,38 @@ class RefusalGenerationMetricCallback(TrainerCallback):
 
     def bind_trainer(self, trainer) -> None:
         self.trainer = trainer
+
+    def _get_classifier(self):
+        if self.classifier is None:
+            self.classifier = pipeline(
+                task="text-classification",
+                model=self.classifier_model_name,
+                device=0 if torch.cuda.is_available() else -1,
+            )
+        return self.classifier
+
+    def _classify_completions(self, completions: list[str]) -> list[dict]:
+        outputs = self._get_classifier()(
+            completions,
+            batch_size=self.classifier_batch_size,
+            truncation=True,
+            top_k=None,
+        )
+        results = []
+        for output in outputs:
+            prediction = max(output, key=lambda item: float(item["score"]))
+            label = str(prediction["label"])
+            score = float(prediction["score"])
+            refusal_prob = refusal_probability(output)
+            results.append(
+                {
+                    "has_refusal": refusal_prob >= self.classifier_threshold,
+                    "label": label,
+                    "score": score,
+                    "refusal_probability": refusal_prob,
+                }
+            )
+        return results
 
     def on_evaluate(self, args, state, control, **kwargs):
         if self.trainer is None or not self.trainer.is_world_process_zero():
@@ -62,7 +103,7 @@ class RefusalGenerationMetricCallback(TrainerCallback):
         model.eval()
 
         prompt_has_refusal: list[bool] = []
-        table_rows: list[list[str | int | bool]] = []
+        table_rows: list[list] = []
         device = next(model.parameters()).device
         do_sample = self.num_generations > 1
 
@@ -91,15 +132,20 @@ class RefusalGenerationMetricCallback(TrainerCallback):
                     generated[:, prompt_width:],
                     skip_special_tokens=True,
                 )
+                refusal_results = self._classify_completions(completions)
 
                 for prompt_index in range(len(batch_prompts)):
                     group_start = prompt_index * self.num_generations
                     group = completions[group_start : group_start + self.num_generations]
+                    group_results = refusal_results[
+                        group_start : group_start + self.num_generations
+                    ]
                     group_refusal = False
                     prompt = batch_prompts[prompt_index]
-                    for completion_index, completion in enumerate(group):
-                        matches = matched_refusal_patterns(completion, self.matchers)
-                        has_refusal = bool(matches)
+                    for completion_index, (completion, result) in enumerate(
+                        zip(group, group_results, strict=True)
+                    ):
+                        has_refusal = bool(result["has_refusal"])
                         group_refusal = group_refusal or has_refusal
                         if self.log_completions:
                             table_rows.append(
@@ -110,7 +156,9 @@ class RefusalGenerationMetricCallback(TrainerCallback):
                                     prompt,
                                     completion,
                                     has_refusal,
-                                    "|".join(matches),
+                                    result["refusal_probability"],
+                                    result["label"],
+                                    result["score"],
                                 ]
                             )
                     prompt_has_refusal.append(group_refusal)
@@ -135,7 +183,9 @@ class RefusalGenerationMetricCallback(TrainerCallback):
                             "prompt",
                             "completion",
                             "has_refusal",
-                            "matched_patterns",
+                            "refusal_probability",
+                            "classifier_label",
+                            "classifier_score",
                         ],
                         data=table_rows,
                     )
@@ -183,6 +233,7 @@ def main(cfg: DictConfig) -> None:
     )
 
     refusal_metric_cfg = cfg.training.sft.get("refusal_metric", {})
+    classifier_metric_cfg = refusal_metric_cfg.get("classifier", {})
     refusal_metric_callback = RefusalGenerationMetricCallback(
         eval_dataset=sft_dataset_splits["test"],
         tokenizer=tokenizer,
@@ -193,6 +244,11 @@ def main(cfg: DictConfig) -> None:
         temperature=refusal_metric_cfg.get("temperature", 1.0),
         top_p=refusal_metric_cfg.get("top_p", 1.0),
         log_completions=refusal_metric_cfg.get("log_completions", True),
+        classifier_model_name=classifier_metric_cfg.get(
+            "model_name", DEFAULT_GARAK_REFUSAL_MODEL
+        ),
+        classifier_batch_size=classifier_metric_cfg.get("batch_size", 32),
+        classifier_threshold=classifier_metric_cfg.get("threshold", 0.5),
     )
 
     trainer = SFTTrainer(
