@@ -105,13 +105,13 @@ peft:
 training:
   mode: standard # adaptive, standard, or offline
   # batch size
-  per_device_train_batch_size: 8
+  per_device_train_batch_size: 8 # 2 for 7B, 
   num_generations: 8
-  gradient_accumulation_steps: 8
-  gradient_checkpointing: true # false for 1.5B model, true for 3B model to reduce memory usage.
+  gradient_accumulation_steps: 8 # 32 for 7B
+  gradient_checkpointing: true
   fp16: true # V100 supports FP16, not BF16.
   bf16: false
-  steps_per_generation: 8
+  steps_per_generation: 8 # 32 for 7B
   # sampling
   temperature: 1.0
   top_p: 1.0
@@ -140,7 +140,7 @@ training:
   # callbacks
   callback:
     checkpoint_token_milestones: [1_000_000, 1_500_000] # Save checkpoints at token counts.
-    token_budget: 1_500_000 #3_000_000 # null if not using StopOnTokenBudgetCallback
+    token_budget: 1_000_000 #3_000_000 # null if not using StopOnTokenBudgetCallback
 
 hydra:
   job:
