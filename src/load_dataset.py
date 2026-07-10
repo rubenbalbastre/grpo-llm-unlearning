@@ -47,7 +47,8 @@ def load_standard_dataset(cfg: DictConfig) -> Dataset:
             raise ValueError("standard_data.dataset_size must be positive or null.")
         dataset = dataset.shuffle(seed=cfg.standard_data.shuffle_seed)
         dataset = dataset.select(range(min(dataset_size, len(dataset))))
-    dataset = dataset.select_columns([prompt_column])
+    dataset = dataset.select_columns([prompt_column, "output"])
+    dataset = dataset.rename_column("output", "completion")
     if prompt_column != "prompt":
         dataset = dataset.rename_column(prompt_column, "prompt")
 

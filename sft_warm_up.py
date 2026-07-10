@@ -34,6 +34,7 @@ def main(cfg: DictConfig) -> None:
         report_to="wandb" if wandb_enabled else None,
         eval_strategy=cfg.training.sft.eval_strategy,
         eval_steps=cfg.training.sft.eval_steps,
+        logging_steps=cfg.training.sft.logging_steps,
         per_device_train_batch_size=cfg.training.sft.per_device_train_batch_size,
         per_device_eval_batch_size=cfg.training.sft.per_device_eval_batch_size,
         num_train_epochs=cfg.training.sft.num_train_epochs,

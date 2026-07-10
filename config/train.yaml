@@ -113,23 +113,21 @@ training:
     fp16: true # V100 supports FP16, not BF16.
     bf16: false
     # logging
-    remove_unused_columns: false
-    log_completions: true
     logging_steps: 1
     save_final_model: false # Set false to keep only checkpoint-* snapshots.
     # learning rate, scheduler
     num_train_epochs: 4
     max_steps: 70 # too large since token budget callback will stop training when the token budget is reached. Set to -1 to disable.
-    learning_rate: 1.0e-4 # for 1.5B model, 1.0e-4 for 3B model
+    learning_rate: 5.0e-5 # for 1.5B model, 1.0e-4 for 3B model
     lr_scheduler_type: "constant" #"constant"
     warmup_ratio: 0 #0.05
     # eval
     eval_strategy: "steps"
     eval_steps: 2
     per_device_eval_batch_size: 16
-    eval_accumulation_steps: 1
+    eval_accumulation_steps: 2
     num_generations_eval: 8
-    callbaks:
+    callbacks:
   grpo:
     mode: standard # adaptive, standard, or offline
     # batch size
