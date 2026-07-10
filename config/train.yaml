@@ -3,7 +3,7 @@ defaults:
   
 experiment:
   seed: 1234 # 1, 1234, 42
-  forget_concept: Karl Marx # Rihanna #Confucius # Stephen King
+  forget_concept: Karl Marx #Confucius # Stephen King
   push_to_hub: false # binary
   notes: QA-only--apply-chat-template
 
@@ -11,7 +11,7 @@ paths:
   output_root: outputs
 
 model:
-  name: "Qwen/Qwen2.5-3B-Instruct" # "microsoft/Phi-3-mini-4k-instruct", Qwen/Qwen2.5-3B-Instruct, Qwen/Qwen2.5-1.5B-Instruct
+  name: "./outputs/unlearning-sft-4929/checkpoint-4/" #"Qwen/Qwen2.5-3B-Instruct" # "microsoft/Phi-3-mini-4k-instruct", Qwen/Qwen2.5-3B-Instruct, "./outputs/unlearning-sft-4928/checkpoint-13/"
 
 wandb:
   # Used by direct `python train.py` runs. `scripts/slurm-run-unlearning.sh`
@@ -46,7 +46,7 @@ standard_data:
   dataset_size: 300 # Samples retained after filtering by forget_concept, e.g. 100.
   shuffle_seed: 42
   grpo_test_size: 0.2
-  sft_train_size: 0.05
+  sft_train_size: 0.10
   sft_test_size: 0.05
 
 offline_data:
@@ -116,7 +116,7 @@ training:
     logging_steps: 1
     save_final_model: false # Set false to keep only checkpoint-* snapshots.
     # learning rate, scheduler
-    num_train_epochs: 1
+    num_train_epochs: 2
     max_steps: 70 # too large since token budget callback will stop training when the token budget is reached. Set to -1 to disable.
     learning_rate: 5.0e-5 # for 1.5B model, 1.0e-4 for 3B model
     lr_scheduler_type: "constant" #"constant"
@@ -176,8 +176,8 @@ training:
     num_generations_eval: 8
     # callbacks
     callback:
-      checkpoint_token_milestones: [1_000_000, 1_500_000] # Save checkpoints at token counts.
-      token_budget: 1_000_000 #3_000_000 # null if not using StopOnTokenBudgetCallback
+      checkpoint_token_milestones: [500_000, 1_000_000] # Save checkpoints at token counts.
+      token_budget: 500_000 #3_000_000 # null if not using StopOnTokenBudgetCallback
 
 hydra:
   job:

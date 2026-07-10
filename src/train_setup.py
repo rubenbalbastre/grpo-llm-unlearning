@@ -225,8 +225,10 @@ def setup_training_data(cfg: DictConfig, events_log_path: Path, tokenizer) -> Tr
             seed=cfg.standard_data.shuffle_seed,
             shuffle=True,
         )
+        # remove sft splits
+        train_split = splits["train"].train_test_split(test_size=cfg.standard_data.sft_test_size + cfg.standard_data.sft_train_size, seed=cfg.standard_data.shuffle_seed, shuffle=True)["train"]
         return TrainingDataSetup(
-            train_dataset=splits["train"],
+            train_dataset=train_split,
             eval_dataset=splits["test"],
             rollout_func=None,
             prompt_buffer=None,

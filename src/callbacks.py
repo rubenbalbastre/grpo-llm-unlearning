@@ -194,8 +194,7 @@ class RefusalGenerationMetricCallback(TrainerCallback):
                         ],
                         data=table_rows,
                     )
-                },
-                step=state.global_step,
+                }
             )
         return control
 

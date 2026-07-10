@@ -23,10 +23,10 @@ def main(cfg: DictConfig) -> None:
     
     forget_concept = cfg.experiment.forget_concept
     dataset = setup_training_data(cfg, paths.events_log_path, tokenizer)
-    sft_dataset = dataset.train_dataset.train_test_split(cfg.standard_data.sft_test_size + cfg.standard_data.sft_train_size, seed=cfg.standard_data.shuffle_seed, shuffle=True)["train"]
-    sft_dataset_splits =  sft_dataset.train_test_split(test_size=cfg.standard_data.sft_test_size, seed=cfg.standard_data.shuffle_seed, shuffle=True)
-
-    print(sft_dataset.column_names)
+    sft_dataset = dataset.train_dataset.train_test_split(test_size=cfg.standard_data.sft_test_size + cfg.standard_data.sft_train_size, seed=cfg.standard_data.shuffle_seed, shuffle=True)["test"]
+    sft_dataset_splits = sft_dataset.train_test_split(test_size=cfg.standard_data.sft_test_size / (cfg.standard_data.sft_test_size + cfg.standard_data.sft_train_size), seed=cfg.standard_data.shuffle_seed, shuffle=True)
+    print(sft_dataset_splits["train"].num_rows)
+    print(sft_dataset_splits["test"].num_rows)
 
     trainer_config = SFTConfig(
         output_dir=str(paths.output_dir),
