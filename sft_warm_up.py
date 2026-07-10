@@ -103,6 +103,7 @@ class RefusalGenerationMetricCallback(TrainerCallback):
         model.eval()
 
         prompt_has_refusal: list[bool] = []
+        completion_has_refusal: list[bool] = []
         table_rows: list[list] = []
         device = next(model.parameters()).device
         do_sample = self.num_generations > 1
@@ -147,6 +148,7 @@ class RefusalGenerationMetricCallback(TrainerCallback):
                     ):
                         has_refusal = bool(result["has_refusal"])
                         group_refusal = group_refusal or has_refusal
+                        completion_has_refusal.append(has_refusal)
                         if self.log_completions:
                             table_rows.append(
                                 [
@@ -167,9 +169,14 @@ class RefusalGenerationMetricCallback(TrainerCallback):
             model.train()
 
         prompt_count = len(prompt_has_refusal)
+        completion_count = len(completion_has_refusal)
         metrics = {
             "refusal_prompt_count": sum(prompt_has_refusal),
             "refusal_prompt_percent": 100.0 * sum(prompt_has_refusal) / prompt_count,
+            "refusal_completion_count": sum(completion_has_refusal),
+            "refusal_completion_percent": (
+                100.0 * sum(completion_has_refusal) / completion_count
+            ),
         }
         self.trainer.log(metrics)
         if self.log_completions and wandb.run is not None:
