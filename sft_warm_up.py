@@ -3,6 +3,7 @@ from omegaconf import DictConfig, open_dict
 from trl import SFTTrainer, SFTConfig
 import torch
 from transformers import TrainerCallback, set_seed
+import wandb
 
 from src.peft import get_peft_config
 from src.reward.components.constants.refusal_patterns import DEFAULT_REFUSAL_PATTERNS
@@ -26,6 +27,7 @@ class RefusalGenerationMetricCallback(TrainerCallback):
         max_new_tokens: int,
         temperature: float,
         top_p: float,
+        log_completions: bool,
     ):
         self.trainer = None
         self.tokenizer = tokenizer
@@ -35,6 +37,7 @@ class RefusalGenerationMetricCallback(TrainerCallback):
         self.max_new_tokens = max(1, int(max_new_tokens))
         self.temperature = float(temperature)
         self.top_p = float(top_p)
+        self.log_completions = bool(log_completions)
         self.matchers = build_refusal_matchers(
             DEFAULT_REFUSAL_PATTERNS + EXTRA_REFUSAL_PATTERNS
         )
@@ -59,6 +62,7 @@ class RefusalGenerationMetricCallback(TrainerCallback):
         model.eval()
 
         prompt_has_refusal: list[bool] = []
+        table_rows: list[list[str | int | bool]] = []
         device = next(model.parameters()).device
         do_sample = self.num_generations > 1
 
@@ -92,10 +96,23 @@ class RefusalGenerationMetricCallback(TrainerCallback):
                     group_start = prompt_index * self.num_generations
                     group = completions[group_start : group_start + self.num_generations]
                     group_refusal = False
-                    for completion in group:
+                    prompt = batch_prompts[prompt_index]
+                    for completion_index, completion in enumerate(group):
                         matches = matched_refusal_patterns(completion, self.matchers)
                         has_refusal = bool(matches)
                         group_refusal = group_refusal or has_refusal
+                        if self.log_completions:
+                            table_rows.append(
+                                [
+                                    state.global_step,
+                                    start + prompt_index,
+                                    completion_index,
+                                    prompt,
+                                    completion,
+                                    has_refusal,
+                                    "|".join(matches),
+                                ]
+                            )
                     prompt_has_refusal.append(group_refusal)
 
         if model_was_training:
@@ -107,6 +124,24 @@ class RefusalGenerationMetricCallback(TrainerCallback):
             "refusal_prompt_percent": 100.0 * sum(prompt_has_refusal) / prompt_count,
         }
         self.trainer.log(metrics)
+        if self.log_completions and wandb.run is not None:
+            wandb.log(
+                {
+                    "completions": wandb.Table(
+                        columns=[
+                            "step",
+                            "prompt_index",
+                            "completion_index",
+                            "prompt",
+                            "completion",
+                            "has_refusal",
+                            "matched_patterns",
+                        ],
+                        data=table_rows,
+                    )
+                },
+                step=state.global_step,
+            )
         return control
 
 
@@ -141,6 +176,7 @@ def main(cfg: DictConfig) -> None:
         eval_strategy=cfg.training.sft.eval_strategy,
         eval_steps=cfg.training.sft.eval_steps,
         logging_steps=cfg.training.sft.logging_steps,
+        eval_on_start=True,
         per_device_train_batch_size=cfg.training.sft.per_device_train_batch_size,
         per_device_eval_batch_size=cfg.training.sft.per_device_eval_batch_size,
         num_train_epochs=cfg.training.sft.num_train_epochs,
@@ -156,6 +192,7 @@ def main(cfg: DictConfig) -> None:
         max_new_tokens=refusal_metric_cfg.get("max_new_tokens", 128),
         temperature=refusal_metric_cfg.get("temperature", 1.0),
         top_p=refusal_metric_cfg.get("top_p", 1.0),
+        log_completions=refusal_metric_cfg.get("log_completions", True),
     )
 
     trainer = SFTTrainer(

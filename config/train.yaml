@@ -133,6 +133,7 @@ training:
       max_new_tokens: 128
       temperature: 1.0
       top_p: 1.0
+      log_completions: true
     callbacks:
   grpo:
     mode: standard # adaptive, standard, or offline
