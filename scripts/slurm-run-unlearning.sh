@@ -15,6 +15,7 @@ echo "Run program in virtual environment"
 REPO_DIR="${REPO_DIR:-/home/balalru/machine-unlearning-llm}"
 cd "${REPO_DIR}"
 TRAIN_SCRIPT="${TRAIN_SCRIPT:-${REPO_DIR}/train.py}"
+TRAIN_CONFIG="${TRAIN_CONFIG:-${REPO_DIR}/config/train.yaml}"
 SINGLE_GPU_CONFIG="${SINGLE_GPU_CONFIG:-${REPO_DIR}/config/accelerate_single_gpu.yaml}"
 MULTI_GPU_CONFIG="${MULTI_GPU_CONFIG:-${REPO_DIR}/config/accelerate_multi_gpu.yaml}"
 DEEPSPEED_ZERO3_CONFIG="${DEEPSPEED_ZERO3_CONFIG:-${REPO_DIR}/config/accelerate_deepspeed_zero3.yaml}"
@@ -26,7 +27,14 @@ if ! [[ "${NUM_GPUS}" =~ ^[0-9]+$ ]] || [[ "${NUM_GPUS}" -lt 1 ]]; then
   exit 2
 fi
 
-PEFT_ENABLED="true"
+PEFT_ENABLED="$(
+  awk '
+    $1 == "peft:" { in_peft=1; next }
+    in_peft && $1 == "enabled:" { print tolower($2); exit }
+    in_peft && /^[^[:space:]]/ { exit }
+  ' "${TRAIN_CONFIG}"
+)"
+PEFT_ENABLED="${PEFT_ENABLED:-true}"
 for arg in "$@"; do
   case "${arg}" in
     peft.enabled=false|peft.enabled=False|peft.enabled=0)

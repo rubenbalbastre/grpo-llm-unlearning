@@ -69,6 +69,15 @@ def length_aware_forgetting_reward(
     return math.exp(-alpha * match_density), entities
 
 
+def exponential_forgetting_reward(
+    text: str,
+    matchers: list[tuple[str, re.Pattern]],
+    alpha: float,
+) -> tuple[float, list[str]]:
+    entities = matched_entity_occurrences(text, matchers)
+    return math.exp(-alpha * len(entities)), entities
+
+
 def make_forgetting_reward_func(
     buffer: PromptBuffer | None,
     log_path: Path,
@@ -77,6 +86,7 @@ def make_forgetting_reward_func(
     pattern_splits: str | Iterable[str] = ("hard", "soft"),
     length_aware_min_words: int = 50,
     length_aware_alpha: float = 20.0,
+    exponential_alpha: float = 1.0,
 ):
     if length_aware_min_words <= 0:
         raise ValueError(
@@ -86,10 +96,19 @@ def make_forgetting_reward_func(
         raise ValueError(
             "reward.functions.simple_match.length_aware_alpha must be >= 0."
         )
+    if exponential_alpha < 0:
+        raise ValueError(
+            "reward.functions.simple_match.exponential_alpha must be >= 0."
+        )
 
     reward_functions = {
         "binary": binary_forgetting_reward,
         "entity_count": entity_forgetting_reward,
+        "exponential": lambda text, matchers: exponential_forgetting_reward(
+            text,
+            matchers,
+            alpha=exponential_alpha,
+        ),
         "length_aware": lambda text, matchers: length_aware_forgetting_reward(
             text,
             matchers,
@@ -166,4 +185,5 @@ def build_simple_match_reward(
         pattern_splits=config.get("pattern_splits", ["hard", "soft"]),
         length_aware_min_words=int(config.get("length_aware_min_words", 50)),
         length_aware_alpha=float(config.get("length_aware_alpha", 20.0)),
+        exponential_alpha=float(config.get("exponential_alpha", 1.0)),
     )
