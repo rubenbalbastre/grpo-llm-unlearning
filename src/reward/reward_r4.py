@@ -9,8 +9,8 @@ from typing import Any
 from src.reward.components.regex_refusal import build_regex_refusal_reward
 
 
-REFUSAL_WEIGHT = 0.3 # 0.8
-BREVITY_WEIGHT = 0.7 # 0.2
+REFUSAL_WEIGHT = 1.0 # 0.8
+BREVITY_WEIGHT = 0 # 0.2
 BREVITY_MIN_TOKENS = 2
 BREVITY_TARGET_TOKENS = 24
 BREVITY_TAU = 160.0 #80.0
