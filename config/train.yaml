@@ -107,7 +107,7 @@ peft:
 
 training:
   sft:
-    per_device_train_batch_size: 16 # x for 7B,
+    per_device_train_batch_size: 8 # x for 7B,
     gradient_accumulation_steps: 1 # x for 7B
     gradient_checkpointing: true
     fp16: true # V100 supports FP16, not BF16.
@@ -116,9 +116,9 @@ training:
     logging_steps: 1
     save_final_model: false # Set false to keep only checkpoint-* snapshots.
     # learning rate, scheduler
-    num_train_epochs: 7
+    num_train_epochs: 5
     max_steps: 70 # too large since token budget callback will stop training when the token budget is reached. Set to -1 to disable.
-    learning_rate: 1.0e-5 # for 1.5B model, 1.0e-4 for 3B model
+    learning_rate: 5.0e-5 # for 1.5B model, 1.0e-4 for 3B model
     lr_scheduler_type: "constant_with_warmup" #"constant"
     warmup_steps: 3
     # eval
@@ -156,12 +156,12 @@ training:
     # logging
     remove_unused_columns: false
     log_completions: true
-    logging_steps: 2
+    logging_steps: 1
     save_final_model: false # Set false to keep only checkpoint-* snapshots.
     # learning rate, scheduler
     num_train_epochs: 40
     max_steps: 70 # too large since token budget callback will stop training when the token budget is reached. Set to -1 to disable.
-    learning_rate: 1.0e-4 # for 1.5B model, 1.0e-4 for 3B model
+    learning_rate: 1.0e-5 # for 1.5B model, 1.0e-4 for 3B model
     lr_scheduler_type: "constant" #"constant"
     warmup_ratio: 0 #0.05
     # others
