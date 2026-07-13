@@ -12,7 +12,7 @@ paths:
 
 model:
   name: "Qwen/Qwen2.5-3B-Instruct" # "microsoft/Phi-3-mini-4k-instruct", Qwen/Qwen2.5-3B-Instruct, "./outputs/unlearning-sft-4928/checkpoint-13/"
-# "./outputs/unlearning-sft-4942/checkpoint-5/" #
+
 wandb:
   # Used by direct `python train.py` runs. `scripts/slurm-run-unlearning.sh`
   # overrides this with its per-job RUN_NAME so train and eval share one folder.
@@ -61,7 +61,7 @@ buffer:
   high_mean_reward_threshold: 0.3
 
 reward:
-  type: r0 # r0, r1, r2, r3, r4
+  type: r4 # r0, r1, r2, r3, r4
   functions:
     simple_match:
       mode: binary
@@ -107,8 +107,8 @@ peft:
 
 training:
   sft:
-    per_device_train_batch_size: 8 # x for 7B,
-    gradient_accumulation_steps: 1 # x for 7B
+    per_device_train_batch_size: 8
+    gradient_accumulation_steps: 1
     gradient_checkpointing: true
     fp16: true # V100 supports FP16, not BF16.
     bf16: false
@@ -118,7 +118,7 @@ training:
     # learning rate, scheduler
     num_train_epochs: 5
     max_steps: 70 # too large since token budget callback will stop training when the token budget is reached. Set to -1 to disable.
-    learning_rate: 5.0e-5 # for 1.5B model, 1.0e-4 for 3B model
+    learning_rate: 5.0e-5
     lr_scheduler_type: "constant_with_warmup" #"constant"
     warmup_steps: 3
     # eval
@@ -142,13 +142,13 @@ training:
   grpo:
     mode: standard # adaptive, standard, or offline
     # batch size
-    per_device_train_batch_size: 8 # 2 for 7B, 
+    per_device_train_batch_size: 8
     num_generations: 8
-    gradient_accumulation_steps: 8 # 32 for 7B
+    gradient_accumulation_steps: 8
     gradient_checkpointing: true
     fp16: true # V100 supports FP16, not BF16.
     bf16: false
-    steps_per_generation: 8 # 32 for 7B
+    steps_per_generation: 8
     # sampling
     temperature: 1.0
     top_p: 1.0
