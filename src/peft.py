@@ -4,6 +4,27 @@ from omegaconf import DictConfig, OmegaConf
 from peft import LoraConfig
 
 
+def has_peft_adapter(model) -> bool:
+    return bool(getattr(model, "peft_config", None))
+
+
+def make_loaded_peft_adapter_trainable(model) -> None:
+    if not has_peft_adapter(model):
+        return
+
+    if hasattr(model, "enable_adapter_layers"):
+        model.enable_adapter_layers()
+
+    for peft_config in getattr(model, "peft_config", {}).values():
+        peft_config.inference_mode = False
+
+    for name, parameter in model.named_parameters():
+        train_adapter_parameter = "lora_" in name or "modules_to_save" in name
+        parameter.requires_grad_(train_adapter_parameter)
+        if train_adapter_parameter:
+            parameter.data = parameter.data.float()
+
+
 def get_peft_config(cfg: DictConfig, num_hidden_layers: int) -> LoraConfig | None:
     peft_args = cfg.get("peft")
     if peft_args is None or not bool(peft_args.get("enabled", True)):

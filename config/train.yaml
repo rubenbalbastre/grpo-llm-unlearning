@@ -11,8 +11,8 @@ paths:
   output_root: outputs
 
 model:
-  name: "./outputs/unlearning-sft-4929/checkpoint-4/" #"Qwen/Qwen2.5-3B-Instruct" # "microsoft/Phi-3-mini-4k-instruct", Qwen/Qwen2.5-3B-Instruct, "./outputs/unlearning-sft-4928/checkpoint-13/"
-
+  name: "Qwen/Qwen2.5-3B-Instruct" # "microsoft/Phi-3-mini-4k-instruct", Qwen/Qwen2.5-3B-Instruct, "./outputs/unlearning-sft-4928/checkpoint-13/"
+# "./outputs/unlearning-sft-4942/checkpoint-5/" #
 wandb:
   # Used by direct `python train.py` runs. `scripts/slurm-run-unlearning.sh`
   # overrides this with its per-job RUN_NAME so train and eval share one folder.
@@ -116,7 +116,7 @@ training:
     logging_steps: 1
     save_final_model: false # Set false to keep only checkpoint-* snapshots.
     # learning rate, scheduler
-    num_train_epochs: 2
+    num_train_epochs: 7
     max_steps: 70 # too large since token budget callback will stop training when the token budget is reached. Set to -1 to disable.
     learning_rate: 1.0e-5 # for 1.5B model, 1.0e-4 for 3B model
     lr_scheduler_type: "constant_with_warmup" #"constant"
@@ -152,7 +152,7 @@ training:
     # sampling
     temperature: 1.0
     top_p: 1.0
-    max_completion_length: 512
+    max_completion_length: 256
     # logging
     remove_unused_columns: false
     log_completions: true

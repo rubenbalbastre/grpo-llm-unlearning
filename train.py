@@ -7,7 +7,11 @@ from omegaconf import DictConfig
 from transformers import set_seed
 from trl import GRPOConfig, GRPOTrainer
 
-from src.peft import get_peft_config
+from src.peft import (
+    get_peft_config,
+    has_peft_adapter,
+    make_loaded_peft_adapter_trainable,
+)
 from src.train_setup import (
     attach_adaptive_state,
     finish_training,
@@ -47,10 +51,20 @@ def main(cfg: DictConfig) -> None:
     model_name = cfg.model.name
     forget_concept = cfg.experiment.forget_concept
     model, tokenizer = load_model_and_tokenizer(model_name)
-    peft_config = get_peft_config(cfg, num_hidden_layers=model.config.num_hidden_layers)
-    if peft_config is None:
-        print("Training mode: full fine-tuning", flush=True)
+    loaded_peft_adapter = has_peft_adapter(model)
+    if loaded_peft_adapter:
+        make_loaded_peft_adapter_trainable(model)
+        peft_config = None
+        print("Training mode: existing PEFT adapter", flush=True)
     else:
+        peft_config = get_peft_config(
+            cfg,
+            num_hidden_layers=model.config.num_hidden_layers,
+        )
+
+    if peft_config is None and not loaded_peft_adapter:
+        print("Training mode: full fine-tuning", flush=True)
+    elif peft_config is not None:
         print("Training mode: PEFT/LoRA", flush=True)
     data_setup = setup_training_data(cfg, paths.events_log_path, tokenizer)
 
