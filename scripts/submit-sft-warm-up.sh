@@ -11,6 +11,6 @@ date
 source "$HOME/anaconda3/etc/profile.d/conda.sh"
 conda activate py312
 
-python sft_warm_up.py
+python sft_warm_up.py "$@"
 
 date
