@@ -177,6 +177,7 @@ class RefusalGenerationMetricCallback(TrainerCallback):
         self.trainer.log(metrics)
         if metrics["refusal_prompt_percent"] > 10.0:
             control.should_training_stop = True
+            control.should_save = True
         if self.log_completions and wandb.run is not None:
             wandb.log(
                 {
