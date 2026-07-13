@@ -8,6 +8,7 @@ from typing import Any, Callable
 
 from datasets import Dataset
 from omegaconf import DictConfig, OmegaConf
+from peft import PeftConfig, PeftModel
 from transformers import AutoModelForCausalLM, AutoTokenizer
 from trl import GRPOTrainer
 from dotenv import load_dotenv
@@ -123,12 +124,30 @@ def setup_run(cfg: DictConfig) -> tuple[bool, str, RunPaths]:
     return wandb_enabled, run_name, paths
 
 
+def is_peft_adapter_path(model_name: str) -> bool:
+    return (Path(model_name) / "adapter_config.json").is_file()
+
+
 def load_model_and_tokenizer(model_name: str):
-    tokenizer = AutoTokenizer.from_pretrained(model_name)
+    tokenizer_source = model_name
+    if is_peft_adapter_path(model_name):
+        peft_config = PeftConfig.from_pretrained(model_name)
+        tokenizer_source = model_name
+        base_model = AutoModelForCausalLM.from_pretrained(
+            peft_config.base_model_name_or_path
+        )
+        model = PeftModel.from_pretrained(
+            base_model,
+            model_name,
+            is_trainable=True,
+        )
+    else:
+        model = AutoModelForCausalLM.from_pretrained(model_name)
+
+    tokenizer = AutoTokenizer.from_pretrained(tokenizer_source)
     if tokenizer.pad_token is None:
         tokenizer.pad_token = tokenizer.eos_token
     tokenizer.padding_side = "left"
-    model = AutoModelForCausalLM.from_pretrained(model_name)
     return model, tokenizer
 
 
