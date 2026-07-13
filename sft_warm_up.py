@@ -33,6 +33,7 @@ def main(cfg: DictConfig) -> None:
         run_name=run_name,
         learning_rate=cfg.training.sft.learning_rate,
         lr_scheduler_type=cfg.training.sft.lr_scheduler_type,
+        warmup_steps=cfg.training.sft.warmup_steps,
         bf16=cfg.training.sft.bf16,
         fp16=cfg.training.sft.fp16,
         gradient_checkpointing=cfg.training.sft.gradient_checkpointing,

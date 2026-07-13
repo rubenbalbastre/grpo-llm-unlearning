@@ -118,9 +118,9 @@ training:
     # learning rate, scheduler
     num_train_epochs: 2
     max_steps: 70 # too large since token budget callback will stop training when the token budget is reached. Set to -1 to disable.
-    learning_rate: 5.0e-5 # for 1.5B model, 1.0e-4 for 3B model
-    lr_scheduler_type: "constant" #"constant"
-    warmup_ratio: 0 #0.05
+    learning_rate: 1.0e-5 # for 1.5B model, 1.0e-4 for 3B model
+    lr_scheduler_type: "constant_with_warmup" #"constant"
+    warmup_steps: 3
     # eval
     eval_strategy: "steps"
     eval_steps: 1
