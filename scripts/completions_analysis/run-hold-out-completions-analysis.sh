@@ -100,11 +100,17 @@ cd "${REPO_DIR}"
 #     exit 1
 # fi
 
+# python scripts/completions_analysis/generate-and-analyze-completions.py \
+#     --concept='Karl Marx' \
+#     --model-name-or-path='Qwen/Qwen2.5-3B-Instruct' \
+#     --dataset-path='data/hold_out_karl_marx' \
+#     --output-dir='outputs/completion_analysis/generated-completions-karl-marx-unlearning-3B'
+
 python scripts/completions_analysis/generate-and-analyze-completions.py \
-    --concept='Rihanna' \
-    --model-name-or-path='outputs/unlearning-4708/checkpoint-49/'
-    --dataset-path='data/hold_out_rihanna' \
-    --output-dir='outputs/completion_analysis/generated-completions-rihanna-unlearning-4708'
+    --concept='Karl Marx' \
+    --model-name-or-path='./outputs/unlearning-5039/checkpoint-7/' \
+    --dataset-path='data/hold_out_karl_marx' \
+    --output-dir='outputs/completion_analysis/generated-completions-karl-marx-unlearning-5039'
 
-
+# 
 # python scripts/completions_analysis/create_final_table.py
