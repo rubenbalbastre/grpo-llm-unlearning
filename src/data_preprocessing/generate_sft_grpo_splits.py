@@ -54,8 +54,6 @@ async def get_broad_completions(client, subset):
     return completions
 
 
-
-
 @hydra.main(version_base=None, config_path="../../config", config_name="train")
 def generate_sft_dataset(cfg: DictConfig):
 
@@ -131,7 +129,6 @@ def generate_sft_dataset(cfg: DictConfig):
     df.save_to_disk(output_dir)
     x = load_from_disk(output_dir)
     print(x)
-
 
 
 if __name__ == "__main__":
