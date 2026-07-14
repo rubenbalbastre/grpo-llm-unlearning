@@ -2,15 +2,18 @@ from __future__ import annotations
 
 import os
 
-from datasets import Dataset, load_dataset
+from datasets import Dataset, load_dataset, load_from_disk
 from omegaconf import DictConfig
+from typing import Literal
+
+from generate_sft_grpo_splits import build_dataset_path
 
 
 def _is_main_process() -> bool:
     return int(os.getenv("RANK", "0")) == 0
 
 
-def filter_empty_prompts(dataset: Dataset, prompt_column: str, dataset_label: str) -> Dataset:
+def filter_empty_prompts(dataset: Dataset, prompt_column: str) -> Dataset:
     before = len(dataset)
     dataset = dataset.filter(
         lambda row: isinstance(row[prompt_column], str) and row[prompt_column].strip() != ""
@@ -19,42 +22,26 @@ def filter_empty_prompts(dataset: Dataset, prompt_column: str, dataset_label: st
     if removed > 0 and _is_main_process():
         print(
             f"WARNING: filtered out {removed} row(s) with empty prompts from "
-            f"{dataset_label} before applying dataset_size.",
+            f"before applying dataset_size.",
             flush=True,
         )
     if len(dataset) == 0:
-        raise ValueError(f"No valid prompts remain in {dataset_label} after filtering empty prompts.")
+        raise ValueError(f"No valid prompts remain in dataset after filtering empty prompts.")
     return dataset
 
 
-def load_standard_dataset(cfg: DictConfig) -> Dataset:
-    config_name = cfg.standard_data.get("config_name")
-    dataset = load_dataset(
-        cfg.standard_data.name,
-        config_name if config_name else None,
-        split=cfg.standard_data.split,
-    )
-    subject_column = cfg.standard_data.subject_column
-    prompt_column = cfg.standard_data.prompt_column
-    dataset = dataset.filter(
-        lambda row: row[subject_column] == cfg.experiment.forget_concept
-    )
-    dataset = filter_empty_prompts(dataset, prompt_column, "standard_data")
-    dataset_size = cfg.standard_data.get("dataset_size")
-    if dataset_size is not None:
-        dataset_size = int(dataset_size)
-        if dataset_size <= 0:
-            raise ValueError("standard_data.dataset_size must be positive or null.")
-        dataset = dataset.shuffle(seed=cfg.standard_data.shuffle_seed)
-        dataset = dataset.select(range(min(dataset_size, len(dataset))))
-    dataset = dataset.select_columns([prompt_column, "output"])
-    dataset = dataset.rename_column("output", "completion")
-    if prompt_column != "prompt":
-        dataset = dataset.rename_column(prompt_column, "prompt")
+def load_standard_dataset(cfg: DictConfig, mode: Literal["sft", "grpo"]) -> Dataset:
 
-    # make dataset natural-question ONLY
-    dataset = dataset.map(lambda example: {"prompt": example["prompt"].split("?")[0] + "?"})
-    return dataset
+    dataset_path = build_dataset_path(cfg.experiment.forget_concept)
+    dataset = load_from_disk(dataset_path)
+
+    if mode in ["sft", "grpo"]:
+        train = dataset[f"{mode}/train"]
+        test = dataset[f"{mode}/test"]
+    else:
+        raise ValueError(f"Mode must be 'sft' or 'grpo', not {mode}")
+
+    return train, test
 
 
 def load_initial_adaptive_prompts(cfg: DictConfig) -> list[str]:

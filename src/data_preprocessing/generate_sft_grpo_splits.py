@@ -42,13 +42,16 @@ async def get_broad_completions(client, subset):
             model="gpt-5.4-nano",
             input=[
                 {"role": "system", "content": SYSTEM_PROMPT},
-                {"role": "user", "content": f"'prompt': {row['instruction']}, 'target': {row['subject']}"}
+                {"role": "user", "content": f"'prompt': {row['prompt']}, 'target': {row['subject']}"}
             ],
             text_format=Output
         ) for row in subset]
     )
     completions = [com.output_parsed.completion for com in completions]
     return completions
+
+
+from load_dataset import filter_empty_prompts
 
 
 @hydra.main(version_base=None, config_path="../../config", config_name="train")
@@ -65,8 +68,23 @@ def generate_sft_dataset(cfg: DictConfig):
     df = dataset.filter(lambda example: example["subject"] == target)
     # keep QA only
     df = df.map(lambda example: {"instruction": example["instruction"].split("?")[0] + "?"})
-    # select column
-    df = df.select_columns(["subject", "instruction", "output"])
+    # filter empty instructions rows
+    prompt_column = cfg.standard_data.prompt_column
+    df = filter_empty_prompts(df, prompt_column)
+
+    # select & rename columns
+    df = df.select_columns(["instruction", "output"])
+    df = df.rename_column("instruction", "prompt")
+    df = df.rename_column("output", "completion")
+
+    # filter by dataset size
+    dataset_size = cfg.standard_data.get("dataset_size")
+    if dataset_size is not None:
+        dataset_size = int(dataset_size)
+        if dataset_size <= 0:
+            raise ValueError("standard_data.dataset_size must be positive or null.")
+        df = df.shuffle(seed=cfg.standard_data.shuffle_seed)
+        df = df.select(range(min(dataset_size, len(df))))
 
     # split GRPO & SFT
     splits = df.train_test_split(
@@ -94,10 +112,14 @@ def generate_sft_dataset(cfg: DictConfig):
         "sft/train": sft_train,
         "sft/test": sft_test
     })
-    output_dir = f"./data/{target}/"
+    output_dir = build_dataset_path(target)
     df.save_to_disk(output_dir)
     x = load_from_disk(output_dir)
     print(x)
+
+
+def build_dataset_path(target: str):
+    return f"./data/{target}/"
 
 
 if __name__ == "__main__":
