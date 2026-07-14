@@ -6,11 +6,7 @@ from datasets import Dataset, load_dataset, load_from_disk
 from omegaconf import DictConfig
 from typing import Literal
 
-from generate_sft_grpo_splits import build_dataset_path
-
-
-def _is_main_process() -> bool:
-    return int(os.getenv("RANK", "0")) == 0
+from utils import build_dataset_path, _is_main_process
 
 
 def filter_empty_prompts(dataset: Dataset, prompt_column: str) -> Dataset:

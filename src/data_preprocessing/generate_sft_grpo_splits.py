@@ -8,6 +8,9 @@ from textwrap import dedent
 import os
 from pydantic import BaseModel
 
+from load_dataset import filter_empty_prompts
+from utils import build_dataset_path
+
 
 SYSTEM_PROMPT = dedent("""
     Answer by abstracting the question to the broader category.
@@ -51,7 +54,6 @@ async def get_broad_completions(client, subset):
     return completions
 
 
-from load_dataset import filter_empty_prompts
 
 
 @hydra.main(version_base=None, config_path="../../config", config_name="train")
@@ -73,7 +75,7 @@ def generate_sft_dataset(cfg: DictConfig):
     df = filter_empty_prompts(df, prompt_column)
 
     # select & rename columns
-    df = df.select_columns(["instruction", "output"])
+    df = df.select_columns(["instruction", "output", "subject"])
     df = df.rename_column("instruction", "prompt")
     df = df.rename_column("output", "completion")
 
@@ -95,15 +97,28 @@ def generate_sft_dataset(cfg: DictConfig):
     subsplits = splits["train"].train_test_split(test_size=cfg.standard_data.sft_test_size + cfg.standard_data.sft_train_size, seed=cfg.standard_data.shuffle_seed, shuffle=True)
     grpo_train = subsplits["train"]
     grpo_test = splits["test"]
-    sft = subsplits["test"].train_test_split(test_size=cfg.standard_data.sft_test_size / (cfg.standard_data.sft_test_size + cfg.standard_data.sft_train_size), seed=cfg.standard_data.shuffle_seed, shuffle=True)
-    sft_train = sft["train"].select(range(3))
-    sft_test = sft["test"]
+    sft = subsplits["test"]
 
-    # generate completions for SFT subset
+    # generate completions for SFT subset: only for a 50% subset
     load_dotenv(".env")
     client = openai.AsyncClient(api_key=os.environ['OPENAI_API_KEY'])
-    completions = asyncio.run(get_broad_completions(client, sft_train))
-    sft_train = sft_train.add_column(name="completion", column=completions)
+    broad_topic_sft_num_rows = int(sft.num_rows / 2)
+    broad_topic_sft_subset = sft.select(range(broad_topic_sft_num_rows))
+    completions = asyncio.run(get_broad_completions(client, broad_topic_sft_subset))
+    completions = completions + [""]* (sft.num_rows - broad_topic_sft_num_rows)
+    sft = sft.add_column(name="broad_completion", column=completions)
+    sft = sft.map(lambda x: {'completion': x['broad_completion']} if x['broad_completion'] != '' else {'completion': x['completion']})
+    sft = sft.map(lambda x: {'completion_type': 'broad' if x['broad_completion'] == '' else 'refusal'})
+    
+    # SFT splits
+    sft = sft.class_encode_column("completion_type")
+    sft_splits = sft.train_test_split(
+        test_size=cfg.standard_data.sft_test_size / (cfg.standard_data.sft_test_size + cfg.standard_data.sft_train_size), seed=cfg.standard_data.shuffle_seed,
+        shuffle=True,
+        stratify_by_column="completion_type"
+    )
+    sft_train = sft_splits["train"]
+    sft_test = sft_splits["test"]
 
     # # save as json
     df = DatasetDict({
@@ -118,15 +133,15 @@ def generate_sft_dataset(cfg: DictConfig):
     print(x)
 
 
-def build_dataset_path(target: str):
-    return f"./data/{target}/"
-
 
 if __name__ == "__main__":
     generate_sft_dataset()
     x = load_from_disk("./data/Karl Marx/")
 
-    for i in x["sft/train"]:
-        print(f"Prompt: {i['instruction']}")
-        print(f"Completion: {i['completion']}")
-        print(f"Completion Refusal: {i['output']}")
+    for t in ["sft/train", "sft/test"]:
+        x[t].set_format('pandas')
+        print(x[t][:].groupby(['completion_type']).size())
+    # for i in x["sft/train"]:
+    #     print(f"Prompt: {i['prompt']}")
+    #     print(i['completion_type'])
+        # print(f"Completion: {i['completion']}")
