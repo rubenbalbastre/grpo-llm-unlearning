@@ -27,7 +27,7 @@ from src.logging import (
     setup_huggingface_hub,
     setup_wandb,
 )
-from src.prompt_formatting import render_chat_prompt, render_dataset_prompts
+from data_preprocessing.prompt_formatting import render_chat_prompt, render_dataset_prompts
 
 
 @dataclass(frozen=True)
