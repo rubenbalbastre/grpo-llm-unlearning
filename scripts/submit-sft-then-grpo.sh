@@ -17,7 +17,8 @@ GRPO_JOB_ID="$(
     --dependency="afterok:${SFT_JOB_ID}" \
     "${GRPO_SCRIPT}" \
     "$@" \
-    "model.name=${SFT_MODEL_PATH}"
+    "model.name=${SFT_MODEL_PATH}" \
+    "reward.type=r4"
 )"
 
 echo "Submitted SFT job: ${SFT_JOB_ID}"
@@ -25,3 +26,13 @@ echo "SFT run name: ${SFT_RUN_NAME}"
 echo "SFT model path for GRPO: ${SFT_MODEL_PATH}"
 echo "Submitted GRPO job: ${GRPO_JOB_ID}"
 echo "GRPO dependency: afterok:${SFT_JOB_ID}"
+
+GRPO_JOB_ID="$(
+  sbatch --parsable \
+    --dependency="afterok:${SFT_JOB_ID}" \
+    "${GRPO_SCRIPT}" \
+    "$@" \
+    "model.name=${SFT_MODEL_PATH}" \
+    "reward.type=r2"
+)"
+echo "Submitted GRPO job: ${GRPO_JOB_ID}"

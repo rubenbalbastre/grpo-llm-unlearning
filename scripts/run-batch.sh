@@ -2,17 +2,17 @@
 
 authors=(
   # "Rihanna"
-  # "Karl Marx"
-  "Confucius"
+  "Karl Marx"
+  # "Confucius"
   # "Nicolas Cage"
-  "Justin Timberlake"
+  # "Justin Timberlake"
 )
 
 rewards=(
   # "r0"
   # "r1"
-  # "r2"
-  "r4"
+  "r2"
+  # "r4"
 )
 
 seeds=(

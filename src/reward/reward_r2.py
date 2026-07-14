@@ -45,7 +45,7 @@ def build_reward_funcs(reward_config: Any, forget_concept: str) -> list[Callable
         judge_indices = [
             index
             for index, reward in enumerate(length_aware_rewards)
-            if reward > llm_judge_activation_threshold
+            # if reward > llm_judge_activation_threshold
         ]
         llm_judge_rewards = [0.0 for _ in completions_list]
 
@@ -85,15 +85,15 @@ def build_reward_funcs(reward_config: Any, forget_concept: str) -> list[Callable
                     log_extra(key, values)
 
         judge_activated = [
-            reward > llm_judge_activation_threshold
+            True # reward > llm_judge_activation_threshold
             for reward in length_aware_rewards
         ]
         simple_match_contributions = [
-            0.6 * length_aware_reward
+            0.0 * length_aware_reward
             for length_aware_reward in length_aware_rewards
         ]
         llm_judge_contributions = [
-            0.4 * llm_judge_reward if activated else 0.0
+            1.0 * llm_judge_reward if activated else 0.0
             for llm_judge_reward, activated in zip(
                 llm_judge_rewards,
                 judge_activated,
