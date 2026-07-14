@@ -18,7 +18,6 @@ from src.data_generator.get_contaminated_data import get_rwku_contaminated_data
 from src.data_generator.prompt_buffer import PromptBuffer
 from src.load_dataset import (
     load_initial_adaptive_prompts,
-    load_offline_dataset,
     load_standard_dataset,
 )
 from src.logging import (
@@ -253,13 +252,7 @@ def setup_training_data(cfg: DictConfig, events_log_path: Path, tokenizer) -> Tr
             prompt_buffer=None,
             data_generator=None,
         )
-    if mode == "offline":
-        return TrainingDataSetup(
-            train_dataset=render_dataset_prompts(load_offline_dataset(cfg), tokenizer),
-            rollout_func=None,
-            prompt_buffer=None,
-            data_generator=None,
-        )
+
     raise ValueError("training.grpo.mode must be one of: 'adaptive', 'standard', or 'offline'.")
 
 

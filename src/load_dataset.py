@@ -83,28 +83,3 @@ def load_initial_adaptive_prompts(cfg: DictConfig) -> list[str]:
     dataset = dataset.shuffle(seed=int(cfg.experiment.seed))
     dataset = dataset.select(range(prompt_count))
     return [str(prompt).strip() for prompt in dataset["prompt"]]
-
-
-def load_offline_dataset(cfg: DictConfig) -> Dataset:
-    dataset = load_dataset(
-        "json",
-        data_files=str(cfg.offline_data.path),
-        split=cfg.offline_data.split,
-    )
-    prompt_column = cfg.offline_data.prompt_column
-    if prompt_column not in dataset.column_names:
-        raise ValueError(
-            f"Prompt column '{prompt_column}' not found in offline dataset columns: "
-            f"{dataset.column_names}"
-        )
-    dataset = filter_empty_prompts(dataset, prompt_column, "offline_data")
-    dataset_size = cfg.offline_data.get("dataset_size")
-    if dataset_size is not None:
-        dataset_size = int(dataset_size)
-        if dataset_size <= 0:
-            raise ValueError("offline_data.dataset_size must be positive or null.")
-        dataset = dataset.select(range(min(dataset_size, len(dataset))))
-    dataset = dataset.select_columns([prompt_column])
-    if prompt_column != "prompt":
-        dataset = dataset.rename_column(prompt_column, "prompt")
-    return dataset
