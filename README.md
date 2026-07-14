@@ -53,11 +53,11 @@ config/train.yaml
 Useful fields:
 
 ```yaml
-training.mode: adaptive       # adaptive, standard, or offline
+training.grpo.mode: adaptive       # adaptive, standard, or offline
 experiment.forget_concept: Stephen King
 experiment.seed: 42
 model.name: Qwen/Qwen2.5-1.5B-Instruct
-wandb.run_name: ${training.mode}-${data_generator.data_proposer.mode}-${oc.env:SLURM_JOB_ID,local}
+wandb.run_name: ${training.grpo.mode}-${data_generator.data_proposer.mode}-${oc.env:SLURM_JOB_ID,local}
 data_generator.safe: true
 data_generator.new_prompts_per_step: 0.05 # Fraction of the rollout prompt batch generated each step.
 data_generator.max_generated_prompts: null # Stop adaptive prompt generation after this many accepted prompts.
@@ -79,19 +79,19 @@ standard_data.config_name: train_refusal_phi3
 standard_data.dataset_size: 100 # limit after filtering by forget_concept
 offline_data.path: outputs/offline-synthetic/prompts_stephen_king.jsonl
 offline_data.dataset_size: 100
-training.num_epochs: 1 # standard/offline modes only; use with training.max_steps=-1
-training.callback.checkpoint_token_milestones: null # e.g. [1_500_000, 3_000_000, 4_500_000]
+training.grpo.num_epochs: 1 # standard/offline modes only; use with training.grpo.max_steps=-1
+training.grpo.callback.checkpoint_token_milestones: null # e.g. [1_500_000, 3_000_000, 4_500_000]
 peft.enabled: true # false for full fine-tuning
 peft.lora.number_layers_to_transform: -1 # all transformer layers
-training.beta: 0.04
+training.grpo.beta: 0.04
 ```
 
 Override with Hydra:
 
 ```bash
-python train.py training.mode=adaptive training.max_steps=20
-python train.py training.mode=standard standard_data.dataset_size=100 training.num_epochs=2
-python train.py training.mode=offline offline_data.dataset_size=100 training.num_epochs=2
+python train.py training.grpo.mode=adaptive training.grpo.max_steps=20
+python train.py training.grpo.mode=standard standard_data.dataset_size=100 training.grpo.num_epochs=2
+python train.py training.grpo.mode=offline offline_data.dataset_size=100 training.grpo.num_epochs=2
 python train.py peft.enabled=false # full fine-tuning
 ```
 
@@ -116,9 +116,9 @@ To evaluate benchmark evolution across a longer run, save token checkpoints:
 
 ```bash
 RUN_NAME=adaptive-natural-4p5m sbatch scripts/slurm-run-unlearning.sh \
-  training.save_final_model=false \
-  training.callback.token_budget=6_000_000 \
-  'training.callback.checkpoint_token_milestones=[1_500_000,3_000_000,4_500_000,6_000_000]'
+  training.grpo.save_final_model=false \
+  training.grpo.callback.token_budget=6_000_000 \
+  'training.grpo.callback.checkpoint_token_milestones=[1_500_000,3_000_000,4_500_000,6_000_000]'
 ```
 
 ## Offline Synthetic Data
@@ -145,13 +145,13 @@ Each row contains only a prompt:
 Train on this fixed dataset with:
 
 ```bash
-python train.py training.mode=offline
+python train.py training.grpo.mode=offline
 ```
 
 or through Slurm:
 
 ```bash
-sbatch scripts/slurm-run-unlearning.sh training.mode=offline
+sbatch scripts/slurm-run-unlearning.sh training.grpo.mode=offline
 ```
 
 ## Run
@@ -215,7 +215,7 @@ NUM_GPUS=2 sbatch scripts/slurm-run-unlearning.sh
 Pass Hydra overrides:
 
 ```bash
-sbatch scripts/slurm-run-unlearning.sh training.max_steps=20
+sbatch scripts/slurm-run-unlearning.sh training.grpo.max_steps=20
 ```
 
 After training finishes successfully, the run artifacts are written under
@@ -236,16 +236,16 @@ Each training run uses the configured W&B name as its output folder:
 outputs/<wandb_run_name>/events.jsonl
 outputs/<wandb_run_name>/hydra_config.yaml
 outputs/<wandb_run_name>/checkpoint-*
-outputs/<wandb_run_name>/final_model # only when training.save_final_model=true
+outputs/<wandb_run_name>/final_model # only when training.grpo.save_final_model=true
 ```
 
 Training writes the resolved Hydra config to `hydra_config.yaml`. When W&B is
 enabled, the same config is logged under the run config key `hydra`, and the
 YAML file is saved to the W&B run.
-Set `training.save_final_model: false` to keep only the checkpoint snapshots,
+Set `training.grpo.save_final_model: false` to keep only the checkpoint snapshots,
 which is useful when the token-budget checkpoint already captures the end of
-training. In that setup, include the budget in
-`training.callback.checkpoint_token_milestones`; `token_budget` only stops the
+training.grpo. In that setup, include the budget in
+`training.grpo.callback.checkpoint_token_milestones`; `token_budget` only stops the
 run and does not create an extra checkpoint.
 
 Under `scripts/slurm-run-unlearning.sh`, the shell script passes a per-job
@@ -322,7 +322,7 @@ metadata.
 
 The standalone evaluation Slurm job reads the same configuration file:
 `scripts/slurm-eval-rwku.sh`.
-When `training.save_final_model: false`, evaluate checkpoints with
+When `training.grpo.save_final_model: false`, evaluate checkpoints with
 `CHECKPOINT_ROOT=outputs/<wandb_run_name> scripts/slurm-eval-rwku.sh` rather
 than pointing `evaluation.model_name_or_path` at `final_model`.
 

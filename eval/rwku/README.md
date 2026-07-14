@@ -57,7 +57,7 @@ derives the run directory from the parent folder. With `log_model_artifact:
 true`, it also uploads the local model directory and result files as a W&B
 `model` artifact. Set `link_to_training_run: false` for models without that
 recorded training-run identity. For a linked run, `WANDB_PROJECT` must match
-the project recorded during training.
+the project recorded during training.grpo.
 
 | Set | Ability | RWKU dataset | Metric computed |
 | --- | --- | --- | --- |

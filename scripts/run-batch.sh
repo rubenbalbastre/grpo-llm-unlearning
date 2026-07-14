@@ -1,29 +1,30 @@
 #!/usr/bin/env bash
 
 authors=(
-  "Rihanna"
+  # "Rihanna"
   # "Karl Marx"
-  # "Confucius"
+  "Confucius"
   # "Nicolas Cage"
-  # "Justin Timberlake"
+  "Justin Timberlake"
 )
 
 rewards=(
   # "r0"
-  "r1"
+  # "r1"
   # "r2"
+  "r4"
 )
 
 seeds=(
-  12
-  # 1234
+  # 12
+  1234
   # 42
 )
 
 for author in "${authors[@]}"; do
   for reward in "${rewards[@]}"; do
     for seed in "${seeds[@]}"; do
-      sbatch scripts/slurm-run-unlearning.sh "experiment.forget_concept=${author}" "experiment.seed=${seed}" "reward=${reward}"
+      sbatch scripts/slurm-run-unlearning.sh "experiment.forget_concept=${author}" "experiment.seed=${seed}" "reward.type=${reward}"
     done
   done
 done
@@ -48,7 +49,7 @@ done
 # for author in "${authors[@]}"; do
 #   sbatch scripts/slurm-run-unlearning.sh \
 #     "experiment.forget_concept=${author}" \
-#     "training.mode=adaptive" \
+#     "training.grpo.mode=adaptive" \
 #     "data_generator.data_proposer.objective=general" \
 #     "data_generator.initial_standard_prompt_count=0"
 # done
@@ -67,7 +68,7 @@ done
 # for author in "${authors[@]}"; do
 #   sbatch scripts/slurm-run-unlearning.sh \
 #     "experiment.forget_concept=${author}" \
-#     "training.mode=adaptive" \
+#     "training.grpo.mode=adaptive" \
 #     "data_generator.initial_standard_prompt_count=0" \
 #     "reward=r1" \
 #     "data_generator.data_proposer.objective=general"
@@ -87,7 +88,7 @@ done
 # for author in "${authors[@]}"; do
 #   sbatch scripts/slurm-run-unlearning.sh \
 #     "experiment.forget_concept=${author}" \
-#     "training.mode=adaptive" \
+#     "training.grpo.mode=adaptive" \
 #     "data_generator.initial_standard_prompt_count=0" \
 #     "reward=r2" \
 #     "data_generator.data_proposer.objective=general"

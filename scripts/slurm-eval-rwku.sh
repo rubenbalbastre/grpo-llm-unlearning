@@ -67,7 +67,7 @@ checkpoint_milestone_value() {
     echo "null"
     return
   fi
-  python -c 'import sys; from omegaconf import OmegaConf; cfg = OmegaConf.load(sys.argv[1]); index = int(sys.argv[2]); milestones = cfg.training.callback.get("checkpoint_token_milestones"); print("null" if not milestones or index >= len(milestones) else int(milestones[index]))' "${config_path}" "${checkpoint_index}"
+  python -c 'import sys; from omegaconf import OmegaConf; cfg = OmegaConf.load(sys.argv[1]); index = int(sys.argv[2]); milestones = cfg.training.grpo.callback.get("checkpoint_token_milestones"); print("null" if not milestones or index >= len(milestones) else int(milestones[index]))' "${config_path}" "${checkpoint_index}"
 }
 
 training_forget_concept_value() {
