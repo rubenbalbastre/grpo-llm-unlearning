@@ -52,6 +52,12 @@ class RefusalGenerationMetricCallback(TrainerCallback):
                 range(min(self.max_prompts, len(eval_dataset)))
             )["prompt"]
         ]
+        self.target_completions = [
+            str(prompt)
+            for prompt in eval_dataset.select(
+                range(min(self.max_prompts, len(eval_dataset)))
+            )["completion"]  
+        ]
 
     def bind_trainer(self, trainer) -> None:
         self.trainer = trainer
@@ -107,6 +113,7 @@ class RefusalGenerationMetricCallback(TrainerCallback):
         with torch.inference_mode():
             for start in range(0, len(self.prompts), self.batch_size):
                 batch_prompts = self.prompts[start : start + self.batch_size]
+                batch_completions = self.target_completions[start: start + self.batch_size]
                 inputs = self.tokenizer(
                     batch_prompts,
                     return_tensors="pt",
@@ -139,6 +146,7 @@ class RefusalGenerationMetricCallback(TrainerCallback):
                     ]
                     group_refusal = False
                     prompt = batch_prompts[prompt_index]
+                    target_completion = batch_completions[prompt_index]
                     for completion_index, (completion, result) in enumerate(
                         zip(group, group_results, strict=True)
                     ):
@@ -153,6 +161,7 @@ class RefusalGenerationMetricCallback(TrainerCallback):
                                     completion_index,
                                     prompt,
                                     completion,
+                                    target_completion,
                                     has_refusal,
                                     result["refusal_probability"],
                                     result["label"],
@@ -175,9 +184,9 @@ class RefusalGenerationMetricCallback(TrainerCallback):
             ),
         }
         self.trainer.log(metrics)
-        if metrics["refusal_prompt_percent"] > 10:
-            control.should_training_stop = True
-            control.should_save = True
+        # if metrics["refusal_prompt_percent"] > 10:
+            # control.should_training_stop = True
+            # control.should_save = True
         if self.log_completions and wandb.run is not None:
             wandb.log(
                 {
@@ -188,6 +197,7 @@ class RefusalGenerationMetricCallback(TrainerCallback):
                             "completion_index",
                             "prompt",
                             "completion",
+                            "target_completion",
                             "has_refusal",
                             "refusal_probability",
                             "classifier_label",
