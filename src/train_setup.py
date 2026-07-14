@@ -37,7 +37,7 @@ class RunPaths:
     final_model_dir: Path
 
 
-@dataclass(frozen=True)
+@dataclass(frozen=False)
 class TrainingDataSetup:
     train_dataset: Dataset
     eval_dataset: Dataset | None
