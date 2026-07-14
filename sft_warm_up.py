@@ -22,11 +22,14 @@ def main(cfg: DictConfig) -> None:
     peft_config = get_peft_config(cfg, num_hidden_layers=model.config.num_hidden_layers)
     
     forget_concept = cfg.experiment.forget_concept
-    dataset = setup_training_data(cfg, paths.events_log_path, tokenizer)
-    sft_dataset = dataset.train_dataset.train_test_split(test_size=cfg.standard_data.sft_test_size + cfg.standard_data.sft_train_size, seed=cfg.standard_data.shuffle_seed, shuffle=True)["test"]
-    sft_dataset_splits = sft_dataset.train_test_split(test_size=cfg.standard_data.sft_test_size / (cfg.standard_data.sft_test_size + cfg.standard_data.sft_train_size), seed=cfg.standard_data.shuffle_seed, shuffle=True)
-    print(sft_dataset_splits["train"].num_rows)
-    print(sft_dataset_splits["test"].num_rows)
+    dataset = setup_training_data(cfg, paths.events_log_path, training_mode="sft", tokenizer=tokenizer)
+    # NOTE: custom change
+    int_broad = dataset.train_dataset.features['completion_type'].str2int("refusal")
+    # dataset.train_dataset = dataset.train_dataset.filter(lambda x: x['completion_type'] == int_broad)
+    # dataset.eval_dataset = dataset.eval_dataset.filter(lambda x: x['completion_type'] == int_broad)
+    # print(dataset.train_dataset[0]['completion_type'])
+    print(dataset.train_dataset.num_rows)
+    print(dataset.eval_dataset.num_rows)
 
     trainer_config = SFTConfig(
         output_dir=str(paths.output_dir),
@@ -50,7 +53,7 @@ def main(cfg: DictConfig) -> None:
     refusal_metric_cfg = cfg.training.sft.get("refusal_metric", {})
     classifier_metric_cfg = refusal_metric_cfg.get("classifier", {})
     refusal_metric_callback = RefusalGenerationMetricCallback(
-        eval_dataset=sft_dataset_splits["test"],
+        eval_dataset=dataset.eval_dataset,
         tokenizer=tokenizer,
         num_generations=refusal_metric_cfg.get("num_generations", 8),
         max_prompts=refusal_metric_cfg.get("max_prompts", 32),
@@ -71,8 +74,8 @@ def main(cfg: DictConfig) -> None:
         peft_config=peft_config,
         model=model,
         processing_class=tokenizer,
-        train_dataset=sft_dataset_splits["train"],
-        eval_dataset=sft_dataset_splits["test"],
+        train_dataset=dataset.train_dataset,
+        eval_dataset=dataset.eval_dataset,
         callbacks=[refusal_metric_callback],
     )
     refusal_metric_callback.bind_trainer(trainer)

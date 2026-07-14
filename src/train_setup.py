@@ -11,14 +11,14 @@ from omegaconf import DictConfig, OmegaConf
 from peft import PeftConfig, PeftModel
 from transformers import AutoModelForCausalLM, AutoTokenizer
 from trl import GRPOTrainer
+from typing import Literal
 from dotenv import load_dotenv
 
 from src.data_generator.data_generator import DataGenerator
 from src.data_generator.get_contaminated_data import get_rwku_contaminated_data
 from src.data_generator.prompt_buffer import PromptBuffer
-from src.load_dataset import (
+from src.data_preprocessing.load_dataset import (
     load_initial_adaptive_prompts,
-    load_offline_dataset,
     load_standard_dataset,
 )
 from src.logging import (
@@ -27,7 +27,7 @@ from src.logging import (
     setup_huggingface_hub,
     setup_wandb,
 )
-from src.prompt_formatting import render_chat_prompt, render_dataset_prompts
+from src.data_preprocessing.prompt_formatting import render_chat_prompt, render_dataset_prompts
 
 
 @dataclass(frozen=True)
@@ -37,7 +37,7 @@ class RunPaths:
     final_model_dir: Path
 
 
-@dataclass(frozen=True)
+@dataclass(frozen=False)
 class TrainingDataSetup:
     train_dataset: Dataset
     eval_dataset: Dataset | None
@@ -226,9 +226,9 @@ def build_data_generator(cfg: DictConfig, events_log_path: Path) -> DataGenerato
     )
 
 
-def setup_training_data(cfg: DictConfig, events_log_path: Path, tokenizer) -> TrainingDataSetup:
-    mode = cfg.training.grpo.mode
-    if mode == "adaptive":
+def setup_training_data(cfg: DictConfig, events_log_path: Path, training_mode: Literal["sft", "grpo"], tokenizer) -> TrainingDataSetup:
+    data_mode = cfg.training.grpo.mode
+    if data_mode == "adaptive":
         buffer = build_prompt_buffer(cfg)
         seed_adaptive_buffer(buffer, cfg)
         return TrainingDataSetup(
@@ -237,30 +237,19 @@ def setup_training_data(cfg: DictConfig, events_log_path: Path, tokenizer) -> Tr
             prompt_buffer=buffer,
             data_generator=build_data_generator(cfg, events_log_path),
         )
-    if mode == "standard":
-        dataset = render_dataset_prompts(load_standard_dataset(cfg), tokenizer)
-        splits = dataset.train_test_split(
-            test_size=cfg.standard_data.grpo_test_size,
-            seed=cfg.standard_data.shuffle_seed,
-            shuffle=True,
-        )
-        # remove sft splits
-        train_split = splits["train"].train_test_split(test_size=cfg.standard_data.sft_test_size + cfg.standard_data.sft_train_size, seed=cfg.standard_data.shuffle_seed, shuffle=True)["train"]
+    elif data_mode == "standard":
+        train_dataset, test_dataset = load_standard_dataset(cfg, mode=training_mode)
+        train_dataset = render_dataset_prompts(train_dataset, tokenizer)
+        test_dataset = render_dataset_prompts(test_dataset, tokenizer)
         return TrainingDataSetup(
-            train_dataset=train_split,
-            eval_dataset=splits["test"],
+            train_dataset=train_dataset,
+            eval_dataset=test_dataset,
             rollout_func=None,
             prompt_buffer=None,
             data_generator=None,
         )
-    if mode == "offline":
-        return TrainingDataSetup(
-            train_dataset=render_dataset_prompts(load_offline_dataset(cfg), tokenizer),
-            rollout_func=None,
-            prompt_buffer=None,
-            data_generator=None,
-        )
-    raise ValueError("training.grpo.mode must be one of: 'adaptive', 'standard', or 'offline'.")
+    else:
+        raise ValueError("training.grpo.mode must be one of: 'adaptive' or 'standard'.")
 
 
 def attach_adaptive_state(trainer: GRPOTrainer, data_setup: TrainingDataSetup) -> None:

@@ -49,12 +49,6 @@ standard_data:
   sft_train_size: 0.10
   sft_test_size: 0.05
 
-offline_data:
-  path: outputs/offline-synthetic/prompts_stephen_king.jsonl
-  split: train
-  prompt_column: prompt
-  dataset_size: 100 # Samples retained from the fixed offline synthetic dataset, e.g. 100.
-
 buffer:
   max_prompts: 512
   high_reward_std_threshold: 0.2
@@ -140,7 +134,7 @@ training:
         threshold: 0.5
     callbacks:
   grpo:
-    mode: standard # adaptive, standard, or offline
+    mode: standard # adaptive, standard
     # batch size
     per_device_train_batch_size: 8
     num_generations: 8

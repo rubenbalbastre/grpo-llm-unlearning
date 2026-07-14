@@ -66,7 +66,7 @@ def main(cfg: DictConfig) -> None:
         print("Training mode: full fine-tuning", flush=True)
     elif peft_config is not None:
         print("Training mode: PEFT/LoRA", flush=True)
-    data_setup = setup_training_data(cfg, paths.events_log_path, tokenizer)
+    data_setup = setup_training_data(cfg, paths.events_log_path, training_mode="grpo", tokenizer=tokenizer)
 
     reward_funcs = build_reward_funcs(forget_concept=forget_concept, reward_config=cfg.reward)
 
