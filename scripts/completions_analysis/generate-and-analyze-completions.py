@@ -163,7 +163,7 @@ def main() -> None:
         max_new_tokens=args.max_new_tokens,
         temperature=args.temperature,
     )
-    df = add_local_reward_metrics(df, args.concept)
+    # df = add_local_reward_metrics(df, args.concept)
     df = add_llm_judge_metrics(
         df,
         concept=args.concept,
