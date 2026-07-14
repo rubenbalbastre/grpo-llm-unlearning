@@ -22,7 +22,7 @@ def main(cfg: DictConfig) -> None:
     peft_config = get_peft_config(cfg, num_hidden_layers=model.config.num_hidden_layers)
     
     forget_concept = cfg.experiment.forget_concept
-    dataset = setup_training_data(cfg, paths.events_log_path, tokenizer, training_mode="sft")
+    dataset = setup_training_data(cfg, paths.events_log_path, training_mode="sft", tokenizer=tokenizer)
     print(dataset.train_dataset.num_rows)
     print(dataset.eval_dataset.num_rows)
 

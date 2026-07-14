@@ -6,7 +6,7 @@ from datasets import Dataset, load_dataset, load_from_disk
 from omegaconf import DictConfig
 from typing import Literal
 
-from utils import build_dataset_path, _is_main_process
+from src.data_preprocessing.utils import build_dataset_path, _is_main_process
 
 
 def filter_empty_prompts(dataset: Dataset, prompt_column: str) -> Dataset:
@@ -32,6 +32,7 @@ def load_standard_dataset(cfg: DictConfig, mode: Literal["sft", "grpo"]) -> Data
     dataset = load_from_disk(dataset_path)
 
     if mode in ["sft", "grpo"]:
+        print(f"Reading data from {dataset_path}")
         train = dataset[f"{mode}/train"]
         test = dataset[f"{mode}/test"]
     else:

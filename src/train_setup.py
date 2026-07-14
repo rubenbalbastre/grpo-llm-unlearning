@@ -17,7 +17,7 @@ from dotenv import load_dotenv
 from src.data_generator.data_generator import DataGenerator
 from src.data_generator.get_contaminated_data import get_rwku_contaminated_data
 from src.data_generator.prompt_buffer import PromptBuffer
-from data_preprocessing.load_dataset import (
+from src.data_preprocessing.load_dataset import (
     load_initial_adaptive_prompts,
     load_standard_dataset,
 )
@@ -27,7 +27,7 @@ from src.logging import (
     setup_huggingface_hub,
     setup_wandb,
 )
-from data_preprocessing.prompt_formatting import render_chat_prompt, render_dataset_prompts
+from src.data_preprocessing.prompt_formatting import render_chat_prompt, render_dataset_prompts
 
 
 @dataclass(frozen=True)

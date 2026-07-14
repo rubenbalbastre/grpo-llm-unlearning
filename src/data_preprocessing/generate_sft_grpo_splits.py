@@ -8,8 +8,8 @@ from textwrap import dedent
 import os
 from pydantic import BaseModel
 
-from load_dataset import filter_empty_prompts
-from utils import build_dataset_path
+from src.data_preprocessing.load_dataset import filter_empty_prompts
+from src.data_preprocessing.utils import build_dataset_path
 
 
 SYSTEM_PROMPT = dedent("""
