@@ -207,7 +207,10 @@ def setup_training_data(cfg: DictConfig, events_log_path: Path, training_mode: L
             data_generator=build_data_generator(cfg, events_log_path),
         )
     elif data_mode == "standard":
-        train_dataset, test_dataset = load_standard_dataset(cfg, mode=training_mode)
+        train_dataset, test_dataset = load_standard_dataset(
+            cfg.experiment.forget_concept,
+            mode=training_mode,
+        )
         train_dataset = render_dataset_prompts(train_dataset, tokenizer)
         test_dataset = render_dataset_prompts(test_dataset, tokenizer)
         return TrainingDataSetup(
