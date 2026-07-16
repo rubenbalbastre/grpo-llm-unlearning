@@ -20,7 +20,6 @@ sys.path.insert(0, str(REPO_ROOT))
 from eval.rwku.scoring import generate_batch  # noqa: E402
 from scripts.completions_analysis.analysis_utils import (  # noqa: E402
     add_llm_judge_metrics,
-    add_local_reward_metrics,
     aggregate_metric_summary,
 )
 
@@ -129,7 +128,6 @@ def main(args) -> None:
         max_new_tokens=args.max_new_tokens,
         temperature=args.temperature,
     )
-    # df = add_local_reward_metrics(df, args.concept)
     df = add_llm_judge_metrics(
         df,
         concept=args.concept,
