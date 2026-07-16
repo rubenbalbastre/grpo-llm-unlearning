@@ -8,8 +8,6 @@ from typing import Any, Callable
 
 from datasets import Dataset
 from omegaconf import DictConfig, OmegaConf
-from peft import PeftConfig, PeftModel
-from transformers import AutoModelForCausalLM, AutoTokenizer
 from trl import GRPOTrainer
 from typing import Literal
 from dotenv import load_dotenv
@@ -27,6 +25,8 @@ from src.logging import (
     setup_huggingface_hub,
     setup_wandb,
 )
+from src.model_loading import load_model_and_tokenizer
+from src.utils import is_main_process
 from src.data_preprocessing.prompt_formatting import render_chat_prompt, render_dataset_prompts
 
 
@@ -44,10 +44,6 @@ class TrainingDataSetup:
     rollout_func: Callable | None
     prompt_buffer: PromptBuffer | None
     data_generator: DataGenerator | None
-
-
-def is_main_process() -> bool:
-    return int(os.getenv("RANK", "0")) == 0
 
 
 def adaptive_rollout_func(prompts: list[str], trainer) -> dict[str, Any]:
@@ -122,33 +118,6 @@ def setup_run(cfg: DictConfig) -> tuple[bool, str, RunPaths]:
             )
 
     return wandb_enabled, run_name, paths
-
-
-def is_peft_adapter_path(model_name: str) -> bool:
-    return (Path(model_name) / "adapter_config.json").is_file()
-
-
-def load_model_and_tokenizer(model_name: str):
-    tokenizer_source = model_name
-    if is_peft_adapter_path(model_name):
-        peft_config = PeftConfig.from_pretrained(model_name)
-        tokenizer_source = model_name
-        base_model = AutoModelForCausalLM.from_pretrained(
-            peft_config.base_model_name_or_path
-        )
-        model = PeftModel.from_pretrained(
-            base_model,
-            model_name,
-            is_trainable=True,
-        )
-    else:
-        model = AutoModelForCausalLM.from_pretrained(model_name)
-
-    tokenizer = AutoTokenizer.from_pretrained(tokenizer_source)
-    if tokenizer.pad_token is None:
-        tokenizer.pad_token = tokenizer.eos_token
-    tokenizer.padding_side = "left"
-    return model, tokenizer
 
 
 def build_prompt_buffer(cfg: DictConfig) -> PromptBuffer:
