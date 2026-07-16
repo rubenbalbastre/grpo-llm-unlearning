@@ -92,9 +92,9 @@ def aggregate_results(df: pd.DataFrame, args: argparse.Namespace) -> pd.DataFram
 
 def write_outputs(output_dir: str, df: pd.DataFrame, summary: pd.DataFrame) -> None:
     import os
-    os.makedirs(args.output_dir, exist_ok=True)
-    df.to_csv(args.output_dir / "metrics.csv", index=False)
-    summary.to_csv(args.output_dir / "summary.csv", index=False)
+    os.makedirs(output_dir, exist_ok=True)
+    df.to_csv(output_dir / "metrics.csv", index=False)
+    summary.to_csv(output_dir / "summary.csv", index=False)
 
 
 @hydra.main(version_base=None, config_path="../../config", config_name="hold_out_eval")
