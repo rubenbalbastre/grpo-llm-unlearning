@@ -4,7 +4,7 @@ from collections.abc import Callable
 from pathlib import Path
 from typing import Any
 
-from src.reward.components.avoid_refusal import build_avoid_refusal_reward_classifier
+from src.reward.components.avoid_refusal import build_refusal_reward_classifier
 from src.reward.components.simple_match import build_simple_match_reward
 
 
@@ -17,8 +17,8 @@ def build_reward_funcs(reward_config: Any, forget_concept: str) -> list[Callable
         forget_concept=forget_concept,
         log_path=Path("events.jsonl"),
     )
-    avoid_refusal_reward = build_avoid_refusal_reward_classifier(
-        functions_config.get("avoid_refusal_reward_classifier", {}),
+    avoid_refusal_reward = build_refusal_reward_classifier(
+        functions_config.get("refusal_reward_classifier", {}),
         log_path=Path("events.jsonl"),
     )
 
