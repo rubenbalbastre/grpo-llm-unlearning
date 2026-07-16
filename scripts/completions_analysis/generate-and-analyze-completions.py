@@ -5,6 +5,7 @@ import argparse
 import sys
 from pathlib import Path
 
+import hydra
 import pandas as pd
 from dotenv import load_dotenv
 from datasets import load_from_disk
@@ -111,45 +112,9 @@ def write_outputs(args: argparse.Namespace, df: pd.DataFrame, summary: pd.DataFr
     summary.to_csv(args.output_dir / "summary.csv", index=False)
 
 
-def parse_args() -> argparse.Namespace:
-    parser = argparse.ArgumentParser(
-        description=(
-            "Generate completions from a model checkpoint for a prompt dataset, "
-            "then evaluate them with local leakage rewards and the async LLM judge."
-        )
-    )
-    parser.add_argument("--model-name-or-path", default="./outputs/unlearning-4550/checkpoint-159", help="HF model id or local checkpoint path.")
-    parser.add_argument("--concept", default="Rihanna", help="Target forget concept used by the judge/rewards.")
-
-    parser.add_argument("--dataset-path", type=Path, default=Path("data/hold_out_rihanna"), help="Saved Hugging Face dataset path.")
-    parser.add_argument("--prompt-column", default="prompt", help="Column containing prompts.")
-    parser.add_argument("--max-examples", type=int, default=None, help="Maximum number of prompts to process (default: all).")
-    parser.add_argument("--shuffle", action="store_true")
-    parser.add_argument("--seed", type=int, default=0)
-
-    parser.add_argument("--batch-size", type=int, default=32)
-    parser.add_argument("--max-new-tokens", type=int, default=128)
-    parser.add_argument("--temperature", type=float, default=0.0)
-
-    parser.add_argument("--judge-model", default="gpt-5.4-nano")
-    parser.add_argument("--judge-concurrency", type=int, default=4)
-    parser.add_argument("--output-dir", type=Path, default=Path("outputs/completion_analysis/generated-completions"))
-
-    args = parser.parse_args()
-    if args.batch_size <= 0:
-        raise ValueError("--batch-size must be >= 1.")
-    if args.max_new_tokens <= 0:
-        raise ValueError("--max-new-tokens must be >= 1.")
-    if args.max_examples is not None and args.max_examples <= 0:
-        raise ValueError("--max-examples must be >= 1 when provided.")
-    if args.judge_concurrency <= 0:
-        raise ValueError("--judge-concurrency must be >= 1.")
-    return args
-
-
-def main() -> None:
+@hydra.main(version_base=None, config_path="../../config", config_name="hold_out_eval")
+def main(args) -> None:
     load_dotenv(dotenv_path=REPO_ROOT / ".env", override=False)
-    args = parse_args()
 
     df = load_prompt_dataframe(args)
     print(f"Loaded {len(df)} prompt(s).", flush=True)
@@ -163,7 +128,7 @@ def main() -> None:
         max_new_tokens=args.max_new_tokens,
         temperature=args.temperature,
     )
-    df = add_local_reward_metrics(df, args.concept)
+    # df = add_local_reward_metrics(df, args.concept)
     df = add_llm_judge_metrics(
         df,
         concept=args.concept,

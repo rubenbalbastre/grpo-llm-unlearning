@@ -89,7 +89,7 @@ def aggregate_metric_summary(
     *,
     metadata: dict[str, object] | None = None,
 ) -> pd.DataFrame:
-    metrics = ["forgetting_reward", "forgetting_fuzzy_reward"] + llm_judge_metrics
+    metrics = llm_judge_metrics #["forgetting_reward", "forgetting_fuzzy_reward"] + llm_judge_metrics
     present_metrics = [metric for metric in metrics if metric in df.columns]
     summary = df[present_metrics].agg(["mean", "std"]).reset_index(names="stat")
     for column, value in reversed(list((metadata or {}).items())):

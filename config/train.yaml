@@ -3,15 +3,15 @@ defaults:
   
 experiment:
   seed: 1234 # 1, 1234, 42
-  forget_concept: Karl Marx #Confucius # Stephen King
+  forget_concept: Nicolas Cage #Justin Timberlake #Confucius # Stephen King
   push_to_hub: false # binary
-  notes: QA-only--apply-chat-template
+  notes: test-warmup
 
 paths:
   output_root: outputs
 
 model:
-  name: "Qwen/Qwen2.5-3B-Instruct" # "microsoft/Phi-3-mini-4k-instruct", Qwen/Qwen2.5-3B-Instruct, "./outputs/unlearning-sft-4928/checkpoint-13/"
+  name: Qwen/Qwen2.5-3B-Instruct # "microsoft/Phi-3-mini-4k-instruct", Qwen/Qwen2.5-3B-Instruct, "./outputs/unlearning-sft-4928/checkpoint-13/"
 
 wandb:
   # Used by direct `python train.py` runs. `scripts/slurm-run-unlearning.sh`
@@ -78,7 +78,8 @@ reward:
       temperature: 0.0
       max_concurrent_requests: 4
       activation_threshold: 0.8
-    avoid_refusal_reward_classifier:
+    refusal_reward_classifier:
+      mode: reward_non_refusal # reward_non_refusal or reward_refusal
       model_name: garak-llm/garak-refusal-detector
       batch_size: 32
       truncation: true
@@ -111,7 +112,7 @@ training:
     save_final_model: false # Set false to keep only checkpoint-* snapshots.
     # learning rate, scheduler
     num_train_epochs: 5
-    max_steps: 70 # too large since token budget callback will stop training when the token budget is reached. Set to -1 to disable.
+    max_steps: 12 # too large since token budget callback will stop training when the token budget is reached. Set to -1 to disable.
     learning_rate: 5.0e-5
     lr_scheduler_type: "constant_with_warmup" #"constant"
     warmup_steps: 3
@@ -121,7 +122,7 @@ training:
     per_device_eval_batch_size: 16
     eval_accumulation_steps: 1
     refusal_metric:
-      num_generations: 8
+      num_generations: 16
       max_prompts: 64
       batch_size: 8
       max_new_tokens: 128
@@ -129,10 +130,11 @@ training:
       top_p: 1.0
       log_completions: true
       classifier:
-        model_name: ${reward.functions.avoid_refusal_reward_classifier.model_name}
+        model_name: ${reward.functions.refusal_reward_classifier.model_name}
         batch_size: 32
         threshold: 0.5
-    callbacks:
+    callback:
+      refusal_prompt_percent: 10 # in %
   grpo:
     mode: standard # adaptive, standard
     # batch size
@@ -170,8 +172,8 @@ training:
     num_generations_eval: 8
     # callbacks
     callback:
-      checkpoint_token_milestones: [500_000, 1_000_000] # Save checkpoints at token counts.
-      token_budget: 500_000 #3_000_000 # null if not using StopOnTokenBudgetCallback
+      checkpoint_token_milestones: [100_000, 200_000, 300_000, 400_000] # Save checkpoints at token counts.
+      token_budget: 300_000 #3_000_000 # null if not using StopOnTokenBudgetCallback
 
 hydra:
   job:

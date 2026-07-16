@@ -1,8 +1,8 @@
-import os
+from src.utils import is_main_process
 
 
 def _is_main_process() -> bool:
-    return int(os.getenv("RANK", "0")) == 0
+    return is_main_process()
 
 
 def build_dataset_path(target: str):

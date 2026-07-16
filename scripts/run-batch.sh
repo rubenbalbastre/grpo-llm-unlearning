@@ -3,16 +3,16 @@
 authors=(
   # "Rihanna"
   # "Karl Marx"
-  "Confucius"
+  # "Confucius"
   # "Nicolas Cage"
   "Justin Timberlake"
 )
 
 rewards=(
-  # "r0"
+  "r0"
   # "r1"
   # "r2"
-  "r4"
+  # "r4"
 )
 
 seeds=(
@@ -24,10 +24,12 @@ seeds=(
 for author in "${authors[@]}"; do
   for reward in "${rewards[@]}"; do
     for seed in "${seeds[@]}"; do
-      sbatch scripts/slurm-run-unlearning.sh "experiment.forget_concept=${author}" "experiment.seed=${seed}" "reward.type=${reward}"
+      sbatch scripts/slurm-run-unlearning.sh "reward.functions.llm-judge.model_name=gpt-5.4-nano" "experiment.forget_concept=${author}" "experiment.seed=${seed}" "reward.type=${reward}"
     done
   done
 done
+
+# sbatch scripts/slurm-run-unlearning.sh "reward.functions.llm-judge.model_name=gpt-5.4-mini" "experiment.forget_concept=${author}" "experiment.seed=1234" "reward.type=r2"
 
 # sbatch scripts/slurm-run-unlearning.sh
 
