@@ -5,6 +5,7 @@ import argparse
 import sys
 from pathlib import Path
 
+import hydra
 import pandas as pd
 from dotenv import load_dotenv
 from datasets import load_from_disk
@@ -111,7 +112,7 @@ def write_outputs(args: argparse.Namespace, df: pd.DataFrame, summary: pd.DataFr
     summary.to_csv(args.output_dir / "summary.csv", index=False)
 
 
-@hydra.main(version_base=None, config_path="config", config_name="hold_out_eval")
+@hydra.main(version_base=None, config_path="../../config", config_name="hold_out_eval")
 def main(args) -> None:
     load_dotenv(dotenv_path=REPO_ROOT / ".env", override=False)
 
