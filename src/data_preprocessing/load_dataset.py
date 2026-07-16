@@ -26,9 +26,9 @@ def filter_empty_prompts(dataset: Dataset, prompt_column: str) -> Dataset:
     return dataset
 
 
-def load_standard_dataset(cfg: DictConfig, mode: Literal["sft", "grpo"]) -> Dataset:
+def load_standard_dataset(forget_concept: str, mode: Literal["sft", "grpo"]) -> Dataset:
 
-    dataset_path = build_dataset_path(cfg.experiment.forget_concept)
+    dataset_path = build_dataset_path(forget_concept)
     dataset = load_from_disk(dataset_path)
 
     if mode in ["sft", "grpo"]:
