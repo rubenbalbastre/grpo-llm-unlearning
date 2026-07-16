@@ -121,7 +121,7 @@ training:
     per_device_eval_batch_size: 16
     eval_accumulation_steps: 1
     refusal_metric:
-      num_generations: 8
+      num_generations: 16
       max_prompts: 64
       batch_size: 8
       max_new_tokens: 128
@@ -133,6 +133,7 @@ training:
         batch_size: 32
         threshold: 0.5
     callbacks:
+      refusal_prompt_percent: 10 # in %
   grpo:
     mode: standard # adaptive, standard
     # batch size
