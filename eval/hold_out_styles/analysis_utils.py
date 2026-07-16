@@ -4,7 +4,7 @@ import asyncio
 
 import pandas as pd
 
-from scripts.completions_analysis.llm_completion_classification import (
+from eval.hold_out_styles.llm_completion_classification import (
     AsyncCompletionClassificationTool,
     llm_judge_metrics,
 )

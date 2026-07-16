@@ -13,7 +13,7 @@ from dotenv import load_dotenv
 REPO_ROOT = Path(__file__).resolve().parents[2]
 sys.path.insert(0, str(REPO_ROOT))
 
-from scripts.completions_analysis.analysis_utils import (  # noqa: E402
+from eval.hold_out_styles.analysis_utils import (  # noqa: E402
     add_llm_judge_metrics,
     add_local_reward_metrics,
     llm_judge_metrics,
