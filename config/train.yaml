@@ -133,7 +133,7 @@ training:
         model_name: ${reward.functions.refusal_reward_classifier.model_name}
         batch_size: 32
         threshold: 0.5
-    callbacks:
+    callback:
       refusal_prompt_percent: 10 # in %
   grpo:
     mode: standard # adaptive, standard

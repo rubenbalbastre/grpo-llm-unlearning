@@ -62,7 +62,7 @@ def main(cfg: DictConfig) -> None:
         temperature=refusal_metric_cfg.get("temperature", 1.0),
         top_p=refusal_metric_cfg.get("top_p", 1.0),
         log_completions=refusal_metric_cfg.get("log_completions", True),
-        stop_refusal_prompt_percent_threshold=cfg.training.grpo.callbacks.refusal_prompt_percent,
+        stop_refusal_prompt_percent_threshold=cfg.training.sft.callback.refusal_prompt_percent,
         classifier_model_name=classifier_metric_cfg.get(
             "model_name", DEFAULT_GARAK_REFUSAL_MODEL
         ),
