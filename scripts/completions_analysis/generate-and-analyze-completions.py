@@ -107,7 +107,8 @@ def aggregate_results(df: pd.DataFrame, args: argparse.Namespace) -> pd.DataFram
 
 
 def write_outputs(args: argparse.Namespace, df: pd.DataFrame, summary: pd.DataFrame) -> None:
-    args.output_dir.mkdir(parents=True, exist_ok=True)
+    import os
+    os.makedirs(args.output_dir, exist_ok=True)
     df.to_csv(args.output_dir / "metrics.csv", index=False)
     summary.to_csv(args.output_dir / "summary.csv", index=False)
 
