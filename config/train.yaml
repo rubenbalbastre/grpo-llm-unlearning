@@ -110,6 +110,8 @@ training:
     # logging
     logging_steps: 1
     save_final_model: false # Set false to keep only checkpoint-* snapshots.
+    save_strategy: "steps"
+    save_steps: 1
     # learning rate, scheduler
     num_train_epochs: 5
     max_steps: 12 # too large since token budget callback will stop training when the token budget is reached. Set to -1 to disable.
