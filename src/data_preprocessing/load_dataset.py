@@ -26,9 +26,12 @@ def filter_empty_prompts(dataset: Dataset, prompt_column: str) -> Dataset:
     return dataset
 
 
-def load_standard_dataset(cfg: DictConfig, mode: Literal["sft", "grpo"]) -> Dataset:
+def load_standard_dataset(
+    forget_concept: str,
+    mode: Literal["sft", "grpo"],
+) -> tuple[Dataset, Dataset]:
 
-    dataset_path = build_dataset_path(cfg.experiment.forget_concept)
+    dataset_path = build_dataset_path(forget_concept)
     dataset = load_from_disk(dataset_path)
 
     if mode in ["sft", "grpo"]:
@@ -57,7 +60,10 @@ def load_initial_adaptive_prompts(cfg: DictConfig) -> list[str]:
             f"buffer.max_prompts={cfg.buffer.max_prompts}."
         )
 
-    dataset = load_standard_dataset(cfg)
+    dataset, _ = load_standard_dataset(
+        cfg.experiment.forget_concept,
+        mode="grpo",
+    )
     if prompt_count > len(dataset):
         raise ValueError(
             "data_generator.initial_standard_prompt_count cannot exceed the "

@@ -18,40 +18,24 @@ REPO_ROOT = Path(__file__).resolve().parents[2]
 sys.path.insert(0, str(REPO_ROOT))
 
 from eval.rwku.scoring import generate_batch  # noqa: E402
-from scripts.completions_analysis.analysis_utils import (  # noqa: E402
+from eval.hold_out_styles.analysis_utils import (  # noqa: E402
     add_llm_judge_metrics,
-    add_local_reward_metrics,
     aggregate_metric_summary,
 )
+from src.data_preprocessing.load_dataset import load_standard_dataset
 
 
 def load_prompt_dataframe(args: argparse.Namespace) -> pd.DataFrame:
-    dataset_path = Path(args.dataset_path)
-    if not dataset_path.exists():
-        raise FileNotFoundError(f"Saved Hugging Face dataset not found: {dataset_path}")
-    dataset = load_from_disk(str(dataset_path))
+
+    _, dataset = load_standard_dataset(forget_concept=args.concept, mode="grpo")
+    
     df = dataset.to_pandas()
 
-    if args.prompt_column not in df.columns:
-        raise ValueError(
-            f"Prompt column {args.prompt_column!r} not found. Available columns: {list(df.columns)}"
-        )
-
-    df = df.copy()
-    df["source_row_index"] = df.index
-    df = df[df[args.prompt_column].map(lambda value: isinstance(value, str) and value.strip() != "")]
-    if len(df) == 0:
-        raise ValueError(f"No valid prompts remain after filtering empty {args.prompt_column!r} values.")
-
-    df[args.prompt_column] = df[args.prompt_column].map(str.strip)
     if args.max_examples is not None:
         if args.shuffle:
             df = df.sample(frac=1.0, random_state=args.seed)
         df = df.head(args.max_examples)
-
     df = df.reset_index(drop=True)
-    if args.prompt_column != "prompt":
-        df = df.rename(columns={args.prompt_column: "prompt"})
     return df
 
 
@@ -106,10 +90,11 @@ def aggregate_results(df: pd.DataFrame, args: argparse.Namespace) -> pd.DataFram
     )
 
 
-def write_outputs(args: argparse.Namespace, df: pd.DataFrame, summary: pd.DataFrame) -> None:
-    args.output_dir.mkdir(parents=True, exist_ok=True)
-    df.to_csv(args.output_dir / "metrics.csv", index=False)
-    summary.to_csv(args.output_dir / "summary.csv", index=False)
+def write_outputs(output_dir: str, df: pd.DataFrame, summary: pd.DataFrame) -> None:
+    import os
+    os.makedirs(output_dir, exist_ok=True)
+    df.to_csv(output_dir + "metrics.csv", index=False)
+    summary.to_csv(output_dir + "summary.csv", index=False)
 
 
 @hydra.main(version_base=None, config_path="../../config", config_name="hold_out_eval")
@@ -128,7 +113,6 @@ def main(args) -> None:
         max_new_tokens=args.max_new_tokens,
         temperature=args.temperature,
     )
-    # df = add_local_reward_metrics(df, args.concept)
     df = add_llm_judge_metrics(
         df,
         concept=args.concept,
@@ -136,8 +120,9 @@ def main(args) -> None:
         max_concurrent_requests=args.judge_concurrency,
     )
     summary = aggregate_results(df, args)
-    write_outputs(args, df, summary)
-    print(f"Wrote metrics and summary to {args.output_dir}", flush=True)
+    output_dir = f"outputs/hold_out_styles/{args.concept.replace(" ", "-").lower()}-{args.model_name_or_path.replace("/","-")}/"
+    write_outputs(output_dir, df, summary)
+    print(f"Wrote metrics and summary to {output_dir}", flush=True)
 
 
 if __name__ == "__main__":

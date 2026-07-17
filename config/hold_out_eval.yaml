@@ -1,6 +1,5 @@
 model_name_or_path: "./outputs/unlearning-4550/checkpoint-159"
 concept: Rihanna
-dataset_path: data/hold_out_rihanna
 prompt_column: prompt
 max_examples: null
 shuffle: true
@@ -8,6 +7,5 @@ seed: 0
 batch_size: 8
 max_new_tokens: 256
 temperature: 0.0
-judge_model: gpt-5.4-mini
+judge_model: gpt-5.4-nano # use gpt-5.4-mini for paper results
 judge_concurrency: 4
-output_dir: "outputs/completion_analysis/generated-completions"
