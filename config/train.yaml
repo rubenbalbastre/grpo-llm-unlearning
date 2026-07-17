@@ -134,7 +134,8 @@ training:
         batch_size: 32
         threshold: 0.5
     callback:
-      refusal_prompt_percent: 20 # in %
+      refusal_completion_percent: 5
+      # refusal_prompt_percent: 20 # in %
   grpo:
     mode: standard # adaptive, standard
     # batch size

@@ -29,7 +29,7 @@ class RefusalGenerationMetricCallback(TrainerCallback):
         temperature: float,
         top_p: float,
         log_completions: bool,
-        stop_refusal_prompt_percent_threshold: float,
+        stop_refusal_completion_percent_threshold: float,
         classifier_model_name: str,
         classifier_batch_size: int,
         classifier_threshold: float,
@@ -43,7 +43,7 @@ class RefusalGenerationMetricCallback(TrainerCallback):
         self.temperature = float(temperature)
         self.top_p = float(top_p)
         self.log_completions = bool(log_completions)
-        self.stop_refusal_prompt_percent_threshold = float(stop_refusal_prompt_percent_threshold)
+        self.stop_refusal_completion_percent_threshold = float(stop_refusal_completion_percent_threshold)
         self.classifier_model_name = str(classifier_model_name)
         self.classifier_batch_size = max(1, int(classifier_batch_size))
         self.classifier_threshold = float(classifier_threshold)
@@ -186,7 +186,7 @@ class RefusalGenerationMetricCallback(TrainerCallback):
             ),
         }
         self.trainer.log(metrics)
-        if metrics["refusal_prompt_percent"] > self.stop_refusal_prompt_percent_threshold:
+        if metrics["refusal_completion_percent"] > self.stop_refusal_completion_percent_threshold:
             control.should_training_stop = True
             control.should_save = True
         if self.log_completions and wandb.run is not None:
