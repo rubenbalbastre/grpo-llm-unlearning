@@ -3,9 +3,10 @@ from omegaconf import DictConfig, open_dict
 from trl import SFTTrainer, SFTConfig
 from transformers import set_seed
 
-from src.callbacks import RefusalGenerationMetricCallback
+from src.callbacks import SFTCallback
 from src.peft import get_peft_config
 from src.reward.components.avoid_refusal import DEFAULT_GARAK_REFUSAL_MODEL
+from src.reward.reward_r2 import build_reward_funcs as build_r2_reward_funcs
 from src.train_setup import load_model_and_tokenizer, setup_run, setup_training_data, finish_training
 
 
@@ -52,7 +53,11 @@ def main(cfg: DictConfig) -> None:
 
     refusal_metric_cfg = cfg.training.sft.get("refusal_metric", {})
     classifier_metric_cfg = refusal_metric_cfg.get("classifier", {})
-    refusal_metric_callback = RefusalGenerationMetricCallback(
+    r2_reward_func = build_r2_reward_funcs(
+        reward_config=cfg.reward,
+        forget_concept=forget_concept,
+    )[0]
+    sft_callback = SFTCallback(
         eval_dataset=dataset.eval_dataset,
         tokenizer=tokenizer,
         num_generations=refusal_metric_cfg.get("num_generations", 8),
@@ -62,12 +67,17 @@ def main(cfg: DictConfig) -> None:
         temperature=refusal_metric_cfg.get("temperature", 1.0),
         top_p=refusal_metric_cfg.get("top_p", 1.0),
         log_completions=refusal_metric_cfg.get("log_completions", True),
-        stop_refusal_completion_percent_threshold=cfg.training.sft.callback.refusal_completion_percent,
+        stop_refusal_completion_rate_threshold=cfg.training.sft.callback.refusal_completion_rate,
+        stop_r2_reward_threshold=cfg.training.sft.callback.get(
+            "r2_reward_threshold",
+            0.05,
+        ),
         classifier_model_name=classifier_metric_cfg.get(
             "model_name", DEFAULT_GARAK_REFUSAL_MODEL
         ),
         classifier_batch_size=classifier_metric_cfg.get("batch_size", 32),
         classifier_threshold=classifier_metric_cfg.get("threshold", 0.5),
+        r2_reward_func=r2_reward_func,
     )
 
     trainer = SFTTrainer(
@@ -77,9 +87,9 @@ def main(cfg: DictConfig) -> None:
         processing_class=tokenizer,
         train_dataset=dataset.train_dataset,
         eval_dataset=dataset.eval_dataset,
-        callbacks=[refusal_metric_callback],
+        callbacks=[sft_callback],
     )
-    refusal_metric_callback.bind_trainer(trainer)
+    sft_callback.bind_trainer(trainer)
 
     trainer.train()
 

@@ -102,7 +102,7 @@ peft:
 
 training:
   sft:
-    per_device_train_batch_size: 8
+    per_device_train_batch_size: 16
     gradient_accumulation_steps: 1
     gradient_checkpointing: true
     fp16: true # V100 supports FP16, not BF16.
@@ -134,8 +134,8 @@ training:
         batch_size: 32
         threshold: 0.5
     callback:
-      refusal_completion_percent: 5
-      # refusal_prompt_percent: 20 # in %
+      refusal_completion_rate: 0.10
+      r2_reward_threshold: 0.05
   grpo:
     mode: standard # adaptive, standard
     # batch size
