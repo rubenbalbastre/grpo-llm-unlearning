@@ -12,13 +12,17 @@ conda activate py312
 REPO_DIR="${REPO_DIR:-/home/balalru/machine-unlearning-llm}"
 cd "${REPO_DIR}"
 
-python eval/hold_out_styles/generate-and-analyze-completions.py \
-    concept='Nicolas Cage' \
-    model_name_or_path='Qwen/Qwen2.5-3B-Instruct' \
+# python eval/hold_out_styles/generate-and-analyze-completions.py \
+#     concept='Nicolas Cage' \
+#     model_name_or_path='Qwen/Qwen2.5-3B-Instruct' \
 
 python eval/hold_out_styles/generate-and-analyze-completions.py \
     concept='Nicolas Cage' \
-    model_name_or_path='./outputs/unlearning-sft-5104/checkpoint-3/' \
+    model_name_or_path='./outputs/unlearning-sft-5104/final_model/' \
+
+python eval/hold_out_styles/generate-and-analyze-completions.py \
+    concept='Nicolas Cage' \
+    model_name_or_path='./outputs/unlearning-sft-5130/final_model/' \
 
 # 
 # python eval/hold_out_styles/create_final_table.py
