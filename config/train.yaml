@@ -134,7 +134,7 @@ training:
         batch_size: 32
         threshold: 0.5
     callback:
-      refusal_prompt_percent: 10 # in %
+      refusal_prompt_percent: 20 # in %
   grpo:
     mode: standard # adaptive, standard
     # batch size
@@ -172,8 +172,12 @@ training:
     num_generations_eval: 8
     # callbacks
     callback:
-      checkpoint_token_milestones: [100_000, 200_000, 300_000, 400_000] # Save checkpoints at token counts.
-      token_budget: 300_000 #3_000_000 # null if not using StopOnTokenBudgetCallback
+      checkpoint_token_milestones: [100_000, 200_000, 300_000, 400_000, 500_000] # Save checkpoints at token counts.
+      token_budget: 500_000 #3_000_000 # null if not using StopOnTokenBudgetCallback
+      high_reward_stop:
+        threshold: 0.95
+        max_optimizer_steps_above_threshold: 5
+        metric_names: ["train/reward", "reward"]
 
 hydra:
   job:

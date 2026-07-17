@@ -33,6 +33,17 @@ GRPO_JOB_ID="$(
     "${GRPO_SCRIPT}" \
     "$@" \
     "model.name=${SFT_MODEL_PATH}" \
+    "reward.type=r2"
+)"
+
+echo "Submitted SFT job: ${SFT_JOB_ID}"
+
+GRPO_JOB_ID="$(
+  sbatch --parsable \
+    --dependency="afterok:${SFT_JOB_ID}" \
+    "${GRPO_SCRIPT}" \
+    "$@" \
+    "model.name=${SFT_MODEL_PATH}" \
     "reward.type=r0"
 )"
 echo "Submitted GRPO job: ${GRPO_JOB_ID}"
