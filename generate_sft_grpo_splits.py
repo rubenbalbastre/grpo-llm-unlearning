@@ -100,10 +100,11 @@ def generate_sft_dataset(cfg: DictConfig):
     # generate completions for SFT subset: only for a 50% subset
     load_dotenv(".env")
     client = openai.AsyncClient(api_key=os.environ['OPENAI_API_KEY'])
-    broad_topic_sft_num_rows = int(sft.num_rows / 4)
+    refusal_sft_num_rows = int(sft.num_rows / 4)
+    broad_topic_sft_num_rows = sft.num_rows - refusal_sft_num_rows
     broad_topic_sft_subset = sft.select(range(broad_topic_sft_num_rows))
     completions = asyncio.run(get_broad_completions(client, broad_topic_sft_subset))
-    completions = completions + [""]* (sft.num_rows - broad_topic_sft_num_rows)
+    completions = completions + [""]* refusal_sft_num_rows
     sft = sft.add_column(name="broad_completion", column=completions)
     sft = sft.map(lambda x: {'completion': x['broad_completion']} if x['broad_completion'] != '' else {'completion': x['completion']})
     sft = sft.map(lambda x: {'completion_type': 'broad' if x['broad_completion'] == '' else 'refusal'})
