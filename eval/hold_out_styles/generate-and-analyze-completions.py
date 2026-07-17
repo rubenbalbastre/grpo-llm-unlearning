@@ -93,8 +93,8 @@ def aggregate_results(df: pd.DataFrame, args: argparse.Namespace) -> pd.DataFram
 def write_outputs(output_dir: str, df: pd.DataFrame, summary: pd.DataFrame) -> None:
     import os
     os.makedirs(output_dir, exist_ok=True)
-    df.to_csv(output_dir / "metrics.csv", index=False)
-    summary.to_csv(output_dir / "summary.csv", index=False)
+    df.to_csv(output_dir + "metrics.csv", index=False)
+    summary.to_csv(output_dir + "summary.csv", index=False)
 
 
 @hydra.main(version_base=None, config_path="../../config", config_name="hold_out_eval")
@@ -120,9 +120,9 @@ def main(args) -> None:
         max_concurrent_requests=args.judge_concurrency,
     )
     summary = aggregate_results(df, args)
-    output_dir = f"outputs/hold_out_styles/{args.concept.replace(" ", "-").lower()}-{args.model_name_or_path.replace("/","-")}"
+    output_dir = f"outputs/hold_out_styles/{args.concept.replace(" ", "-").lower()}-{args.model_name_or_path.replace("/","-")}/"
     write_outputs(output_dir, df, summary)
-    print(f"Wrote metrics and summary to {args.output_dir}", flush=True)
+    print(f"Wrote metrics and summary to {output_dir}", flush=True)
 
 
 if __name__ == "__main__":
