@@ -163,6 +163,32 @@ def _top_prediction(output) -> dict[str, Any]:
     return output
 
 
+def _refusal_classification_from_output(
+    output,
+    *,
+    threshold: float,
+) -> dict[str, Any]:
+    prediction = _top_prediction(output)
+    label = str(prediction["label"])
+    score = float(prediction["score"])
+    top_label_is_refusal = _is_garak_refusal_label(label)
+    refusal_probability = (
+        _refusal_probability_from_scores(output)
+        if isinstance(output, list)
+        else (score if top_label_is_refusal else 1.0 - score)
+    )
+    is_refusal = refusal_probability >= threshold
+    return {
+        "label": label,
+        "score": score,
+        "refusal_probability": refusal_probability,
+        "threshold": threshold,
+        "top_label_is_refusal": top_label_is_refusal,
+        "is_refusal": is_refusal,
+        "is_non_refusal": not is_refusal,
+    }
+
+
 def make_refusal_classifier_reward_func(
     config: Any,
     log_path: Path,
@@ -182,6 +208,7 @@ def make_refusal_classifier_reward_func(
     batch_size = int(config.get("batch_size", 32))
     truncation = bool(config.get("truncation", True))
     max_length = config.get("max_length")
+    threshold = float(config.get("threshold", 0.5))
     trust_remote_code = bool(config.get("trust_remote_code", False))
     return_all_scores = bool(
         config.get("return_all_scores", mode == "reward_refusal")
@@ -224,14 +251,13 @@ def make_refusal_classifier_reward_func(
         scores: list[float] = []
         refusal_probabilities: list[float] = []
         for output in outputs:
-            prediction = _top_prediction(output)
-            label = str(prediction["label"])
-            score = float(prediction["score"])
-            refusal_probability = (
-                _refusal_probability_from_scores(output)
-                if isinstance(output, list)
-                else (score if _is_garak_refusal_label(label) else 1.0 - score)
+            classification = _refusal_classification_from_output(
+                output,
+                threshold=threshold,
             )
+            label = classification["label"]
+            score = classification["score"]
+            refusal_probability = classification["refusal_probability"]
             classifier_reward = (
                 reward_for_refusal * refusal_probability
                 + reward_for_non_refusal * (1.0 - refusal_probability)
@@ -252,6 +278,111 @@ def make_refusal_classifier_reward_func(
 
     refusal_classifier_reward_func.__name__ = reward_name
     return refusal_classifier_reward_func
+
+
+def make_refusal_classifier_func(
+    config: Any,
+    log_path: Path,
+):
+    from transformers import pipeline
+
+    model_name = config.get("model_name", DEFAULT_GARAK_REFUSAL_MODEL)
+    batch_size = int(config.get("batch_size", 32))
+    truncation = bool(config.get("truncation", True))
+    max_length = config.get("max_length")
+    trust_remote_code = bool(config.get("trust_remote_code", False))
+    log_prefix = str(config.get("log_prefix", "refusal_classifier"))
+    threshold = float(config.get("threshold", 0.5))
+
+    pipeline_kwargs: dict[str, Any] = {
+        "task": "text-classification",
+        "model": model_name,
+        "trust_remote_code": trust_remote_code,
+    }
+    if "device" in config:
+        pipeline_kwargs["device"] = config["device"]
+
+    classifier = pipeline(**pipeline_kwargs)
+
+    def refusal_classifier_func(
+        prompts,
+        completions,
+        **kwargs,
+    ) -> list[dict[str, Any]]:
+        completions_list = list(completions) if completions is not None else []
+
+        classify_kwargs: dict[str, Any] = {
+            "batch_size": batch_size,
+            "truncation": truncation,
+            "top_k": None,
+        }
+        if max_length is not None:
+            classify_kwargs["max_length"] = int(max_length)
+
+        outputs = classifier(
+            [str(completion) for completion in completions_list],
+            **classify_kwargs,
+        )
+        classifications = [
+            _refusal_classification_from_output(output, threshold=threshold)
+            for output in outputs
+        ]
+
+        log_extra = kwargs.get("log_extra")
+        if log_extra is not None:
+            log_extra(
+                f"{log_prefix}_label",
+                [classification["label"] for classification in classifications],
+            )
+            log_extra(
+                f"{log_prefix}_score",
+                [classification["score"] for classification in classifications],
+            )
+            log_extra(
+                f"{log_prefix}_refusal_probability",
+                [
+                    classification["refusal_probability"]
+                    for classification in classifications
+                ],
+            )
+            log_extra(
+                f"{log_prefix}_threshold",
+                [classification["threshold"] for classification in classifications],
+            )
+            log_extra(
+                f"{log_prefix}_top_label_is_refusal",
+                [
+                    classification["top_label_is_refusal"]
+                    for classification in classifications
+                ],
+            )
+            log_extra(
+                f"{log_prefix}_is_refusal",
+                [classification["is_refusal"] for classification in classifications],
+            )
+            log_extra(
+                f"{log_prefix}_is_non_refusal",
+                [
+                    classification["is_non_refusal"]
+                    for classification in classifications
+                ],
+            )
+
+        return classifications
+
+    refusal_classifier_func.__name__ = "refusal_classifier"
+    return refusal_classifier_func
+
+
+def build_refusal_classifier(
+    config: Any,
+    *,
+    log_path: Path,
+):
+    return make_refusal_classifier_func(
+        config,
+        log_path,
+    )
 
 
 def make_refusal_reward_classifier_func(

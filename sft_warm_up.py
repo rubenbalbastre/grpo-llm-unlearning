@@ -51,8 +51,10 @@ def main(cfg: DictConfig) -> None:
         num_train_epochs=cfg.training.sft.num_train_epochs,
     )
 
-    refusal_metric_cfg = cfg.training.sft.get("refusal_metric", {})
-    classifier_metric_cfg = refusal_metric_cfg.get("classifier", {})
+    sft_monitoring_cfg = cfg.training.sft.get("monitoring", {})
+    generation_monitoring_cfg = sft_monitoring_cfg.get("generation", {})
+    classifier_monitoring_cfg = sft_monitoring_cfg.get("classifier", {})
+    stop_monitoring_cfg = sft_monitoring_cfg.get("stop_conditions", {})
     r2_reward_func = build_r2_reward_funcs(
         reward_config=cfg.reward,
         forget_concept=forget_concept,
@@ -60,23 +62,26 @@ def main(cfg: DictConfig) -> None:
     sft_callback = SFTCallback(
         eval_dataset=dataset.eval_dataset,
         tokenizer=tokenizer,
-        num_generations=refusal_metric_cfg.get("num_generations", 8),
-        max_prompts=refusal_metric_cfg.get("max_prompts", 32),
-        batch_size=refusal_metric_cfg.get("batch_size", 4),
-        max_new_tokens=refusal_metric_cfg.get("max_new_tokens", 128),
-        temperature=refusal_metric_cfg.get("temperature", 1.0),
-        top_p=refusal_metric_cfg.get("top_p", 1.0),
-        log_completions=refusal_metric_cfg.get("log_completions", True),
-        stop_refusal_completion_rate_threshold=cfg.training.sft.callback.refusal_completion_rate,
-        stop_r2_reward_threshold=cfg.training.sft.callback.get(
+        num_generations=generation_monitoring_cfg.get("num_generations", 8),
+        max_prompts=generation_monitoring_cfg.get("max_prompts", 32),
+        batch_size=generation_monitoring_cfg.get("batch_size", 4),
+        max_new_tokens=generation_monitoring_cfg.get("max_new_tokens", 128),
+        temperature=generation_monitoring_cfg.get("temperature", 1.0),
+        top_p=generation_monitoring_cfg.get("top_p", 1.0),
+        log_completions=generation_monitoring_cfg.get("log_completions", True),
+        stop_refusal_completion_rate_threshold=stop_monitoring_cfg.get(
+            "refusal_completion_rate",
+            0.10,
+        ),
+        stop_r2_reward_threshold=stop_monitoring_cfg.get(
             "r2_reward_threshold",
             0.05,
         ),
-        classifier_model_name=classifier_metric_cfg.get(
+        classifier_model_name=classifier_monitoring_cfg.get(
             "model_name", DEFAULT_GARAK_REFUSAL_MODEL
         ),
-        classifier_batch_size=classifier_metric_cfg.get("batch_size", 32),
-        classifier_threshold=classifier_metric_cfg.get("threshold", 0.5),
+        classifier_batch_size=classifier_monitoring_cfg.get("batch_size", 32),
+        classifier_threshold=classifier_monitoring_cfg.get("threshold", 0.5),
         r2_reward_func=r2_reward_func,
     )
 

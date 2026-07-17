@@ -77,12 +77,12 @@ reward:
       model_name: gpt-5.4-nano
       temperature: 0.0
       max_concurrent_requests: 4
-      activation_threshold: 0.8
     refusal_reward_classifier:
       mode: reward_non_refusal # reward_non_refusal or reward_refusal
       model_name: garak-llm/garak-refusal-detector
       batch_size: 32
       truncation: true
+      threshold: ${training.sft.monitoring.classifier.threshold}
 
 peft:
   enabled: true # Set false for full fine-tuning.
@@ -121,21 +121,22 @@ training:
     eval_steps: 1
     per_device_eval_batch_size: 16
     eval_accumulation_steps: 1
-    refusal_metric:
-      num_generations: 16
-      max_prompts: 64
-      batch_size: 8
-      max_new_tokens: 128
-      temperature: 1.0
-      top_p: 1.0
-      log_completions: true
+    monitoring:
+      generation:
+        num_generations: 8
+        max_prompts: 64
+        batch_size: 8
+        max_new_tokens: 128
+        temperature: 1.0
+        top_p: 1.0
+        log_completions: true
       classifier:
         model_name: ${reward.functions.refusal_reward_classifier.model_name}
         batch_size: 32
         threshold: 0.5
-    callback:
-      refusal_completion_rate: 0.10
-      r2_reward_threshold: 0.05
+      stop_conditions:
+        refusal_completion_rate: 0.10
+        r2_reward_threshold: 0.05
   grpo:
     mode: standard # adaptive, standard
     # batch size
