@@ -100,21 +100,12 @@ def generate_sft_dataset(cfg: DictConfig):
     # generate completions for SFT subset: only for a 50% subset
     load_dotenv(".env")
     client = openai.AsyncClient(api_key=os.environ['OPENAI_API_KEY'])
-    refusal_sft_num_rows = int(sft.num_rows / 4)
-    broad_topic_sft_num_rows = sft.num_rows - refusal_sft_num_rows
-    broad_topic_sft_subset = sft.select(range(broad_topic_sft_num_rows))
-    completions = asyncio.run(get_broad_completions(client, broad_topic_sft_subset))
-    completions = completions + [""]* refusal_sft_num_rows
+    completions = asyncio.run(get_broad_completions(client, sft))
     sft = sft.add_column(name="broad_completion", column=completions)
-    sft = sft.map(lambda x: {'completion': x['broad_completion']} if x['broad_completion'] != '' else {'completion': x['completion']})
-    sft = sft.map(lambda x: {'completion_type': 'broad' if x['broad_completion'] == '' else 'refusal'})
-    
     # SFT splits
-    sft = sft.class_encode_column("completion_type")
     sft_splits = sft.train_test_split(
         test_size=cfg.standard_data.sft_test_size / (cfg.standard_data.sft_test_size + cfg.standard_data.sft_train_size), seed=cfg.standard_data.shuffle_seed,
         shuffle=True,
-        stratify_by_column="completion_type"
     )
     sft_train = sft_splits["train"]
     sft_test = sft_splits["test"]
@@ -134,12 +125,3 @@ def generate_sft_dataset(cfg: DictConfig):
 
 if __name__ == "__main__":
     generate_sft_dataset()
-    x = load_from_disk("./data/Karl Marx/")
-
-    for t in ["sft/train", "sft/test"]:
-        x[t].set_format('pandas')
-        print(x[t][:].groupby(['completion_type']).size())
-    # for i in x["sft/train"]:
-    #     print(f"Prompt: {i['prompt']}")
-    #     print(i['completion_type'])
-        # print(f"Completion: {i['completion']}")
