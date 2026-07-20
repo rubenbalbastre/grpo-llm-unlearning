@@ -14,6 +14,10 @@ echo "Run program in virtual environment"
 
 REPO_DIR="${REPO_DIR:-/home/balalru/machine-unlearning-llm}"
 cd "${REPO_DIR}"
+if [[ -n "${SKIP_IF_MARKER:-}" && -f "${SKIP_IF_MARKER}" ]]; then
+  echo "Skipping RWKU evaluation because marker exists: ${SKIP_IF_MARKER}"
+  exit 0
+fi
 echo "Evaluate RWKU using config/eval.yaml"
 IFS=',' read -r -a GPU_IDS <<< "${CUDA_VISIBLE_DEVICES:-0}"
 GPU_COUNT="${#GPU_IDS[@]}"

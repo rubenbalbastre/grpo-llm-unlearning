@@ -9,6 +9,6 @@ date
 source "$HOME/anaconda3/etc/profile.d/conda.sh"
 conda activate py312
 
-python generate_sft_grpo_splits.py
+python generate_sft_grpo_splits.py "$@"
 
 date

@@ -1,7 +1,12 @@
+import json
+from pathlib import Path
 from typing import Any
 
 from omegaconf import OmegaConf
 from transformers import TrainerCallback
+
+
+LOW_REWARD_STOP_MARKER = "low_reward_stop.json"
 
 
 class TokenMilestoneCheckpointCallback(TrainerCallback):
@@ -105,6 +110,28 @@ class StopOnLowRewardAfterWarmupCallback(TrainerCallback):
                 return float(logs[metric_name])
         return None
 
+    def _write_stop_marker(self, args, state, reward: float) -> None:
+        if not getattr(state, "is_world_process_zero", True):
+            return
+
+        output_dir = Path(args.output_dir)
+        output_dir.mkdir(parents=True, exist_ok=True)
+        marker_path = output_dir / LOW_REWARD_STOP_MARKER
+        marker_path.write_text(
+            json.dumps(
+                {
+                    "reason": "low_reward_after_warmup",
+                    "global_step": int(getattr(state, "global_step", 0) or 0),
+                    "reward": reward,
+                    "threshold": self.threshold,
+                    "wait_optimizer_steps": self.wait_optimizer_steps,
+                },
+                indent=2,
+            )
+            + "\n",
+            encoding="utf-8",
+        )
+
     def on_log(self, args, state, control, logs=None, **kwargs):
         if not logs:
             return control
@@ -120,6 +147,7 @@ class StopOnLowRewardAfterWarmupCallback(TrainerCallback):
         if reward <= self.threshold:
             control.should_training_stop = True
             control.should_save = True
+            self._write_stop_marker(args, state, reward)
 
         return control
 
