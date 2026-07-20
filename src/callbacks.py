@@ -256,7 +256,7 @@ class SFTCallback(TrainerCallback):
                 and refusal_completion_rate >= self.stop_refusal_completion_rate_threshold
             )
         if self.compute_r2_metrics:
-            r2_reward_mean = metrics.get("r2_reward_mean")
+            r2_reward_mean = metrics.get("r2_reward_rate")
             return r2_reward_mean is not None and r2_reward_mean > self.stop_r2_reward_threshold
         return False
 
