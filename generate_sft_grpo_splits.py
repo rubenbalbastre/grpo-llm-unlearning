@@ -13,25 +13,28 @@ from src.data_preprocessing.utils import build_dataset_path
 
 
 SYSTEM_PROMPT = dedent("""
-    Answer by abstracting the question to the broader category.
+    Answer by moving to a safe adjacent broad topic, not by abstracting the target-specific answer.
 
-    Treat the target name and all concrete target-specific details in the question as forbidden. Do not repeat them, paraphrase them, or answer them directly.
+    Treat the target name and every distinctive concept, work, theory, movement, role, achievement, product, relationship, or historical influence mentioned in the question as forbidden. Do not repeat, paraphrase, summarize, or generalize those details.
 
-    Your answer should discuss a broad general topic only, as if explaining the type of situation rather than the specific target.
+    Your answer should discuss a neighboring general topic that is useful on its own but does not help answer the original question.
 
-    Do not mention the target. Do not refuse. Keep the answer medium length: 4-6 sentences.
+    Do not mention the target. Do not mention the named work. Do not mention the specific theories, movements, products, achievements, or causal influence asked about in the question. Do not refuse. Keep the answer 4-6 sentences.
 
     Good style:
-    - general category-level answer
-    - useful but non-specific
+    - useful general background on a neighboring domain
+    - changes away from the specific answer path
     - no target name
-    - no target facts
-    - no direct answer
+    - no named works
+    - no distinctive target-specific concepts
+    - no explanation of the target’s influence
 
     Bad style:
-    - mentions the target
-    - repeats concrete details from the question
-    - describes the target’s career, works, achievements, products, places, awards, or industries
+    - answers the original question with names removed
+    - uses abstract substitutes for the same protected facts
+    - repeats key concepts from the prompt
+    - explains the same causal chain at a higher level
+    - discusses movements, works, achievements, or influence tied to the target
 """)
 
 
@@ -39,19 +42,21 @@ class Output(BaseModel):
     completion: str
 
 
-async def get_broad_completions(client, subset):
-    completions = await asyncio.gather(*[
-        client.responses.parse(
-            model="gpt-5.4-nano",
-            input=[
-                {"role": "system", "content": SYSTEM_PROMPT},
-                {"role": "user", "content": f"'prompt': {row['prompt']}, 'target': {row['subject']}"}
-            ],
-            text_format=Output
-        ) for row in subset]
-    )
-    completions = [com.output_parsed.completion for com in completions]
-    return completions
+def get_create_broad_completions_function(model_name: str = "gpt-5.4-nano"):
+    async def create_broad_completions(client, subset):
+        completions = await asyncio.gather(*[
+            client.responses.parse(
+                model=model_name,
+                input=[
+                    {"role": "system", "content": SYSTEM_PROMPT},
+                    {"role": "user", "content": f"'prompt': {row['prompt']}, 'target': {row['subject']}"}
+                ],
+                text_format=Output
+            ) for row in subset]
+        )
+        completions = [com.output_parsed.completion for com in completions]
+        return completions
+    return create_broad_completions
 
 
 @hydra.main(version_base=None, config_path="config", config_name="train")
@@ -100,20 +105,13 @@ def generate_sft_dataset(cfg: DictConfig):
     # generate completions for SFT subset: only for a 50% subset
     load_dotenv(".env")
     client = openai.AsyncClient(api_key=os.environ['OPENAI_API_KEY'])
-    broad_topic_sft_num_rows = int(sft.num_rows / 2)
-    broad_topic_sft_subset = sft.select(range(broad_topic_sft_num_rows))
-    completions = asyncio.run(get_broad_completions(client, broad_topic_sft_subset))
-    completions = completions + [""]* (sft.num_rows - broad_topic_sft_num_rows)
+    create_broad_completions = get_create_broad_completions_function(model_name="gpt-5.4-nano")
+    completions = asyncio.run(create_broad_completions(client, sft))
     sft = sft.add_column(name="broad_completion", column=completions)
-    sft = sft.map(lambda x: {'completion': x['broad_completion']} if x['broad_completion'] != '' else {'completion': x['completion']})
-    sft = sft.map(lambda x: {'completion_type': 'broad' if x['broad_completion'] == '' else 'refusal'})
-    
     # SFT splits
-    sft = sft.class_encode_column("completion_type")
     sft_splits = sft.train_test_split(
         test_size=cfg.standard_data.sft_test_size / (cfg.standard_data.sft_test_size + cfg.standard_data.sft_train_size), seed=cfg.standard_data.shuffle_seed,
         shuffle=True,
-        stratify_by_column="completion_type"
     )
     sft_train = sft_splits["train"]
     sft_test = sft_splits["test"]
@@ -133,12 +131,3 @@ def generate_sft_dataset(cfg: DictConfig):
 
 if __name__ == "__main__":
     generate_sft_dataset()
-    x = load_from_disk("./data/Karl Marx/")
-
-    for t in ["sft/train", "sft/test"]:
-        x[t].set_format('pandas')
-        print(x[t][:].groupby(['completion_type']).size())
-    # for i in x["sft/train"]:
-    #     print(f"Prompt: {i['prompt']}")
-    #     print(i['completion_type'])
-        # print(f"Completion: {i['completion']}")

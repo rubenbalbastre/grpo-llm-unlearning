@@ -3,7 +3,7 @@ defaults:
   
 experiment:
   seed: 1234 # 1, 1234, 42
-  forget_concept: Nicolas Cage #Justin Timberlake #Confucius # Stephen King
+  forget_concept: Karl Marx #Justin Timberlake #Confucius # Stephen King Nicolas Cage
   push_to_hub: false # binary
   notes: test-warmup
 
@@ -76,13 +76,13 @@ reward:
     llm-judge:
       model_name: gpt-5.4-nano
       temperature: 0.0
-      max_concurrent_requests: 4
-      activation_threshold: 0.8
+      max_concurrent_requests: 8
     refusal_reward_classifier:
       mode: reward_non_refusal # reward_non_refusal or reward_refusal
       model_name: garak-llm/garak-refusal-detector
       batch_size: 32
       truncation: true
+      threshold: ${training.sft.monitoring.classifier.threshold}
 
 peft:
   enabled: true # Set false for full fine-tuning.
@@ -102,7 +102,8 @@ peft:
 
 training:
   sft:
-    per_device_train_batch_size: 8
+    objective: broad # refusal or broad
+    per_device_train_batch_size: 16
     gradient_accumulation_steps: 1
     gradient_checkpointing: true
     fp16: true # V100 supports FP16, not BF16.
@@ -110,31 +111,36 @@ training:
     # logging
     logging_steps: 1
     save_final_model: false # Set false to keep only checkpoint-* snapshots.
+    save_strategy: "steps"
+    save_steps: 1
     # learning rate, scheduler
-    num_train_epochs: 5
+    num_train_epochs: 10
     max_steps: 12 # too large since token budget callback will stop training when the token budget is reached. Set to -1 to disable.
-    learning_rate: 5.0e-5
-    lr_scheduler_type: "constant_with_warmup" #"constant"
+    learning_rate: 1.0e-5
+    lr_scheduler_type: "constant" #"constant"
     warmup_steps: 3
     # eval
+    start_eval_on_step: 5
     eval_strategy: "steps"
-    eval_steps: 1
+    eval_steps: 2
     per_device_eval_batch_size: 16
     eval_accumulation_steps: 1
-    refusal_metric:
-      num_generations: 16
-      max_prompts: 64
-      batch_size: 8
-      max_new_tokens: 128
-      temperature: 1.0
-      top_p: 1.0
-      log_completions: true
+    monitoring:
+      generation:
+        num_generations: 8
+        max_prompts: 128
+        batch_size: 8
+        max_new_tokens: 128
+        temperature: 1.0
+        top_p: 1.0
+        log_completions: true
       classifier:
         model_name: ${reward.functions.refusal_reward_classifier.model_name}
         batch_size: 32
         threshold: 0.5
-    callback:
-      refusal_prompt_percent: 20 # in %
+      stop_conditions:
+        refusal_completion_rate: 0.05
+        r2_reward_threshold: 0.10
   grpo:
     mode: standard # adaptive, standard
     # batch size

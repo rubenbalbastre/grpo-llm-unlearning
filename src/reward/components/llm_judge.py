@@ -198,29 +198,6 @@ def reward_from_judgment(
     return clipped_score(unclipped_score_from_judgment(judgment))
 
 
-def reward_reason_from_judgment(
-    judgment: SoftTermsLeakageJudgment,
-) -> str:
-    reasons: list[str] = []
-    if not judgment.is_related_broad_topic:
-        reasons.append("not_related_broad_topic")
-    if not judgment.provides_useful_information:
-        reasons.append("not_useful")
-    if judgment.uses_degenerate_avoidance:
-        reasons.append("degenerate_avoidance")
-    if judgment.is_target_centered:
-        reasons.append("is_target_centered")
-    if judgment.leaks_target_specific_information:
-        reasons.append("leaks_target_specific_information")
-    return "|".join(reasons) if reasons else "desired_behavior"
-
-
-def weighted_score_from_judgment(
-    judgment: SoftTermsLeakageJudgment,
-) -> float:
-    return reward_from_judgment(judgment)
-
-
 def reward_inputs(prompts, completions, kwargs: dict[str, Any]) -> tuple[list, list]:
     selected_prompts = kwargs.get("selected_prompt", prompts)
     prompts_list = list(selected_prompts) if selected_prompts is not None else []
@@ -236,67 +213,7 @@ def reward_inputs(prompts, completions, kwargs: dict[str, Any]) -> tuple[list, l
 def build_judgment_log_values(
     judgments: list[SoftTermsLeakageJudgment],
 ) -> dict[str, list[Any]]:
-    penalties = [
-        reward_penalties_from_judgment(judgment)
-        for judgment in judgments
-    ]
     return {
-        "llm_judge_reward": [
-            reward_from_judgment(judgment)
-            for judgment in judgments
-        ],
-        "llm_judge_reward_reason": [
-            reward_reason_from_judgment(judgment)
-            for judgment in judgments
-        ],
-        "llm_judge_unclipped_score": [
-            unclipped_score_from_judgment(judgment)
-            for judgment in judgments
-        ],
-        "llm_judge_related_broad_topic_component": [
-            float(judgment.is_related_broad_topic)
-            for judgment in judgments
-        ],
-        "llm_judge_useful_component": [
-            float(judgment.provides_useful_information)
-            for judgment in judgments
-        ],
-        "llm_judge_non_degenerate_component": [
-            float(not judgment.uses_degenerate_avoidance)
-            for judgment in judgments
-        ],
-        "llm_judge_non_target_centered_component": [
-            float(not judgment.is_target_centered)
-            for judgment in judgments
-        ],
-        "llm_judge_non_leakage_component": [
-            float(not judgment.leaks_target_specific_information)
-            for judgment in judgments
-        ],
-        "llm_judge_weighted_score": [
-            weighted_score_from_judgment(judgment)
-            for judgment in judgments
-        ],
-        "llm_judge_unrelated_broad_topic_penalty": [
-            item["unrelated_broad_topic"]
-            for item in penalties
-        ],
-        "llm_judge_not_useful_penalty": [
-            item["not_useful"]
-            for item in penalties
-        ],
-        "llm_judge_degenerate_avoidance_penalty": [
-            item["degenerate_avoidance"]
-            for item in penalties
-        ],
-        "llm_judge_target_centered_penalty": [
-            item["target_centered"]
-            for item in penalties
-        ],
-        "llm_judge_target_leakage_penalty": [
-            item["target_leakage"]
-            for item in penalties
-        ],
         "llm_judge_leaks_target_specific_information": [
             bool(judgment.leaks_target_specific_information)
             for judgment in judgments
@@ -317,25 +234,18 @@ def build_judgment_log_values(
             bool(judgment.uses_degenerate_avoidance)
             for judgment in judgments
         ],
-        "llm_judge_leakage_types": [
-            "|".join(judgment.leakage_types)
-            for judgment in judgments
-        ],
-        "llm_judge_degenerate_types": [
-            "|".join(judgment.degenerate_types)
-            for judgment in judgments
-        ],
-        "llm_judge_topic_summary": [
-            str(judgment.topic_summary)
-            for judgment in judgments
-        ],
     }
 
 
-def build_empty_judgment_log_values(batch_size: int) -> dict[str, list[Any]]:
+def build_zero_judgment_log_values(batch_size: int) -> dict[str, list[Any]]:
     return {
-        key: [None for _ in range(batch_size)]
-        for key in build_judgment_log_values([])
+        "llm_judge_leaks_target_specific_information": [
+            False for _ in range(batch_size)
+        ],
+        "llm_judge_is_target_centered": [False for _ in range(batch_size)],
+        "llm_judge_is_related_broad_topic": [False for _ in range(batch_size)],
+        "llm_judge_provides_useful_information": [False for _ in range(batch_size)],
+        "llm_judge_uses_degenerate_avoidance": [False for _ in range(batch_size)],
     }
 
 
@@ -428,6 +338,7 @@ def make_llm_judge_reward_func(
         prompt_strings = [str(prompt) for prompt in prompts_list]
         completion_strings = [str(completion) for completion in completions_list]
         judgments = run_judge_batch(prompt_strings, completion_strings)
+        rewards = [reward_from_judgment(judgment) for judgment in judgments]
         log_values = build_judgment_log_values(judgments)
 
         log_extra = kwargs.get("log_extra")
@@ -435,7 +346,7 @@ def make_llm_judge_reward_func(
             for key, values in log_values.items():
                 log_extra(key, values)
 
-        return log_values["llm_judge_reward"]
+        return rewards
 
     llm_judge_reward.__name__ = "llm_judge_reward"
     return llm_judge_reward
