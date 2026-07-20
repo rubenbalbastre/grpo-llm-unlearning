@@ -1,7 +1,7 @@
 # RWKU Evaluation
 
 RWKU evaluation is configured through `config/eval.yaml` or checkpoint overrides
-passed by `scripts/slurm-eval-rwku.sh`.
+passed by `scripts/eval-rwku.sh`.
 If authentication is needed, it is read from `HUGGINGFACE_HUB_TOKEN` in the
 repository `.env` file.
 

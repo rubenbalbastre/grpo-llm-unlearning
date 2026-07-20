@@ -1,8 +1,8 @@
 #!/usr/bin/env bash
 
 authors=(
-  "Rihanna"
-  # "Karl Marx"
+  # "Rihanna"
+  "Karl Marx"
   # "Confucius"
   # "Nicolas Cage"
   # "Justin Timberlake"
@@ -11,8 +11,8 @@ authors=(
 rewards=(
   # "r0"
   # "r1"
-  "r2"
-  # "r4"
+  # "r2"
+  "r4"
 )
 
 seeds=(
@@ -24,32 +24,32 @@ seeds=(
 for author in "${authors[@]}"; do
   for reward in "${rewards[@]}"; do
     for seed in "${seeds[@]}"; do
-      sbatch scripts/slurm-run-unlearning.sh "model.name=./outputs/unlearning-sft-5240/checkpoint-6/" "experiment.forget_concept=${author}" "experiment.seed=${seed}" "reward.type=${reward}"
+      sbatch scripts/run-grpo.sh "model.name=./outputs/unlearning-sft-5259/checkpoint-17/" "experiment.forget_concept=${author}" "experiment.seed=${seed}" "reward.type=${reward}"
     done
   done
 done
 
-# sbatch scripts/slurm-run-unlearning.sh "reward.functions.llm-judge.model_name=gpt-5.4-mini" "experiment.forget_concept=${author}" "experiment.seed=1234" "reward.type=r2"
+# sbatch scripts/run-grpo.sh "reward.functions.llm-judge.model_name=gpt-5.4-mini" "experiment.forget_concept=${author}" "experiment.seed=1234" "reward.type=r2"
 
-# sbatch scripts/slurm-run-unlearning.sh
+# sbatch scripts/run-grpo.sh
 
-# sbatch scripts/slurm-run-unlearning.sh "experiment.forget_concept=Confucius" "experiment.seed=12" "reward=r2"
-# sbatch scripts/slurm-run-unlearning.sh "experiment.forget_concept=Rihanna" "experiment.seed=12" "reward=r2"
-# sbatch scripts/slurm-run-unlearning.sh "experiment.forget_concept=Confucius" "experiment.seed=12" "reward=r1"
-# sbatch scripts/slurm-run-unlearning.sh "experiment.forget_concept=Confucius" "experiment.seed=12" "reward=r0"
-# sbatch scripts/slurm-run-unlearning.sh "experiment.forget_concept='Karl Marx'" "experiment.seed=1234" "reward=r0"
-# sbatch scripts/slurm-run-unlearning.sh "experiment.forget_concept='Nicolas Cage'" "experiment.seed=12" "reward=r0"
+# sbatch scripts/run-grpo.sh "experiment.forget_concept=Confucius" "experiment.seed=12" "reward=r2"
+# sbatch scripts/run-grpo.sh "experiment.forget_concept=Rihanna" "experiment.seed=12" "reward=r2"
+# sbatch scripts/run-grpo.sh "experiment.forget_concept=Confucius" "experiment.seed=12" "reward=r1"
+# sbatch scripts/run-grpo.sh "experiment.forget_concept=Confucius" "experiment.seed=12" "reward=r0"
+# sbatch scripts/run-grpo.sh "experiment.forget_concept='Karl Marx'" "experiment.seed=1234" "reward=r0"
+# sbatch scripts/run-grpo.sh "experiment.forget_concept='Nicolas Cage'" "experiment.seed=12" "reward=r0"
 # # --------------------------------------------
 # 1st R0 runs:
 # --------------------------------------------
 
 # for author in "${authors[@]}"; do
-#   sbatch scripts/slurm-run-unlearning.sh "experiment.forget_concept=${author}" "experiment.seed=12"
+#   sbatch scripts/run-grpo.sh "experiment.forget_concept=${author}" "experiment.seed=12"
 # done
 
 
 # for author in "${authors[@]}"; do
-#   sbatch scripts/slurm-run-unlearning.sh \
+#   sbatch scripts/run-grpo.sh \
 #     "experiment.forget_concept=${author}" \
 #     "training.grpo.mode=adaptive" \
 #     "data_generator.data_proposer.objective=general" \
@@ -62,13 +62,13 @@ done
 # --------------------------------------------
 
 # for author in "${authors[@]}"; do
-#   sbatch scripts/slurm-run-unlearning.sh "experiment.forget_concept=${author}" \
+#   sbatch scripts/run-grpo.sh "experiment.forget_concept=${author}" \
 #     "reward=r1" \
 #     "experiment.seed=12"
 # done
 
 # for author in "${authors[@]}"; do
-#   sbatch scripts/slurm-run-unlearning.sh \
+#   sbatch scripts/run-grpo.sh \
 #     "experiment.forget_concept=${author}" \
 #     "training.grpo.mode=adaptive" \
 #     "data_generator.initial_standard_prompt_count=0" \
@@ -82,13 +82,13 @@ done
 # --------------------------------------------
 
 # for author in "${authors[@]}"; do
-#   sbatch scripts/slurm-run-unlearning.sh "experiment.forget_concept=${author}" \
+#   sbatch scripts/run-grpo.sh "experiment.forget_concept=${author}" \
 #     "reward=r2"  \
 #     "experiment.seed=12"
 # done
 
 # for author in "${authors[@]}"; do
-#   sbatch scripts/slurm-run-unlearning.sh \
+#   sbatch scripts/run-grpo.sh \
 #     "experiment.forget_concept=${author}" \
 #     "training.grpo.mode=adaptive" \
 #     "data_generator.initial_standard_prompt_count=0" \

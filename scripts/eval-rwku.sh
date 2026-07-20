@@ -1,6 +1,6 @@
 #!/bin/bash -l
-#SBATCH --job-name=slurm-eval-rwku
-#SBATCH --output=logs/slurm-eval-rwku-%j.log
+#SBATCH --job-name=eval-rwku
+#SBATCH --output=logs/eval-rwku-%j.log
 #SBATCH --gres=gpu:2
 #SBATCH --time=05:30:00
 #SBATCH --partition=sc-gpu
