@@ -25,12 +25,10 @@ def main(cfg: DictConfig) -> None:
     forget_concept = cfg.experiment.forget_concept
     dataset = setup_training_data(cfg, paths.events_log_path, training_mode="sft", tokenizer=tokenizer)
     # NOTE: custom change
-    int_broad = dataset.train_dataset.features['completion_type'].str2int("refusal")
-    # dataset.train_dataset = dataset.train_dataset.filter(lambda x: x['completion_type'] == int_broad)
-    # dataset.eval_dataset = dataset.eval_dataset.filter(lambda x: x['completion_type'] == int_broad)
-    # print(dataset.train_dataset[0]['completion_type'])
-    print(dataset.train_dataset.num_rows)
-    print(dataset.eval_dataset.num_rows)
+    if cfg.training.sft.objective == "broad"
+        print("SFT OBJECTIVE: BROAD. Selecting broad_completion as completion.")
+        dataset.train_dataset = dataset.train_dataset.remove_columns("completion").rename_column("broad_completion", "completion")
+        dataset.eval_dataset = dataset.eval_dataset.remove_columns("completion").rename_column("broad_completion", "completion")
 
     trainer_config = SFTConfig(
         output_dir=str(paths.output_dir),

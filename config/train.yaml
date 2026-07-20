@@ -102,7 +102,8 @@ peft:
 
 training:
   sft:
-    per_device_train_batch_size: 16
+    objective: refusal # refusal or broad
+    per_device_train_batch_size: 8
     gradient_accumulation_steps: 1
     gradient_checkpointing: true
     fp16: true # V100 supports FP16, not BF16.
