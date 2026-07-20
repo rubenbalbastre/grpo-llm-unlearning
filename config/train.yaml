@@ -5,7 +5,7 @@ experiment:
   seed: 1234 # 1, 1234, 42
   forget_concept: Karl Marx #Justin Timberlake #Confucius # Stephen King Nicolas Cage
   push_to_hub: false # binary
-  notes: test-warmup
+  notes: attempt-1
 
 paths:
   output_root: outputs
@@ -183,6 +183,10 @@ training:
       high_reward_stop:
         threshold: 0.95
         max_optimizer_steps_above_threshold: 5
+        metric_names: ["train/reward", "reward"]
+      low_reward_stop:
+        threshold: 0.01
+        wait_optimizer_steps: 5
         metric_names: ["train/reward", "reward"]
 
 hydra:
