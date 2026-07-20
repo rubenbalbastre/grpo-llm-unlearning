@@ -25,7 +25,13 @@ def main(cfg: DictConfig) -> None:
     forget_concept = cfg.experiment.forget_concept
     dataset = setup_training_data(cfg, paths.events_log_path, training_mode="sft", tokenizer=tokenizer)
     # NOTE: custom change
-    if cfg.training.sft.objective == "broad"
+    sft_objective = str(cfg.training.sft.objective)
+    if sft_objective not in {"refusal", "broad"}:
+        raise ValueError(
+            f"Unsupported training.sft.objective={sft_objective!r}; "
+            "expected 'refusal' or 'broad'."
+        )
+    if sft_objective == "broad":
         print("SFT OBJECTIVE: BROAD. Selecting broad_completion as completion.")
         dataset.train_dataset = dataset.train_dataset.remove_columns("completion").rename_column("broad_completion", "completion")
         dataset.eval_dataset = dataset.eval_dataset.remove_columns("completion").rename_column("broad_completion", "completion")
@@ -55,12 +61,19 @@ def main(cfg: DictConfig) -> None:
     generation_monitoring_cfg = sft_monitoring_cfg.get("generation", {})
     classifier_monitoring_cfg = sft_monitoring_cfg.get("classifier", {})
     stop_monitoring_cfg = sft_monitoring_cfg.get("stop_conditions", {})
-    r2_reward_func = build_r2_reward_funcs(
-        reward_config=cfg.reward,
-        forget_concept=forget_concept,
-    )[0]
+    compute_refusal_metrics = sft_objective == "refusal"
+    compute_r2_metrics = sft_objective == "broad"
+    r2_reward_func = (
+        build_r2_reward_funcs(
+            reward_config=cfg.reward,
+            forget_concept=forget_concept,
+        )[0]
+        if compute_r2_metrics
+        else None
+    )
     sft_callback = SFTCallback(
         eval_dataset=dataset.eval_dataset,
+        start_eval_on_step=cfg.training.sft.start_eval_on_step,
         tokenizer=tokenizer,
         num_generations=generation_monitoring_cfg.get("num_generations", 8),
         max_prompts=generation_monitoring_cfg.get("max_prompts", 32),
@@ -83,6 +96,8 @@ def main(cfg: DictConfig) -> None:
         classifier_batch_size=classifier_monitoring_cfg.get("batch_size", 32),
         classifier_threshold=classifier_monitoring_cfg.get("threshold", 0.5),
         r2_reward_func=r2_reward_func,
+        compute_refusal_metrics=compute_refusal_metrics,
+        compute_r2_metrics=compute_r2_metrics,
     )
 
     trainer = SFTTrainer(

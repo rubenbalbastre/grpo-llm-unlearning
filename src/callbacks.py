@@ -38,6 +38,7 @@ class SFTCallback(TrainerCallback):
         self,
         *,
         eval_dataset,
+        start_eval_on_step: int
         tokenizer,
         num_generations: int,
         max_prompts: int,
@@ -52,6 +53,8 @@ class SFTCallback(TrainerCallback):
         classifier_batch_size: int,
         classifier_threshold: float,
         r2_reward_func: Callable | None = None,
+        compute_refusal_metrics: bool = True,
+        compute_r2_metrics: bool = True,
     ):
         self.trainer = None
         self.tokenizer = tokenizer
@@ -68,7 +71,10 @@ class SFTCallback(TrainerCallback):
         self.classifier_batch_size = max(1, int(classifier_batch_size))
         self.classifier_threshold = float(classifier_threshold)
         self.r2_reward_func = r2_reward_func
+        self.compute_refusal_metrics = bool(compute_refusal_metrics)
+        self.compute_r2_metrics = bool(compute_r2_metrics)
         self.classifier = None
+        self.start_eval_on_step = start_eval_on_step
         self.prompts = [
             str(prompt)
             for prompt in eval_dataset.select(
@@ -123,7 +129,7 @@ class SFTCallback(TrainerCallback):
         completions: list[str],
     ) -> tuple[list[float], dict[str, list]]:
         r2_logs: dict[str, list] = {}
-        if self.r2_reward_func is None:
+        if not self.compute_r2_metrics or self.r2_reward_func is None:
             return [], r2_logs
 
         expanded_prompts = [
@@ -228,20 +234,34 @@ class SFTCallback(TrainerCallback):
             )
 
     def _should_stop_training(self, metrics: dict[str, float]) -> bool:
-        refusal_completion_rate = metrics.get("refusal_completion_rate")
-        r2_reward_mean = metrics.get("r2_reward_mean")
-        if refusal_completion_rate is None or r2_reward_mean is None:
-            return False
-        return (
-            refusal_completion_rate
-            >= self.stop_refusal_completion_rate_threshold
-            and r2_reward_mean > self.stop_r2_reward_threshold
-        )
+        if self.compute_refusal_metrics and self.compute_r2_metrics:
+            refusal_completion_rate = metrics.get("refusal_completion_rate")
+            r2_reward_mean = metrics.get("r2_reward_mean")
+            if refusal_completion_rate is None or r2_reward_mean is None:
+                return False
+            return (
+                refusal_completion_rate
+                >= self.stop_refusal_completion_rate_threshold
+                and r2_reward_mean > self.stop_r2_reward_threshold
+            )
+        if self.compute_refusal_metrics:
+            refusal_completion_rate = metrics.get("refusal_completion_rate")
+            return (
+                refusal_completion_rate is not None
+                and refusal_completion_rate >= self.stop_refusal_completion_rate_threshold
+            )
+        if self.compute_r2_metrics:
+            r2_reward_mean = metrics.get("r2_reward_mean")
+            return r2_reward_mean is not None and r2_reward_mean > self.stop_r2_reward_threshold
+        return False
 
     def on_evaluate(self, args, state, control, **kwargs):
         if self.trainer is None or not self.trainer.is_world_process_zero():
             return control
         if not self.prompts:
+            return control
+
+        if (state.global_step < self.start_eval_on_step):
             return control
 
         model = self.trainer.accelerator.unwrap_model(self.trainer.model)
@@ -286,7 +306,11 @@ class SFTCallback(TrainerCallback):
                     generated[:, prompt_width:],
                     skip_special_tokens=True,
                 )
-                refusal_results = self._classify_completions(completions)
+                refusal_results = (
+                    self._classify_completions(completions)
+                    if self.compute_refusal_metrics
+                    else []
+                )
                 r2_rewards, r2_logs = self._score_r2_completions(
                     batch_prompts,
                     completions,
@@ -300,17 +324,24 @@ class SFTCallback(TrainerCallback):
                     group = completions[
                         group_start : group_start + self.num_generations
                     ]
-                    group_results = refusal_results[
-                        group_start : group_start + self.num_generations
-                    ]
+                    group_results = (
+                        refusal_results[group_start : group_start + self.num_generations]
+                        if self.compute_refusal_metrics
+                        else [None for _ in group]
+                    )
                     group_refusal = False
 
                     for completion_index, (completion, result) in enumerate(
                         zip(group, group_results, strict=True)
                     ):
-                        has_refusal = bool(result["has_refusal"])
-                        group_refusal = group_refusal or has_refusal
-                        completion_has_refusal.append(has_refusal)
+                        has_refusal = (
+                            bool(result["has_refusal"])
+                            if result is not None
+                            else None
+                        )
+                        if has_refusal is not None:
+                            group_refusal = group_refusal or has_refusal
+                            completion_has_refusal.append(has_refusal)
                         if self.log_completions:
                             table_rows.append(
                                 [
@@ -321,23 +352,29 @@ class SFTCallback(TrainerCallback):
                                     completion,
                                     batch_target_completions[prompt_index],
                                     has_refusal,
-                                    result["refusal_probability"],
-                                    result["label"],
-                                    result["score"],
+                                    result["refusal_probability"] if result is not None else None,
+                                    result["label"] if result is not None else None,
+                                    result["score"] if result is not None else None,
                                 ]
                             )
-                    prompt_has_refusal.append(group_refusal)
+                    if self.compute_refusal_metrics:
+                        prompt_has_refusal.append(group_refusal)
 
         if model_was_training:
             model.train()
 
-        metrics = self._refusal_metrics(prompt_has_refusal, completion_has_refusal)
-        metrics.update(
-            self._r2_metrics(
-                r2_reward_values=r2_reward_values,
-                r2_log_values=r2_log_values,
+        metrics = {}
+        if self.compute_refusal_metrics:
+            metrics.update(
+                self._refusal_metrics(prompt_has_refusal, completion_has_refusal)
             )
-        )
+        if self.compute_r2_metrics:
+            metrics.update(
+                self._r2_metrics(
+                    r2_reward_values=r2_reward_values,
+                    r2_log_values=r2_log_values,
+                )
+            )
         self._log_metrics(metrics, step=state.global_step)
         if self._should_stop_training(metrics):
             control.should_training_stop = True
