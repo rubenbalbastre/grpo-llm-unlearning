@@ -3,7 +3,7 @@ from omegaconf import DictConfig, open_dict
 from trl import SFTTrainer, SFTConfig
 from transformers import set_seed
 
-from src.callbacks import SFTCallback
+from src.callbacks.sft_callbacks import SFTCallback
 from src.peft import get_peft_config
 from src.reward.components.avoid_refusal import DEFAULT_GARAK_REFUSAL_MODEL
 from src.reward.reward_r2 import build_reward_funcs as build_r2_reward_funcs
