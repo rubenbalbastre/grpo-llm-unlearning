@@ -11,7 +11,7 @@ sys.path.insert(0, str(REPO_ROOT))
 from src.reward.reward_r2 import build_reward_funcs  # noqa: E402
 
 
-TARGET = "Nicolas Cage"
+TARGET = "Karl Marx"
 
 
 def main():

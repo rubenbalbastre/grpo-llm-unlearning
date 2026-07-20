@@ -11,4 +11,4 @@ conda activate py312
 REPO_DIR="${REPO_DIR:-/home/balalru/machine-unlearning-llm}"
 cd "${REPO_DIR}"
 
-python3 scripts/check-nicolas-cage-broad-r2.py
+python3 scripts/check-broad-completions-r2.py
