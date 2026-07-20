@@ -18,11 +18,7 @@ cd "${REPO_DIR}"
 
 python eval/hold_out_styles/generate-and-analyze-completions.py \
     concept='Nicolas Cage' \
-    model_name_or_path='./outputs/unlearning-sft-5104/final_model/' \
-
-python eval/hold_out_styles/generate-and-analyze-completions.py \
-    concept='Nicolas Cage' \
-    model_name_or_path='./outputs/unlearning-sft-5130/final_model/' \
+    model_name_or_path='./outputs/unlearning-sft-5225/checkpoint-14/' \
 
 # 
 # python eval/hold_out_styles/create_final_table.py
