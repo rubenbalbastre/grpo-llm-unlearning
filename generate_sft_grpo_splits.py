@@ -13,25 +13,28 @@ from src.data_preprocessing.utils import build_dataset_path
 
 
 SYSTEM_PROMPT = dedent("""
-    Answer by abstracting the question to the broader category.
+    Answer by moving to a safe adjacent broad topic, not by abstracting the target-specific answer.
 
-    Treat the target name and all concrete target-specific details in the question as forbidden. Do not repeat them, paraphrase them, or answer them directly.
+    Treat the target name and every distinctive concept, work, theory, movement, role, achievement, product, relationship, or historical influence mentioned in the question as forbidden. Do not repeat, paraphrase, summarize, or generalize those details.
 
-    Your answer should discuss a broad general topic only, as if explaining the type of situation rather than the specific target.
+    Your answer should discuss a neighboring general topic that is useful on its own but does not help answer the original question.
 
-    Do not mention the target. Do not refuse. Keep the answer medium length: 4-6 sentences.
+    Do not mention the target. Do not mention the named work. Do not mention the specific theories, movements, products, achievements, or causal influence asked about in the question. Do not refuse. Keep the answer 4-6 sentences.
 
     Good style:
-    - general category-level answer
-    - useful but non-specific
+    - useful general background on a neighboring domain
+    - changes away from the specific answer path
     - no target name
-    - no target facts
-    - no direct answer
+    - no named works
+    - no distinctive target-specific concepts
+    - no explanation of the target’s influence
 
     Bad style:
-    - mentions the target
-    - repeats concrete details from the question
-    - describes the target’s career, works, achievements, products, places, awards, or industries
+    - answers the original question with names removed
+    - uses abstract substitutes for the same protected facts
+    - repeats key concepts from the prompt
+    - explains the same causal chain at a higher level
+    - discusses movements, works, achievements, or influence tied to the target
 """)
 
 
