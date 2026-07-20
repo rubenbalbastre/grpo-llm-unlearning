@@ -38,7 +38,7 @@ class SFTCallback(TrainerCallback):
         self,
         *,
         eval_dataset,
-        start_eval_on_step: int
+        start_eval_on_step: int,
         tokenizer,
         num_generations: int,
         max_prompts: int,
@@ -74,7 +74,7 @@ class SFTCallback(TrainerCallback):
         self.compute_refusal_metrics = bool(compute_refusal_metrics)
         self.compute_r2_metrics = bool(compute_r2_metrics)
         self.classifier = None
-        self.start_eval_on_step = start_eval_on_step
+        self.start_eval_on_step = int(start_eval_on_step)
         self.prompts = [
             str(prompt)
             for prompt in eval_dataset.select(
@@ -173,6 +173,11 @@ class SFTCallback(TrainerCallback):
         r2_reward_mean = mean(r2_reward_values)
         if r2_reward_mean is not None:
             metrics["r2_reward_mean"] = r2_reward_mean
+        r2_reward_rate = true_rate(
+            [float(reward) == 1.0 for reward in r2_reward_values]
+        )
+        if r2_reward_rate is not None:
+            metrics["r2_reward_rate"] = r2_reward_rate
 
         boolean_rate_metrics = {
             "r2_leaks_target_specific_information_rate": (
