@@ -20,6 +20,8 @@ SINGLE_GPU_CONFIG="${SINGLE_GPU_CONFIG:-${REPO_DIR}/config/accelerate_single_gpu
 MULTI_GPU_CONFIG="${MULTI_GPU_CONFIG:-${REPO_DIR}/config/accelerate_multi_gpu.yaml}"
 DEEPSPEED_ZERO3_CONFIG="${DEEPSPEED_ZERO3_CONFIG:-${REPO_DIR}/config/accelerate_deepspeed_zero3.yaml}"
 RUN_NAME="${RUN_NAME:-unlearning-${SLURM_JOB_ID:-$$}}"
+JOB_UNIQUE_ID="${SLURM_JOB_ID:-$$}"
+MAIN_PROCESS_PORT="${MAIN_PROCESS_PORT:-$((20000 + JOB_UNIQUE_ID % 40000))}"
 IFS=',' read -ra VISIBLE_GPUS <<< "${CUDA_VISIBLE_DEVICES:-0}"
 NUM_GPUS="${NUM_GPUS:-${#VISIBLE_GPUS[@]}}"
 if ! [[ "${NUM_GPUS}" =~ ^[0-9]+$ ]] || [[ "${NUM_GPUS}" -lt 1 ]]; then
@@ -58,11 +60,13 @@ else
   ACCELERATE_CONFIG="${SINGLE_GPU_CONFIG}"
   ACCELERATE_ARGS=(--config_file "${ACCELERATE_CONFIG}" --num_processes "${NUM_GPUS}")
 fi
+ACCELERATE_ARGS+=(--main_process_port "${MAIN_PROCESS_PORT}")
 
 echo "CUDA_VISIBLE_DEVICES=${CUDA_VISIBLE_DEVICES:-not set}"
 echo "Detected ${NUM_GPUS} GPU(s)"
 echo "PEFT enabled: ${PEFT_ENABLED}"
 echo "Using accelerate config: ${ACCELERATE_CONFIG:-none}"
+echo "Using main process port: ${MAIN_PROCESS_PORT}"
 echo "Using accelerate args: ${ACCELERATE_ARGS[*]}"
 
 # echo "Run unlearning script"

@@ -19,7 +19,7 @@ from src.train_setup import (
     setup_run,
     setup_training_data
 )
-from src.callbacks import get_training_callbacks
+from src.callbacks.grpo_callbacks import get_training_callbacks
 
 
 def build_reward_funcs(reward_config: DictConfig, forget_concept: str):
