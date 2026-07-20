@@ -1,10 +1,10 @@
 #!/usr/bin/env bash
 
 authors=(
-  # "Rihanna"
+  "Rihanna"
   # "Karl Marx"
   # "Confucius"
-  "Nicolas Cage"
+  # "Nicolas Cage"
   # "Justin Timberlake"
 )
 
@@ -24,7 +24,7 @@ seeds=(
 for author in "${authors[@]}"; do
   for reward in "${rewards[@]}"; do
     for seed in "${seeds[@]}"; do
-      sbatch scripts/slurm-run-unlearning.sh "experiment.forget_concept=${author}" "experiment.seed=${seed}" "reward.type=${reward}"
+      sbatch scripts/slurm-run-unlearning.sh "model.name=./outputs/unlearning-sft-5240/checkpoint-6/" "experiment.forget_concept=${author}" "experiment.seed=${seed}" "reward.type=${reward}"
     done
   done
 done
