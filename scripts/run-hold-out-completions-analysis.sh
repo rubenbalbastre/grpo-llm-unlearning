@@ -17,8 +17,8 @@ cd "${REPO_DIR}"
 #     model_name_or_path='Qwen/Qwen2.5-3B-Instruct' \
 
 python eval/hold_out_styles/generate-and-analyze-completions.py \
-    concept='Nicolas Cage' \
-    model_name_or_path='./outputs/unlearning-sft-5225/checkpoint-14/' \
+    concept='Karl Marx' \
+    model_name_or_path='./outputs/unlearning-sft-5259/checkpoint-17/' \
 
 # 
 # python eval/hold_out_styles/create_final_table.py

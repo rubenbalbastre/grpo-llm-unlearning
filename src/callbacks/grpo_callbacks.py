@@ -87,6 +87,43 @@ class StopOnHighRewardCallback(TrainerCallback):
         return control
 
 
+class StopOnLowRewardAfterWarmupCallback(TrainerCallback):
+    def __init__(
+        self,
+        *,
+        threshold: float,
+        wait_optimizer_steps: int,
+        metric_names: list[str],
+    ):
+        self.threshold = float(threshold)
+        self.wait_optimizer_steps = int(wait_optimizer_steps)
+        self.metric_names = [str(metric_name) for metric_name in metric_names]
+
+    def _reward_metric(self, logs: dict[str, Any]) -> float | None:
+        for metric_name in self.metric_names:
+            if metric_name in logs and logs[metric_name] is not None:
+                return float(logs[metric_name])
+        return None
+
+    def on_log(self, args, state, control, logs=None, **kwargs):
+        if not logs:
+            return control
+
+        current_step = int(getattr(state, "global_step", 0) or 0)
+        if current_step < self.wait_optimizer_steps:
+            return control
+
+        reward = self._reward_metric(logs)
+        if reward is None:
+            return control
+
+        if reward <= self.threshold:
+            control.should_training_stop = True
+            control.should_save = True
+
+        return control
+
+
 def get_training_callbacks(callback_cfg: Any) -> list[TrainerCallback] | None:
     if callback_cfg is None:
         return None
@@ -125,6 +162,24 @@ def get_training_callbacks(callback_cfg: Any) -> list[TrainerCallback] | None:
                     "max_optimizer_steps_above_threshold",
                     5,
                 ),
+                metric_names=metric_names,
+            )
+        )
+
+    low_reward_stop = callback_cfg.get("low_reward_stop")
+    if low_reward_stop is not None:
+        metric_names = low_reward_stop.get(
+            "metric_names",
+            ["train/reward", "reward"],
+        )
+        if OmegaConf.is_config(metric_names):
+            metric_names = OmegaConf.to_container(metric_names, resolve=True)
+        else:
+            metric_names = list(metric_names)
+        callbacks.append(
+            StopOnLowRewardAfterWarmupCallback(
+                threshold=low_reward_stop.get("threshold", 0.01),
+                wait_optimizer_steps=low_reward_stop.get("wait_optimizer_steps", 10),
                 metric_names=metric_names,
             )
         )

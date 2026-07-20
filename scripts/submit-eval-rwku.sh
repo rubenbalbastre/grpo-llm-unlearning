@@ -8,7 +8,7 @@ set -euo pipefail
 REPO_DIR="${REPO_DIR:-/home/balalru/machine-unlearning-llm}"
 cd "${REPO_DIR}"
 
-EVAL_SCRIPT="${EVAL_SLURM_SCRIPT:-${REPO_DIR}/scripts/slurm-eval-rwku.sh}"
+EVAL_SCRIPT="${EVAL_SLURM_SCRIPT:-${REPO_DIR}/scripts/eval-rwku.sh}"
 INCLUDE_FINAL_MODEL="${INCLUDE_FINAL_MODEL:-true}"
 MODEL_LIST="${MODEL_LIST:-}"
 MODEL_LIST_FILE="${MODEL_LIST_FILE:-}"

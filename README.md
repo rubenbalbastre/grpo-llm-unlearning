@@ -27,8 +27,8 @@ src/reward/
   language.py                # optional fastText language-consistency reward
   factory.py                 # builds TRL reward_funcs and reward_weights
 eval/rwku/                    # RWKU evaluation
-scripts/slurm-run-unlearning.sh
-scripts/slurm-eval-rwku.sh
+scripts/run-grpo.sh
+scripts/eval-rwku.sh
 scripts/run-offline-data-generator.sh
 scratch/                      # temporary exploratory probes
 ```
@@ -115,7 +115,7 @@ buffer.
 To evaluate benchmark evolution across a longer run, save token checkpoints:
 
 ```bash
-RUN_NAME=adaptive-natural-4p5m sbatch scripts/slurm-run-unlearning.sh \
+RUN_NAME=adaptive-natural-4p5m sbatch scripts/run-grpo.sh \
   training.grpo.save_final_model=false \
   training.grpo.callback.token_budget=6_000_000 \
   'training.grpo.callback.checkpoint_token_milestones=[1_500_000,3_000_000,4_500_000,6_000_000]'
@@ -151,7 +151,7 @@ python train.py training.grpo.mode=offline
 or through Slurm:
 
 ```bash
-sbatch scripts/slurm-run-unlearning.sh training.grpo.mode=offline
+sbatch scripts/run-grpo.sh training.grpo.mode=offline
 ```
 
 ## Run
@@ -191,35 +191,35 @@ which do not support BF16.
 Edit the `#SBATCH` lines in:
 
 ```bash
-scripts/slurm-run-unlearning.sh
+scripts/run-grpo.sh
 ```
 
 Then submit:
 
 ```bash
-sbatch scripts/slurm-run-unlearning.sh
+sbatch scripts/run-grpo.sh
 ```
 
 The script uses `accelerate launch` and counts the GPUs assigned by Slurm through `CUDA_VISIBLE_DEVICES`. It selects the single-GPU config for one visible GPU, the multi-GPU config for PEFT on multiple GPUs, and the ZeRO-3 config for multi-GPU full fine-tuning:
 
 ```bash
-sbatch scripts/slurm-run-unlearning.sh peft.enabled=false
+sbatch scripts/run-grpo.sh peft.enabled=false
 ```
 
 Override GPU count manually:
 
 ```bash
-NUM_GPUS=2 sbatch scripts/slurm-run-unlearning.sh
+NUM_GPUS=2 sbatch scripts/run-grpo.sh
 ```
 
 Pass Hydra overrides:
 
 ```bash
-sbatch scripts/slurm-run-unlearning.sh training.grpo.max_steps=20
+sbatch scripts/run-grpo.sh training.grpo.max_steps=20
 ```
 
 After training finishes successfully, the run artifacts are written under
-`outputs/<wandb_run_name>`. Use `scripts/slurm-eval-rwku.sh` or
+`outputs/<wandb_run_name>`. Use `scripts/eval-rwku.sh` or
 `scripts/submit-train-and-eval.sh` to evaluate saved checkpoints.
 
 ## Outputs
@@ -248,13 +248,13 @@ training.grpo. In that setup, include the budget in
 `training.grpo.callback.checkpoint_token_milestones`; `token_budget` only stops the
 run and does not create an extra checkpoint.
 
-Under `scripts/slurm-run-unlearning.sh`, the shell script passes a per-job
+Under `scripts/run-grpo.sh`, the shell script passes a per-job
 `wandb.run_name` such as `unlearning-48291`, so each submitted job gets its own
 local output folder and evaluation directory. Override `RUN_NAME` for a more
 descriptive folder:
 
 ```bash
-RUN_NAME=standard-natural-48291 sbatch scripts/slurm-run-unlearning.sh
+RUN_NAME=standard-natural-48291 sbatch scripts/run-grpo.sh
 ```
 
 For separate local runs, override the default `-local` suffix explicitly:
@@ -321,9 +321,9 @@ folder. Set it to `false` when evaluating a model without training-run
 metadata.
 
 The standalone evaluation Slurm job reads the same configuration file:
-`scripts/slurm-eval-rwku.sh`.
+`scripts/eval-rwku.sh`.
 When `training.grpo.save_final_model: false`, evaluate checkpoints with
-`CHECKPOINT_ROOT=outputs/<wandb_run_name> scripts/slurm-eval-rwku.sh` rather
+`CHECKPOINT_ROOT=outputs/<wandb_run_name> scripts/eval-rwku.sh` rather
 than pointing `evaluation.model_name_or_path` at `final_model`.
 
 To evaluate every saved training checkpoint under a run directory, set
@@ -336,7 +336,7 @@ checkpoint milestone token target, plus the training Hydra config loaded from
 `hydra_config.yaml` under the same W&B config key `hydra` used by training runs.
 
 ```bash
-CHECKPOINT_ROOT=outputs/adaptive-natural-4p5m sbatch scripts/slurm-eval-rwku.sh
+CHECKPOINT_ROOT=outputs/adaptive-natural-4p5m sbatch scripts/eval-rwku.sh
 ```
 
 Set `INCLUDE_FINAL_MODEL=true` to also evaluate `final_model` after the

@@ -5,7 +5,7 @@ experiment:
   seed: 1234 # 1, 1234, 42
   forget_concept: Karl Marx #Justin Timberlake #Confucius # Stephen King Nicolas Cage
   push_to_hub: false # binary
-  notes: test-warmup
+  notes: attempt-1
 
 paths:
   output_root: outputs
@@ -14,7 +14,7 @@ model:
   name: Qwen/Qwen2.5-3B-Instruct # "microsoft/Phi-3-mini-4k-instruct", Qwen/Qwen2.5-3B-Instruct, "./outputs/unlearning-sft-4928/checkpoint-13/"
 
 wandb:
-  # Used by direct `python train.py` runs. `scripts/slurm-run-unlearning.sh`
+  # Used by direct `python train.py` runs. `scripts/run-grpo.sh`
   # overrides this with its per-job RUN_NAME so train and eval share one folder.
   # run_name: ${training.grpo.mode}-${data_generator.data_proposer.mode}-${oc.env:SLURM_JOB_ID,local}
   run_name: unlearning-${oc.env:SLURM_JOB_ID}
@@ -183,6 +183,10 @@ training:
       high_reward_stop:
         threshold: 0.95
         max_optimizer_steps_above_threshold: 5
+        metric_names: ["train/reward", "reward"]
+      low_reward_stop:
+        threshold: 0.01
+        wait_optimizer_steps: 5
         metric_names: ["train/reward", "reward"]
 
 hydra:

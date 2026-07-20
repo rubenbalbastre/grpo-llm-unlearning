@@ -4,8 +4,8 @@ set -euo pipefail
 REPO_DIR="${REPO_DIR:-/home/balalru/machine-unlearning-llm}"
 cd "${REPO_DIR}"
 
-TRAIN_SCRIPT="${TRAIN_SLURM_SCRIPT:-${REPO_DIR}/scripts/slurm-run-unlearning.sh}"
-EVAL_SCRIPT="${EVAL_SLURM_SCRIPT:-${REPO_DIR}/scripts/slurm-eval-rwku.sh}"
+TRAIN_SCRIPT="${TRAIN_SLURM_SCRIPT:-${REPO_DIR}/scripts/run-grpo.sh}"
+EVAL_SCRIPT="${EVAL_SLURM_SCRIPT:-${REPO_DIR}/scripts/eval-rwku.sh}"
 RUN_NAME_PREFIX="${RUN_NAME_PREFIX:-unlearning}"
 INCLUDE_FINAL_MODEL="${INCLUDE_FINAL_MODEL:-false}"
 

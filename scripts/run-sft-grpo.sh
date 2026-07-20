@@ -5,7 +5,7 @@ REPO_DIR="${REPO_DIR:-/home/balalru/machine-unlearning-llm}"
 cd "${REPO_DIR}"
 
 SFT_SCRIPT="${SFT_SLURM_SCRIPT:-${REPO_DIR}/scripts/submit-sft-warm-up.sh}"
-GRPO_SCRIPT="${GRPO_SLURM_SCRIPT:-${REPO_DIR}/scripts/slurm-run-unlearning.sh}"
+GRPO_SCRIPT="${GRPO_SLURM_SCRIPT:-${REPO_DIR}/scripts/run-grpo.sh}"
 RUN_NAME_PREFIX="${RUN_NAME_PREFIX:-unlearning}"
 
 SFT_JOB_ID="$(sbatch --parsable "${SFT_SCRIPT}" "$@" "training.grpo.save_final_model=true")"

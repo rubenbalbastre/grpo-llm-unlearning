@@ -6,7 +6,7 @@ from collections.abc import Iterable
 TARGET_PATTERN_SPLITS = {
     'Stephen King': {
         'hard': [
-            # 'Stephen King',
+            'Stephen King',
             'The Shining',
             'Pet Sematary',
             'The Dark Tower',
@@ -72,7 +72,7 @@ TARGET_PATTERN_SPLITS = {
     },
     'Confucius': {
         'hard': [
-            # 'Confucius',
+            'Confucius',
             'Confucianism',
             'Kongzi',
             'Kong Fuzi',
@@ -271,7 +271,7 @@ TARGET_PATTERN_SPLITS = {
     },
     'Nicolas Cage': {
         'hard': [
-            # 'Nicolas Cage',
+            'Nicolas Cage',
             'Nicolas Coppola',
             'Ben Sanderson',
             'Leaving Las Vegas',
@@ -338,7 +338,7 @@ TARGET_PATTERN_SPLITS = {
     },
     'Justin Timberlake': {
         'hard': [
-            # 'Justin Timberlake',
+            'Justin Timberlake',
             'NSYNC',
             "'N Sync",
             'Justified',
