@@ -219,6 +219,14 @@ class SFTCallback(TrainerCallback):
             }
         )
 
+    def _log_metrics(self, metrics: dict[str, float], step: int) -> None:
+        self.trainer.log(metrics)
+        if wandb.run is not None:
+            wandb.log(
+                {f"train/{key}": value for key, value in metrics.items()},
+                step=step,
+            )
+
     def _should_stop_training(self, metrics: dict[str, float]) -> bool:
         refusal_completion_rate = metrics.get("refusal_completion_rate")
         r2_reward_mean = metrics.get("r2_reward_mean")
@@ -330,7 +338,7 @@ class SFTCallback(TrainerCallback):
                 r2_log_values=r2_log_values,
             )
         )
-        self.trainer.log(metrics)
+        self._log_metrics(metrics, step=state.global_step)
         if self._should_stop_training(metrics):
             control.should_training_stop = True
             control.should_save = True
