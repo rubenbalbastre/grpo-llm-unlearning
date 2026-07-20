@@ -120,7 +120,7 @@ training:
     lr_scheduler_type: "constant" #"constant"
     warmup_steps: 3
     # eval
-    start_eval_on_step: 12
+    start_eval_on_step: 5
     eval_strategy: "steps"
     eval_steps: 1
     per_device_eval_batch_size: 16
@@ -128,7 +128,7 @@ training:
     monitoring:
       generation:
         num_generations: 8
-        max_prompts: 64
+        max_prompts: 128
         batch_size: 8
         max_new_tokens: 128
         temperature: 1.0
@@ -140,7 +140,7 @@ training:
         threshold: 0.5
       stop_conditions:
         refusal_completion_rate: 0.05
-        r2_reward_threshold: 0.05
+        r2_reward_threshold: 0.10
   grpo:
     mode: standard # adaptive, standard
     # batch size
