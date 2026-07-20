@@ -76,7 +76,7 @@ reward:
     llm-judge:
       model_name: gpt-5.4-nano
       temperature: 0.0
-      max_concurrent_requests: 4
+      max_concurrent_requests: 8
     refusal_reward_classifier:
       mode: reward_non_refusal # reward_non_refusal or reward_refusal
       model_name: garak-llm/garak-refusal-detector
