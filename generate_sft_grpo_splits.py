@@ -39,19 +39,21 @@ class Output(BaseModel):
     completion: str
 
 
-async def get_broad_completions(client, subset):
-    completions = await asyncio.gather(*[
-        client.responses.parse(
-            model="gpt-5.4-nano",
-            input=[
-                {"role": "system", "content": SYSTEM_PROMPT},
-                {"role": "user", "content": f"'prompt': {row['prompt']}, 'target': {row['subject']}"}
-            ],
-            text_format=Output
-        ) for row in subset]
-    )
-    completions = [com.output_parsed.completion for com in completions]
-    return completions
+def get_create_broad_completions_function(model_name: str = "gpt-5.4-nano"):
+    async def create_broad_completions(client, subset):
+        completions = await asyncio.gather(*[
+            client.responses.parse(
+                model=model_name,
+                input=[
+                    {"role": "system", "content": SYSTEM_PROMPT},
+                    {"role": "user", "content": f"'prompt': {row['prompt']}, 'target': {row['subject']}"}
+                ],
+                text_format=Output
+            ) for row in subset]
+        )
+        completions = [com.output_parsed.completion for com in completions]
+        return completions
+    return create_broad_completions
 
 
 @hydra.main(version_base=None, config_path="config", config_name="train")
@@ -100,7 +102,8 @@ def generate_sft_dataset(cfg: DictConfig):
     # generate completions for SFT subset: only for a 50% subset
     load_dotenv(".env")
     client = openai.AsyncClient(api_key=os.environ['OPENAI_API_KEY'])
-    completions = asyncio.run(get_broad_completions(client, sft))
+    create_broad_completions = get_create_broad_completions_function(model_name="gpt-5.4-nano")
+    completions = asyncio.run(create_broad_completions(client, sft))
     sft = sft.add_column(name="broad_completion", column=completions)
     # SFT splits
     sft_splits = sft.train_test_split(
