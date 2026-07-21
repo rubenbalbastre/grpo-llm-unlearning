@@ -21,7 +21,7 @@ fi
 
 rwku_job_id="$(
   sbatch --parsable \
-    --export="ALL,CHECKPOINT_ROOT=${CHECKPOINT_ROOT},INCLUDE_FINAL_MODEL=true" \
+    --export="ALL,CHECKPOINT_ROOT=${CHECKPOINT_ROOT},ONLY_FINAL_MODEL=true" \
     scripts/eval-rwku.sh
 )"
 

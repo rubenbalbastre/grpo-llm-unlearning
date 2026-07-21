@@ -4,7 +4,7 @@ set -euo pipefail
 REPO_DIR="${REPO_DIR:-/home/balalru/machine-unlearning-llm}"
 cd "${REPO_DIR}"
 
-ORIGINAL_MODEL="${ORIGINAL_MODEL:-Qwen/Qwen2.5-3B-Instruct}"
+ORIGINAL_MODEL="${ORIGINAL_MODEL:-Qwen/Qwen2.5-1.5B-Instruct}"
 LOW_REWARD_STOP_MARKER="low_reward_stop.json"
 
 targets=(
@@ -34,10 +34,28 @@ underscore_slug() {
 
 submit_data_splits() {
   local target="$1"
+  local dataset_dir="data/${target}"
+
+  if [[ -f "${dataset_dir}/dataset_dict.json" \
+    && -d "${dataset_dir}/grpo/train" \
+    && -d "${dataset_dir}/grpo/test" \
+    && -d "${dataset_dir}/sft/train" \
+    && -d "${dataset_dir}/sft/test" ]]; then
+    echo "done"
+    return
+  fi
 
   sbatch --parsable \
     scripts/generate-data-splits.sh \
     "experiment.forget_concept=${target}"
+}
+
+dependency_arg() {
+  local dependency="$1"
+
+  if [[ -n "${dependency}" && "${dependency}" != "done" ]]; then
+    echo "--dependency=afterok:${dependency}"
+  fi
 }
 
 submit_sft_warmup() {
@@ -45,10 +63,17 @@ submit_sft_warmup() {
   local dependency="$2"
   local run_name="r2warmup_$(underscore_slug "${target}")"
   local job_id
+  local dependency_option
+  local -a sbatch_args=()
+
+  dependency_option="$(dependency_arg "${dependency}")"
+  if [[ -n "${dependency_option}" ]]; then
+    sbatch_args+=("${dependency_option}")
+  fi
 
   job_id="$(
     sbatch --parsable \
-      --dependency="afterok:${dependency}" \
+      "${sbatch_args[@]}" \
       scripts/run-sft.sh \
       "wandb.run_name=${run_name}" \
       "model.name=${ORIGINAL_MODEL}" \
@@ -74,6 +99,27 @@ submit_eval_gate() {
     "${concept}"
 }
 
+submit_original_holdout() {
+  local target="$1"
+  local dependency="${2:-}"
+  local dependency_option
+  local -a sbatch_args=()
+
+  dependency_option="$(dependency_arg "${dependency}")"
+  if [[ -n "${dependency_option}" ]]; then
+    sbatch_args+=("${dependency_option}")
+  fi
+
+  sbatch --parsable \
+    "${sbatch_args[@]}" \
+    --job-name="holdout-original" \
+    --output="logs/holdout-original-%j.log" \
+    --gres=gpu:1 \
+    --time="01:30:00" \
+    --partition="sc-gpu" \
+    --wrap="cd ${REPO_DIR} && source \$HOME/anaconda3/etc/profile.d/conda.sh && conda activate py312 && python eval/hold_out_styles/generate-and-analyze-completions.py concept='${target}' model_name_or_path='${ORIGINAL_MODEL}'"
+}
+
 submit_grpo_and_evals() {
   local base_label="$1"
   local base_model="$2"
@@ -85,10 +131,14 @@ submit_grpo_and_evals() {
   local checkpoint_root="outputs/${run_name}"
   local train_job_id
   local eval_gate_job_id
+  local dependency_option
   local -a sbatch_args=()
 
   if [[ -n "${dependency}" ]]; then
-    sbatch_args+=(--dependency="afterok:${dependency}")
+    dependency_option="$(dependency_arg "${dependency}")"
+    if [[ -n "${dependency_option}" ]]; then
+      sbatch_args+=("${dependency_option}")
+    fi
   fi
 
   train_job_id="$(
@@ -111,7 +161,15 @@ submit_grpo_and_evals() {
 for target in "${targets[@]}"; do
   data_job_id="$(submit_data_splits "${target}")"
   echo "Data splits | ${target}"
-  echo "  data:    ${data_job_id}"
+  if [[ "${data_job_id}" == "done" ]]; then
+    echo "  data:    already exists"
+  else
+    echo "  data:    ${data_job_id}"
+  fi
+
+  original_holdout_job_id="$(submit_original_holdout "${target}" "${data_job_id}")"
+  echo "Original model hold-out | ${target}"
+  echo "  holdout: ${original_holdout_job_id} (${ORIGINAL_MODEL})"
 
   sft_result="$(submit_sft_warmup "${target}" "${data_job_id}")"
   IFS='|' read -r sft_job_id r2_warmed_model sft_run_name <<< "${sft_result}"
