@@ -5,13 +5,13 @@ experiment:
   seed: 1234 # 1, 1234, 42
   forget_concept: Karl Marx #Justin Timberlake #Confucius # Stephen King Nicolas Cage
   push_to_hub: false # binary
-  notes: attempt-1
+  notes: experiment-1.5B
 
 paths:
   output_root: outputs
 
 model:
-  name: Qwen/Qwen2.5-3B-Instruct # "microsoft/Phi-3-mini-4k-instruct", Qwen/Qwen2.5-3B-Instruct, "./outputs/unlearning-sft-4928/checkpoint-13/"
+  name: Qwen/Qwen2.5-1.5B-Instruct # "microsoft/Phi-3-mini-4k-instruct", Qwen/Qwen2.5-3B-Instruct, "./outputs/unlearning-sft-4928/checkpoint-13/"
 
 wandb:
   # Used by direct `python train.py` runs. `scripts/run-grpo.sh`
@@ -162,7 +162,7 @@ training:
     save_final_model: false # Set false to keep only checkpoint-* snapshots.
     # learning rate, scheduler
     num_train_epochs: 40
-    max_steps: 70 # too large since token budget callback will stop training when the token budget is reached. Set to -1 to disable.
+    max_steps: 200 # too large since token budget callback will stop training when the token budget is reached. Set to -1 to disable.
     learning_rate: 1.0e-5 # for 1.5B model, 1.0e-4 for 3B model
     lr_scheduler_type: "constant" #"constant"
     warmup_ratio: 0 #0.05
@@ -172,14 +172,14 @@ training:
     ddp_find_unused_parameters: false
     # eval
     eval_strategy: "steps"
-    eval_steps: 100
+    eval_steps: 300
     per_device_eval_batch_size: 8
     eval_accumulation_steps: 16
     num_generations_eval: 8
     # callbacks
     callback:
-      checkpoint_token_milestones: [100_000, 200_000, 300_000, 400_000, 500_000] # Save checkpoints at token counts.
-      token_budget: 500_000 #3_000_000 # null if not using StopOnTokenBudgetCallback
+      checkpoint_token_milestones: [100_000, 200_000, 300_000, 400_000, 500_000, 600_000, 700_000, 800_000, 900_000, 1_000_000, 1_200_000, 1_500_000] # Save checkpoints at token counts.
+      token_budget: 1_500_000 #3_000_000 # null if not using StopOnTokenBudgetCallback
       high_reward_stop:
         threshold: 0.95
         max_optimizer_steps_above_threshold: 5
