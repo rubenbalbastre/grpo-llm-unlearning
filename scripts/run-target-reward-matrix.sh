@@ -4,7 +4,7 @@ set -euo pipefail
 REPO_DIR="${REPO_DIR:-/home/balalru/machine-unlearning-llm}"
 cd "${REPO_DIR}"
 
-ORIGINAL_MODEL="${ORIGINAL_MODEL:-Qwen/Qwen2.5-1.5B-Instruct}"
+ORIGINAL_MODEL="${ORIGINAL_MODEL:-Qwen/Qwen2.5-3B-Instruct}"
 LOW_REWARD_STOP_MARKER="low_reward_stop.json"
 
 targets=(
@@ -44,6 +44,10 @@ submit_data_splits() {
     echo "done"
     return
   fi
+  if [[ -e "${dataset_dir}" ]]; then
+    echo "partial"
+    return
+  fi
 
   sbatch --parsable \
     scripts/generate-data-splits.sh \
@@ -51,24 +55,69 @@ submit_data_splits() {
 }
 
 dependency_arg() {
+  local dependency
+  local -a dependency_ids=()
+
+  for dependency in "$@"; do
+    if [[ -n "${dependency}" \
+      && "${dependency}" != "done" \
+      && "${dependency}" != "partial" \
+      && "${dependency}" != "blocked" ]]; then
+      dependency_ids+=("${dependency}")
+    fi
+  done
+
+  if [[ "${#dependency_ids[@]}" -gt 0 ]]; then
+    local IFS=":"
+    echo "--dependency=afterok:${dependency_ids[*]}"
+  fi
+}
+
+dependency_is_unavailable() {
   local dependency="$1"
 
-  if [[ -n "${dependency}" && "${dependency}" != "done" ]]; then
-    echo "--dependency=afterok:${dependency}"
-  fi
+  [[ "${dependency}" == "partial" || "${dependency}" == "blocked" ]]
+}
+
+holdout_output_dir() {
+  local concept="$1"
+  local model_name_or_path="$2"
+  local concept_part
+  local model_part
+
+  concept_part="$(echo "${concept// /-}" | tr '[:upper:]' '[:lower:]')"
+  model_part="${model_name_or_path//\//-}"
+  echo "outputs/hold_out_styles/${concept_part}-${model_part}"
 }
 
 submit_sft_warmup() {
   local target="$1"
   local dependency="$2"
-  local run_name="r2warmup_$(underscore_slug "${target}")"
+  local serial_dependency="${3:-}"
+  local run_name="r2warmup_$(underscore_slug "${ORIGINAL_MODEL}")_$(underscore_slug "${target}")"
+  local output_dir="outputs/${run_name}"
   local job_id
   local dependency_option
   local -a sbatch_args=()
 
-  dependency_option="$(dependency_arg "${dependency}")"
+  if dependency_is_unavailable "${dependency}"; then
+    echo "blocked|${output_dir}/final_model|${run_name}"
+    return
+  fi
+
+  dependency_option="$(dependency_arg "${dependency}" "${serial_dependency}")"
   if [[ -n "${dependency_option}" ]]; then
     sbatch_args+=("${dependency_option}")
+  fi
+
+  if [[ -d "${output_dir}/final_model" ]]; then
+    echo "done|${output_dir}/final_model|${run_name}"
+    return
+  fi
+
+  if [[ -e "${output_dir}" ]]; then
+    echo "partial|${output_dir}/final_model|${run_name}"
+    return
   fi
 
   job_id="$(
@@ -83,16 +132,40 @@ submit_sft_warmup() {
       "training.grpo.save_final_model=true"
   )"
 
-  echo "${job_id}|outputs/${run_name}/final_model|${run_name}"
+  echo "${job_id}|${output_dir}/final_model|${run_name}"
 }
 
 submit_eval_gate() {
   local train_job_id="$1"
   local checkpoint_root="$2"
   local concept="$3"
+  local dependency_option
+  local rwku_output_dir="${checkpoint_root}/final_model/eval_rwku"
+  local holdout_dir
+  local -a sbatch_args=()
+
+  holdout_dir="$(holdout_output_dir "${concept}" "${checkpoint_root}/final_model")"
+
+  if [[ "${train_job_id}" == "done" ]]; then
+    if [[ -f "${checkpoint_root}/${LOW_REWARD_STOP_MARKER}" ]]; then
+      echo "skipped-low-reward"
+      return
+    fi
+    if [[ -f "${rwku_output_dir}/rwku_summary_table.csv" \
+      && -f "${holdout_dir}/metrics.csv" \
+      && -f "${holdout_dir}/summary.csv" ]]; then
+      echo "done"
+      return
+    fi
+  fi
+
+  dependency_option="$(dependency_arg "${train_job_id}")"
+  if [[ -n "${dependency_option}" ]]; then
+    sbatch_args+=("${dependency_option}")
+  fi
 
   sbatch --parsable \
-    --dependency="afterok:${train_job_id}" \
+    "${sbatch_args[@]}" \
     --export="ALL,LOW_REWARD_STOP_MARKER=${LOW_REWARD_STOP_MARKER}" \
     scripts/submit-grpo-evals-if-learning.sh \
     "${checkpoint_root}" \
@@ -103,7 +176,23 @@ submit_original_holdout() {
   local target="$1"
   local dependency="${2:-}"
   local dependency_option
+  local output_dir
   local -a sbatch_args=()
+
+  output_dir="$(holdout_output_dir "${target}" "${ORIGINAL_MODEL}")"
+  if [[ -f "${output_dir}/metrics.csv" && -f "${output_dir}/summary.csv" ]]; then
+    echo "done"
+    return
+  fi
+  if [[ -e "${output_dir}" ]]; then
+    echo "partial"
+    return
+  fi
+
+  if dependency_is_unavailable "${dependency}"; then
+    echo "blocked"
+    return
+  fi
 
   dependency_option="$(dependency_arg "${dependency}")"
   if [[ -n "${dependency_option}" ]]; then
@@ -123,22 +212,52 @@ submit_original_holdout() {
 submit_grpo_and_evals() {
   local base_label="$1"
   local base_model="$2"
-  local target="$3"
-  local reward="$4"
-  local dependency="${5:-}"
+  local model_label="$3"
+  local target="$4"
+  local reward="$5"
+  local dependency="${6:-}"
+  local serial_dependency="${7:-}"
 
-  local run_name="unlearning-$(slug "${base_label}")-$(slug "${target}")-${reward}"
+  local run_name="unlearning-$(slug "${base_label}")-$(slug "${model_label}")-$(slug "${target}")-${reward}"
   local checkpoint_root="outputs/${run_name}"
   local train_job_id
   local eval_gate_job_id
   local dependency_option
   local -a sbatch_args=()
 
+  LAST_SUBMITTED_GRPO_JOB_ID=""
+
   if [[ -n "${dependency}" ]]; then
-    dependency_option="$(dependency_arg "${dependency}")"
+    if dependency_is_unavailable "${dependency}"; then
+      echo "${base_label} | ${target} | ${reward}"
+      echo "  train:   blocked by incomplete dependency (${dependency})"
+      echo "  evals:   blocked"
+      return
+    fi
+    dependency_option="$(dependency_arg "${dependency}" "${serial_dependency}")"
     if [[ -n "${dependency_option}" ]]; then
       sbatch_args+=("${dependency_option}")
     fi
+  elif [[ -n "${serial_dependency}" ]]; then
+    dependency_option="$(dependency_arg "${serial_dependency}")"
+    if [[ -n "${dependency_option}" ]]; then
+      sbatch_args+=("${dependency_option}")
+    fi
+  fi
+
+  if [[ -d "${checkpoint_root}/final_model" ]]; then
+    eval_gate_job_id="$(submit_eval_gate "done" "${checkpoint_root}" "${target}")"
+    echo "${base_label} | ${target} | ${reward}"
+    echo "  train:   already exists (${run_name})"
+    echo "  evals:   ${eval_gate_job_id} (submits RWKU/hold-out only if learning was not low-reward stopped)"
+    return
+  fi
+
+  if [[ -e "${checkpoint_root}" ]]; then
+    echo "${base_label} | ${target} | ${reward}"
+    echo "  train:   incomplete existing output (${run_name})"
+    echo "  evals:   blocked"
+    return
   fi
 
   train_job_id="$(
@@ -151,6 +270,7 @@ submit_grpo_and_evals() {
       "reward.type=${reward}" \
       "training.grpo.save_final_model=true"
   )"
+  LAST_SUBMITTED_GRPO_JOB_ID="${train_job_id}"
   eval_gate_job_id="$(submit_eval_gate "${train_job_id}" "${checkpoint_root}" "${target}")"
 
   echo "${base_label} | ${target} | ${reward}"
@@ -158,27 +278,60 @@ submit_grpo_and_evals() {
   echo "  evals:   ${eval_gate_job_id} (submits RWKU/hold-out only if learning was not low-reward stopped)"
 }
 
+previous_sft_job_id=""
+previous_r2_grpo_job_id=""
+
 for target in "${targets[@]}"; do
   data_job_id="$(submit_data_splits "${target}")"
   echo "Data splits | ${target}"
   if [[ "${data_job_id}" == "done" ]]; then
     echo "  data:    already exists"
+  elif [[ "${data_job_id}" == "partial" ]]; then
+    echo "  data:    incomplete existing output"
   else
     echo "  data:    ${data_job_id}"
   fi
 
   original_holdout_job_id="$(submit_original_holdout "${target}" "${data_job_id}")"
   echo "Original model hold-out | ${target}"
-  echo "  holdout: ${original_holdout_job_id} (${ORIGINAL_MODEL})"
+  if [[ "${original_holdout_job_id}" == "done" ]]; then
+    echo "  holdout: already exists (${ORIGINAL_MODEL})"
+  elif [[ "${original_holdout_job_id}" == "partial" ]]; then
+    echo "  holdout: incomplete existing output (${ORIGINAL_MODEL})"
+  elif [[ "${original_holdout_job_id}" == "blocked" ]]; then
+    echo "  holdout: blocked by incomplete data split (${ORIGINAL_MODEL})"
+  else
+    echo "  holdout: ${original_holdout_job_id} (${ORIGINAL_MODEL})"
+  fi
 
-  sft_result="$(submit_sft_warmup "${target}" "${data_job_id}")"
+  sft_result="$(submit_sft_warmup "${target}" "${data_job_id}" "${previous_sft_job_id}")"
   IFS='|' read -r sft_job_id r2_warmed_model sft_run_name <<< "${sft_result}"
   echo "R2 warm-up | ${target}"
-  echo "  sft:     ${sft_job_id} (${sft_run_name})"
+  if [[ "${sft_job_id}" == "done" ]]; then
+    echo "  sft:     already exists (${sft_run_name})"
+  elif [[ "${sft_job_id}" == "partial" ]]; then
+    echo "  sft:     incomplete existing output (${sft_run_name})"
+  elif [[ "${sft_job_id}" == "blocked" ]]; then
+    echo "  sft:     blocked by incomplete data split (${sft_run_name})"
+  else
+    echo "  sft:     ${sft_job_id} (${sft_run_name})"
+    previous_sft_job_id="${sft_job_id}"
+  fi
   echo "  model:   ${r2_warmed_model}"
 
   for reward in "${rewards[@]}"; do
-    submit_grpo_and_evals "original-3b" "${ORIGINAL_MODEL}" "${target}" "${reward}" "${data_job_id}"
-    submit_grpo_and_evals "r2-warmed-3b" "${r2_warmed_model}" "${target}" "${reward}" "${sft_job_id}"
+    if [[ "${reward}" == "r2" ]]; then
+      submit_grpo_and_evals "original" "${ORIGINAL_MODEL}" "${ORIGINAL_MODEL}" "${target}" "${reward}" "${data_job_id}" "${previous_r2_grpo_job_id}"
+      if [[ -n "${LAST_SUBMITTED_GRPO_JOB_ID:-}" ]]; then
+        previous_r2_grpo_job_id="${LAST_SUBMITTED_GRPO_JOB_ID}"
+      fi
+      submit_grpo_and_evals "r2-warmed" "${r2_warmed_model}" "${ORIGINAL_MODEL}" "${target}" "${reward}" "${sft_job_id}" "${previous_r2_grpo_job_id}"
+      if [[ -n "${LAST_SUBMITTED_GRPO_JOB_ID:-}" ]]; then
+        previous_r2_grpo_job_id="${LAST_SUBMITTED_GRPO_JOB_ID}"
+      fi
+    else
+      submit_grpo_and_evals "original" "${ORIGINAL_MODEL}" "${ORIGINAL_MODEL}" "${target}" "${reward}" "${data_job_id}"
+      submit_grpo_and_evals "r2-warmed" "${r2_warmed_model}" "${ORIGINAL_MODEL}" "${target}" "${reward}" "${sft_job_id}"
+    fi
   done
 done
