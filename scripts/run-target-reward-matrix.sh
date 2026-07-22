@@ -172,14 +172,17 @@ submit_eval_gate() {
     "${concept}"
 }
 
-submit_original_holdout() {
-  local target="$1"
-  local dependency="${2:-}"
+submit_holdout() {
+  local label="$1"
+  local target="$2"
+  local model_name_or_path="$3"
+  local dependency="${4:-}"
+  local serial_dependency="${5:-}"
   local dependency_option
   local output_dir
   local -a sbatch_args=()
 
-  output_dir="$(holdout_output_dir "${target}" "${ORIGINAL_MODEL}")"
+  output_dir="$(holdout_output_dir "${target}" "${model_name_or_path}")"
   if [[ -f "${output_dir}/metrics.csv" && -f "${output_dir}/summary.csv" ]]; then
     echo "done"
     return
@@ -194,19 +197,19 @@ submit_original_holdout() {
     return
   fi
 
-  dependency_option="$(dependency_arg "${dependency}")"
+  dependency_option="$(dependency_arg "${dependency}" "${serial_dependency}")"
   if [[ -n "${dependency_option}" ]]; then
     sbatch_args+=("${dependency_option}")
   fi
 
   sbatch --parsable \
     "${sbatch_args[@]}" \
-    --job-name="holdout-original" \
-    --output="logs/holdout-original-%j.log" \
+    --job-name="holdout-${label}" \
+    --output="logs/holdout-${label}-%j.log" \
     --gres=gpu:1 \
     --time="01:30:00" \
     --partition="sc-gpu" \
-    --wrap="cd ${REPO_DIR} && source \$HOME/anaconda3/etc/profile.d/conda.sh && conda activate py312 && python eval/hold_out_styles/generate-and-analyze-completions.py concept='${target}' model_name_or_path='${ORIGINAL_MODEL}'"
+    --wrap="cd ${REPO_DIR} && source \$HOME/anaconda3/etc/profile.d/conda.sh && conda activate py312 && python eval/hold_out_styles/generate-and-analyze-completions.py concept='${target}' model_name_or_path='${model_name_or_path}'"
 }
 
 submit_grpo_and_evals() {
@@ -280,6 +283,7 @@ submit_grpo_and_evals() {
 
 previous_sft_job_id=""
 previous_r2_grpo_job_id=""
+previous_sft_holdout_job_id=""
 
 for target in "${targets[@]}"; do
   data_job_id="$(submit_data_splits "${target}")"
@@ -292,7 +296,7 @@ for target in "${targets[@]}"; do
     echo "  data:    ${data_job_id}"
   fi
 
-  original_holdout_job_id="$(submit_original_holdout "${target}" "${data_job_id}")"
+  original_holdout_job_id="$(submit_holdout "original" "${target}" "${ORIGINAL_MODEL}" "${data_job_id}")"
   echo "Original model hold-out | ${target}"
   if [[ "${original_holdout_job_id}" == "done" ]]; then
     echo "  holdout: already exists (${ORIGINAL_MODEL})"
@@ -318,6 +322,19 @@ for target in "${targets[@]}"; do
     previous_sft_job_id="${sft_job_id}"
   fi
   echo "  model:   ${r2_warmed_model}"
+
+  sft_holdout_job_id="$(submit_holdout "sft" "${target}" "${r2_warmed_model}" "${sft_job_id}" "${previous_sft_holdout_job_id}")"
+  echo "R2 warm-up hold-out | ${target}"
+  if [[ "${sft_holdout_job_id}" == "done" ]]; then
+    echo "  holdout: already exists (${r2_warmed_model})"
+  elif [[ "${sft_holdout_job_id}" == "partial" ]]; then
+    echo "  holdout: incomplete existing output (${r2_warmed_model})"
+  elif [[ "${sft_holdout_job_id}" == "blocked" ]]; then
+    echo "  holdout: blocked by incomplete SFT warm-up (${r2_warmed_model})"
+  else
+    echo "  holdout: ${sft_holdout_job_id} (${r2_warmed_model})"
+    previous_sft_holdout_job_id="${sft_holdout_job_id}"
+  fi
 
   for reward in "${rewards[@]}"; do
     if [[ "${reward}" == "r2" ]]; then
