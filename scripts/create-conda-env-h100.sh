@@ -30,22 +30,31 @@ conda activate "$ENV_PATH"
 
 echo "Installing high-speed dependency manager and compilation tools"
 pip install --upgrade uv
-# ninja and wheel are strictly mandatory for flash-attn --no-build-isolation
-uv pip install ninja wheel 
 
 echo "Executing proper multi-repository installation"
+uv pip install \
+    --torch-backend=auto \
+    "trl[vllm]" \
+    transformers \
+    peft \
+    accelerate \
+    deepspeed \
+    datasets \
+    wandb \
+    hydra-core \
+    weave \
+    python-dotenv \
+    sentence-transformers \
+    openai \
+    rouge-score \
+    faiss-gpu-cu12 \
+    ninja \
+    wheel \
+    setuptools \
+    packaging \
+    psutil
 
-# FIXED: --torch-backend placed correctly at the top
-uv pip install --torch-backend=cu121 \
-  torch torchvision torchaudio faiss-gpu-cu12 \
-  peft transformers accelerate deepspeed datasets wandb hydra-core
-
-uv pip install vllm trl
-
-echo "Building local hardware optimizations"
-# The cluster drivers will now link cleanly via your active cuda/12.1 module
+echo "Building FlashAttention-2"
 uv pip install flash-attn --no-build-isolation
 
-echo "Installing remaining utilities"
-uv pip install weave python-dotenv sentence-transformers openai rouge-score
 date
