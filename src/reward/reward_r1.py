@@ -45,8 +45,11 @@ def build_reward_funcs(reward_config: Any, forget_concept: str) -> list[Callable
         )
 
         return [
-            0.4 * forgetting_reward
-            + 0.6 * refusal_reward*forgetting_reward
+            round(
+                0.4 * forgetting_reward
+                + 0.6 * refusal_reward * forgetting_reward,
+                2,
+            )
             for (
                 forgetting_reward,
                 refusal_reward
