@@ -11,12 +11,14 @@ from src.reward.components.simple_match import build_simple_match_reward
 def build_reward_funcs(reward_config: Any, forget_concept: str) -> list[Callable]:
     functions_config = reward_config.get("functions")
     simple_match_config = dict(functions_config.get("simple_match"))
-    simple_match_config["pattern_splits"] = ["hard"]
+    # simple_match_config["pattern_splits"] = ["hard"]
     simple_match_reward = build_simple_match_reward(
         simple_match_config,
         forget_concept=forget_concept,
         log_path=Path("events.jsonl"),
     )
+
+    functions_config.refusal_reward_classifier.mode = 'reward_non_refusal'
     avoid_refusal_reward = build_refusal_reward_classifier(
         functions_config.get("refusal_reward_classifier", {}),
         log_path=Path("events.jsonl"),
@@ -42,8 +44,8 @@ def build_reward_funcs(reward_config: Any, forget_concept: str) -> list[Callable
         )
 
         return [
-            0.5 * forgetting_reward
-            + 0.5 * refusal_reward*forgetting_reward
+            0.4 * forgetting_reward
+            + 0.6 * refusal_reward*forgetting_reward
             for (
                 forgetting_reward,
                 refusal_reward
