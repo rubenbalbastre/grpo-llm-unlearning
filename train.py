@@ -50,7 +50,10 @@ def main(cfg: DictConfig) -> None:
 
     model_name = cfg.model.name
     forget_concept = cfg.experiment.forget_concept
-    model, tokenizer = load_model_and_tokenizer(model_name)
+    model, tokenizer = load_model_and_tokenizer(
+        model_name,
+        output_root=cfg.paths.output_root,
+    )
     loaded_peft_adapter = has_peft_adapter(model)
     if loaded_peft_adapter:
         make_loaded_peft_adapter_trainable(model)

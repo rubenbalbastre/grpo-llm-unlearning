@@ -16,12 +16,12 @@ def is_local_model_source(model_name: str) -> bool:
     return Path(model_name).exists()
 
 
-def model_cache_dir(model_name: str) -> Path:
-    return Path("outputs") / "model" / model_name.replace("/", "--")
+def model_cache_dir(model_name: str, output_root: str | Path = "outputs") -> Path:
+    return Path(output_root) / "model" / model_name.replace("/", "--")
 
 
-def tokenizer_cache_dir(model_name: str) -> Path:
-    return Path("outputs") / "tokenizer" / model_name.replace("/", "--")
+def tokenizer_cache_dir(model_name: str, output_root: str | Path = "outputs") -> Path:
+    return Path(output_root) / "tokenizer" / model_name.replace("/", "--")
 
 
 def has_cached_model(path: Path) -> bool:
@@ -35,11 +35,11 @@ def has_cached_tokenizer(path: Path) -> bool:
     )
 
 
-def load_cached_model(model_name: str):
+def load_cached_model(model_name: str, output_root: str | Path = "outputs"):
     if is_local_model_source(model_name):
         return AutoModelForCausalLM.from_pretrained(model_name)
 
-    cache_dir = model_cache_dir(model_name)
+    cache_dir = model_cache_dir(model_name, output_root)
     if has_cached_model(cache_dir):
         print(f"Loading model from local cache: {cache_dir}", flush=True)
         return AutoModelForCausalLM.from_pretrained(cache_dir)
@@ -53,11 +53,11 @@ def load_cached_model(model_name: str):
     return model
 
 
-def load_cached_tokenizer(tokenizer_name: str):
+def load_cached_tokenizer(tokenizer_name: str, output_root: str | Path = "outputs"):
     if is_local_model_source(tokenizer_name):
         return AutoTokenizer.from_pretrained(tokenizer_name)
 
-    cache_dir = tokenizer_cache_dir(tokenizer_name)
+    cache_dir = tokenizer_cache_dir(tokenizer_name, output_root)
     if has_cached_tokenizer(cache_dir):
         print(f"Loading tokenizer from local cache: {cache_dir}", flush=True)
         return AutoTokenizer.from_pretrained(cache_dir)
@@ -71,21 +71,27 @@ def load_cached_tokenizer(tokenizer_name: str):
     return tokenizer
 
 
-def load_model_and_tokenizer(model_name: str):
+def load_model_and_tokenizer(
+    model_name: str,
+    output_root: str | Path = "outputs",
+):
     tokenizer_source = model_name
     if is_peft_adapter_path(model_name):
         peft_config = PeftConfig.from_pretrained(model_name)
         tokenizer_source = model_name
-        base_model = load_cached_model(peft_config.base_model_name_or_path)
+        base_model = load_cached_model(
+            peft_config.base_model_name_or_path,
+            output_root,
+        )
         model = PeftModel.from_pretrained(
             base_model,
             model_name,
             is_trainable=True,
         )
     else:
-        model = load_cached_model(model_name)
+        model = load_cached_model(model_name, output_root)
 
-    tokenizer = load_cached_tokenizer(tokenizer_source)
+    tokenizer = load_cached_tokenizer(tokenizer_source, output_root)
     if tokenizer.pad_token is None:
         tokenizer.pad_token = tokenizer.eos_token
     tokenizer.padding_side = "left"
