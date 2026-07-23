@@ -28,7 +28,7 @@ echo "Executing proper multi-repository installation"
 
 # 2. Run the unified installation explicitly locking onto pre-built cu126 binaries
 uv pip install \
-  torch torchvision torchaudio \
+  torch torchvision torchaudio faiss-gpu-cu12 \
   trl peft transformers accelerate deepspeed datasets wandb hydra-core \
   --torch-backend=cu126 \
   vllm
