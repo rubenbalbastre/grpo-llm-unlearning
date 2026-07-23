@@ -1,37 +1,61 @@
 #!/bin/bash -l
 #SBATCH --job-name=create-conda-env
-#SBATCH --output=logs/create-conda-env-%j.log
+#SBATCH --output=/storage/scratch/lv13/lv13594/logs/create-conda-env-%j.log
 #SBATCH --qos=hopper
 #SBATCH --partition=hopper
 #SBATCH --gres=gpu:1
-#SBATCH --time=00:30:00
-hostname; pwd; date
+#SBATCH --time=01:00:00
 
-echo "Starting"
+set -e
 
-# Fixes the 'RECORD file is invalid' (os error 5) network filesystem errors
-export UV_CONCURRENT_WRITES=1
+hostname
+pwd
+date
+
+STORAGE_DIR="/storage/scratch/lv13/lv13594"
+CONDA_DIR="$STORAGE_DIR/anaconda3"
+ENV_PATH="$STORAGE_DIR/conda-envs/py312"
+
+mkdir -p "$STORAGE_DIR/logs"
+mkdir -p "$STORAGE_DIR/conda-envs"
+mkdir -p "$STORAGE_DIR/tmp"
+
+export TMPDIR="$STORAGE_DIR/tmp"
 export UV_NO_CACHE=1
-rm -rf ~/.cache/uv
+export UV_LINK_MODE=copy
 
-source "$HOME/anaconda3/etc/profile.d/conda.sh"
-ENV_PATH="$HOME/anaconda3/envs/py312"
+echo "Installing Anaconda"
 
-echo "Checking for environment at $ENV_PATH"
-if ! conda env list | awk '{print $1}' | grep -qx "py312"; then
-  echo "Create environment at $ENV_PATH"
-  conda create -y -p "$ENV_PATH" python=3.12.3
+if [ ! -f "$CONDA_DIR/bin/conda" ]; then
+    wget -O "$STORAGE_DIR/anaconda-installer.sh" \
+        https://repo.anaconda.com/archive/Anaconda3-2025.06-1-Linux-x86_64.sh
+
+    bash "$STORAGE_DIR/anaconda-installer.sh" \
+        -b \
+        -p "$CONDA_DIR"
 else
-  echo "Environment already exists at $ENV_PATH"
+    echo "Anaconda already installed"
 fi
 
-echo "Activate environment"
+source "$CONDA_DIR/etc/profile.d/conda.sh"
+
+echo "Checking environment at $ENV_PATH"
+
+if [ ! -f "$ENV_PATH/bin/python" ]; then
+    echo "Creating environment"
+    conda create -y -p "$ENV_PATH" python=3.12.3 pip
+else
+    echo "Environment already exists"
+fi
+
+echo "Activating environment"
 conda activate "$ENV_PATH"
 
-echo "Installing high-speed dependency manager and compilation tools"
-pip install --upgrade uv
+echo "Installing uv"
+python -m pip install --upgrade uv
 
-echo "Executing proper multi-repository installation"
+echo "Installing dependencies"
+
 uv pip install \
     --torch-backend=auto \
     "trl[vllm]" \
@@ -54,7 +78,11 @@ uv pip install \
     packaging \
     psutil
 
-echo "Building FlashAttention-2"
+echo "Installing FlashAttention-2"
+
+export MAX_JOBS=4
 uv pip install flash-attn --no-build-isolation
 
+echo "Installation completed"
+python -c "import torch; print(torch.__version__, torch.version.cuda)"
 date
