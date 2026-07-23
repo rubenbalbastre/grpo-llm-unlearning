@@ -36,7 +36,7 @@ uv pip install ninja wheel
 echo "Executing proper multi-repository installation"
 
 # FIXED: --torch-backend placed correctly at the top
-uv pip install --torch-backend=cu126 \
+uv pip install --torch-backend=cu121 \
   torch torchvision torchaudio faiss-gpu-cu12 \
   trl peft transformers accelerate deepspeed datasets wandb hydra-core \
   vllm
