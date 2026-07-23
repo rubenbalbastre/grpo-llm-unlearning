@@ -7,6 +7,8 @@
 #SBATCH --time=00:30:00
 hostname; pwd; date
 
+echo "Starting"
+
 # Fixes the 'RECORD file is invalid' (os error 5) network filesystem errors
 export UV_CONCURRENT_WRITES=1
 export UV_NO_CACHE=1
