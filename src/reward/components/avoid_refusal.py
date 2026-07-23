@@ -80,19 +80,12 @@ def make_avoid_refusal_reward_regex_func(
         step = getattr(trainer_state, "global_step", None)
         log_extra = kwargs.get("log_extra")
 
-        selected_prompts = kwargs.get("selected_prompt", prompts)
-        prompts_list = list(selected_prompts) if selected_prompts is not None else []
         completions_list = list(completions) if completions is not None else []
-        if len(prompts_list) != len(completions_list):
-            raise ValueError(
-                f"Avoid-refusal reward input mismatch: {len(prompts_list)} prompts, "
-                f"{len(completions_list)} completions."
-            )
 
         rewards: list[float] = []
         refusal_matches_log: list[str] = []
         redirection_matches_log: list[str] = []
-        for prompt, completion in zip(prompts_list, completions_list, strict=True):
+        for completion in completions_list:
             reward, matches = compute_avoid_refusal_reward_regex(
                 str(completion),
                 matchers,
@@ -229,8 +222,6 @@ def make_refusal_classifier_reward_func(
         completions,
         **kwargs,
     ) -> list[float]:
-        selected_prompts = kwargs.get("selected_prompt", prompts)
-        prompts_list = list(selected_prompts) if selected_prompts is not None else []
         completions_list = list(completions) if completions is not None else []
 
         classify_kwargs: dict[str, Any] = {

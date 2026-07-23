@@ -11,7 +11,6 @@ from src.reward.components.simple_match import build_simple_match_reward
 def build_reward_funcs(reward_config: Any, forget_concept: str) -> list[Callable]:
     functions_config = reward_config.get("functions")
     simple_match_config = dict(functions_config.get("simple_match"))
-    # simple_match_config["pattern_splits"] = ["hard"]
     simple_match_reward = build_simple_match_reward(
         simple_match_config,
         forget_concept=forget_concept,
@@ -37,10 +36,12 @@ def build_reward_funcs(reward_config: Any, forget_concept: str) -> list[Callable
             completions_list,
             **component_kwargs,
         )
+        refusal_kwargs = dict(kwargs)
+        refusal_kwargs.pop("selected_prompt", None)
         refusal_rewards = avoid_refusal_reward(
             prompts_list,
             completions_list,
-            **component_kwargs,
+            **refusal_kwargs,
         )
 
         return [

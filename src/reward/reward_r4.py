@@ -25,17 +25,14 @@ def build_reward_funcs(reward_config: Any, forget_concept: str) -> list[Callable
     )
 
     def reward_r4(prompts, completions, **kwargs) -> list[float]:
-        selected_prompts = kwargs.get("selected_prompt", prompts)
-        prompts_list = list(selected_prompts) if selected_prompts is not None else []
         completions_list = list(completions) if completions is not None else []
-
-        component_kwargs = dict(kwargs)
-        component_kwargs["selected_prompt"] = prompts_list
+        refusal_kwargs = dict(kwargs)
+        refusal_kwargs.pop("selected_prompt", None)
 
         refusal_rewards = refusal_reward(
-            prompts_list,
+            prompts,
             completions_list,
-            **component_kwargs,
+            **refusal_kwargs,
         )
         rewards = refusal_rewards
 
