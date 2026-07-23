@@ -27,7 +27,11 @@ from src.data_preprocessing.load_dataset import load_standard_dataset
 
 def load_prompt_dataframe(args: argparse.Namespace) -> pd.DataFrame:
 
-    _, dataset = load_standard_dataset(forget_concept=args.concept, mode="grpo")
+    _, dataset = load_standard_dataset(
+        forget_concept=args.concept,
+        mode="grpo",
+        storage_root=args.paths.storage_root,
+    )
     
     df = dataset.to_pandas()
 
@@ -90,11 +94,11 @@ def aggregate_results(df: pd.DataFrame, args: argparse.Namespace) -> pd.DataFram
     )
 
 
-def write_outputs(output_dir: str, df: pd.DataFrame, summary: pd.DataFrame) -> None:
-    import os
-    os.makedirs(output_dir, exist_ok=True)
-    df.to_csv(output_dir + "metrics.csv", index=False)
-    summary.to_csv(output_dir + "summary.csv", index=False)
+def write_outputs(output_dir: str | Path, df: pd.DataFrame, summary: pd.DataFrame) -> None:
+    output_path = Path(output_dir)
+    output_path.mkdir(parents=True, exist_ok=True)
+    df.to_csv(output_path / "metrics.csv", index=False)
+    summary.to_csv(output_path / "summary.csv", index=False)
 
 
 @hydra.main(version_base=None, config_path="../../config", config_name="hold_out_eval")
@@ -120,7 +124,12 @@ def main(args) -> None:
         max_concurrent_requests=args.judge_concurrency,
     )
     summary = aggregate_results(df, args)
-    output_dir = f"outputs/hold_out_styles/{args.concept.replace(' ', '-').lower()}-{args.model_name_or_path.replace('/', '-')}/"
+    output_dir = (
+        Path(args.paths.storage_root)
+        / "outputs"
+        / "hold_out_styles"
+        / f"{args.concept.replace(' ', '-').lower()}-{args.model_name_or_path.replace('/', '-')}"
+    )
     write_outputs(output_dir, df, summary)
     print(f"Wrote metrics and summary to {output_dir}", flush=True)
 

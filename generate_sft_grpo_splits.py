@@ -4,6 +4,7 @@ import hydra
 import openai
 from dotenv import load_dotenv
 import asyncio
+import random
 from textwrap import dedent
 import os
 from pydantic import BaseModel
@@ -42,17 +43,34 @@ class Output(BaseModel):
     completion: str
 
 
+async def _parse_with_retries(client, model_name: str, row, semaphore: asyncio.Semaphore):
+    max_retries = int(os.environ.get("OPENAI_MAX_RETRIES", "8"))
+    async with semaphore:
+        for attempt in range(max_retries):
+            try:
+                return await client.responses.parse(
+                    model=model_name,
+                    input=[
+                        {"role": "system", "content": SYSTEM_PROMPT},
+                        {"role": "user", "content": f"'prompt': {row['prompt']}, 'target': {row['subject']}"},
+                    ],
+                    text_format=Output,
+                )
+            except openai.RateLimitError:
+                if attempt == max_retries - 1:
+                    raise
+                wait_seconds = min(60.0, 2.0 ** attempt) + random.uniform(0.0, 1.0)
+                await asyncio.sleep(wait_seconds)
+
+
 def get_create_broad_completions_function(model_name: str = "gpt-5.4-nano"):
     async def create_broad_completions(client, subset):
-        completions = await asyncio.gather(*[
-            client.responses.parse(
-                model=model_name,
-                input=[
-                    {"role": "system", "content": SYSTEM_PROMPT},
-                    {"role": "user", "content": f"'prompt': {row['prompt']}, 'target': {row['subject']}"}
-                ],
-                text_format=Output
-            ) for row in subset]
+        concurrency = int(os.environ.get("OPENAI_CONCURRENCY", "4"))
+        semaphore = asyncio.Semaphore(concurrency)
+        completions = await asyncio.gather(*(
+            _parse_with_retries(client, model_name, row, semaphore)
+            for row in subset
+        )
         )
         completions = [com.output_parsed.completion for com in completions]
         return completions
@@ -123,7 +141,7 @@ def generate_sft_dataset(cfg: DictConfig):
         "sft/train": sft_train,
         "sft/test": sft_test
     })
-    output_dir = build_dataset_path(target)
+    output_dir = build_dataset_path(target, storage_root=cfg.paths.storage_root)
     df.save_to_disk(output_dir)
     x = load_from_disk(output_dir)
     print(x)

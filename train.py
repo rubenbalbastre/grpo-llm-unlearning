@@ -52,7 +52,7 @@ def main(cfg: DictConfig) -> None:
     forget_concept = cfg.experiment.forget_concept
     model, tokenizer = load_model_and_tokenizer(
         model_name,
-        output_root=cfg.paths.output_root,
+        storage_root=cfg.paths.storage_root,
     )
     loaded_peft_adapter = has_peft_adapter(model)
     if loaded_peft_adapter:

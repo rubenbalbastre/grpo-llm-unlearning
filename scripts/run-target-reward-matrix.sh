@@ -7,6 +7,9 @@ cd "${REPO_DIR}"
 LOW_REWARD_STOP_MARKER="low_reward_stop.json"
 RUN_EVALS="${RUN_EVALS:-false}"
 RUN_SFT_WARMUP="${RUN_SFT_WARMUP:-false}"
+STORAGE_ROOT="${STORAGE_ROOT:-.}"
+DATA_ROOT="${STORAGE_ROOT}/data"
+OUTPUT_ROOT="${STORAGE_ROOT}/outputs"
 
 if [[ -n "${ORIGINAL_MODELS:-}" ]]; then
   IFS=',' read -r -a original_models <<< "${ORIGINAL_MODELS}"
@@ -64,7 +67,7 @@ run_sft_warmup_enabled() {
 submit_data_splits() {
   local target="$1"
   local serial_dependency="${2:-}"
-  local dataset_dir="data/${target}"
+  local dataset_dir="${DATA_ROOT}/${target}"
   local dependency_option
   local -a sbatch_args=()
 
@@ -89,7 +92,8 @@ submit_data_splits() {
   sbatch --parsable \
     "${sbatch_args[@]}" \
     scripts/generate-data-splits.sh \
-    "experiment.forget_concept=${target}"
+    "experiment.forget_concept=${target}" \
+    "paths.storage_root=${STORAGE_ROOT}"
 }
 
 dependency_arg() {
@@ -125,7 +129,7 @@ holdout_output_dir() {
 
   concept_part="$(echo "${concept// /-}" | tr '[:upper:]' '[:lower:]')"
   model_part="${model_name_or_path//\//-}"
-  echo "outputs/hold_out_styles/${concept_part}-${model_part}"
+  echo "${OUTPUT_ROOT}/hold_out_styles/${concept_part}-${model_part}"
 }
 
 submit_sft_warmup() {
@@ -133,7 +137,7 @@ submit_sft_warmup() {
   local dependency="$2"
   local serial_dependency="${3:-}"
   local run_name="r2warmup_$(underscore_slug "${ORIGINAL_MODEL}")_$(underscore_slug "${target}")"
-  local output_dir="outputs/${run_name}"
+  local output_dir="${OUTPUT_ROOT}/${run_name}"
   local job_id
   local dependency_option
   local -a sbatch_args=()
@@ -165,6 +169,7 @@ submit_sft_warmup() {
       "wandb.run_name=${run_name}" \
       "model.name=${ORIGINAL_MODEL}" \
       "experiment.forget_concept=${target}" \
+      "paths.storage_root=${STORAGE_ROOT}" \
       "training.sft.objective=broad" \
       "reward.type=r2" \
       "training.grpo.save_final_model=true"
@@ -207,7 +212,8 @@ submit_eval_gate() {
     --export="ALL,LOW_REWARD_STOP_MARKER=${LOW_REWARD_STOP_MARKER}" \
     scripts/submit-grpo-evals-if-learning.sh \
     "${checkpoint_root}" \
-    "${concept}"
+    "${concept}" \
+    "${STORAGE_ROOT}"
 }
 
 submit_holdout() {
@@ -247,7 +253,7 @@ submit_holdout() {
     --gres=gpu:1 \
     --time="01:30:00" \
     --partition="sc-gpu" \
-    --wrap="cd ${REPO_DIR} && source \$HOME/anaconda3/etc/profile.d/conda.sh && conda activate py312 && python eval/hold_out_styles/generate-and-analyze-completions.py concept='${target}' model_name_or_path='${model_name_or_path}'"
+    --wrap="cd ${REPO_DIR} && source \$HOME/anaconda3/etc/profile.d/conda.sh && conda activate py312 && python eval/hold_out_styles/generate-and-analyze-completions.py concept='${target}' model_name_or_path='${model_name_or_path}' paths.storage_root='${STORAGE_ROOT}'"
 }
 
 submit_grpo_and_evals() {
@@ -260,7 +266,7 @@ submit_grpo_and_evals() {
   local serial_dependency="${7:-}"
 
   local run_name="unlearning-$(slug "${base_label}")-$(slug "${model_label}")-$(slug "${target}")-${reward}"
-  local checkpoint_root="outputs/${run_name}"
+  local checkpoint_root="${OUTPUT_ROOT}/${run_name}"
   local train_job_id
   local eval_gate_job_id
   local dependency_option
@@ -314,6 +320,7 @@ submit_grpo_and_evals() {
       scripts/run-grpo.sh \
       "model.name=${base_model}" \
       "experiment.forget_concept=${target}" \
+      "paths.storage_root=${STORAGE_ROOT}" \
       "reward.type=${reward}" \
       "training.grpo.save_final_model=true"
   )"

@@ -7,9 +7,11 @@ set -euo pipefail
 REPO_DIR="${REPO_DIR:-/home/balalru/machine-unlearning-llm}"
 CHECKPOINT_ROOT="${1:?Usage: submit-grpo-evals-if-learning.sh CHECKPOINT_ROOT CONCEPT}"
 CONCEPT="${2:?Usage: submit-grpo-evals-if-learning.sh CHECKPOINT_ROOT CONCEPT}"
+STORAGE_ROOT="${3:-${STORAGE_ROOT:-.}}"
 CHECKPOINT_ROOT="${CHECKPOINT_ROOT%/}"
 LOW_REWARD_STOP_MARKER="${LOW_REWARD_STOP_MARKER:-low_reward_stop.json}"
 MARKER_PATH="${CHECKPOINT_ROOT}/${LOW_REWARD_STOP_MARKER}"
+OUTPUT_ROOT="${STORAGE_ROOT}/outputs"
 
 cd "${REPO_DIR}"
 
@@ -21,7 +23,7 @@ holdout_output_dir() {
 
   concept_part="$(echo "${concept// /-}" | tr '[:upper:]' '[:lower:]')"
   model_part="${model_name_or_path//\//-}"
-  echo "outputs/hold_out_styles/${concept_part}-${model_part}"
+  echo "${OUTPUT_ROOT}/hold_out_styles/${concept_part}-${model_part}"
 }
 
 if [[ -f "${MARKER_PATH}" ]]; then
@@ -53,7 +55,7 @@ else
       --gres=gpu:1 \
       --time="01:30:00" \
       --partition="sc-gpu" \
-      --wrap="cd ${REPO_DIR} && source \$HOME/anaconda3/etc/profile.d/conda.sh && conda activate py312 && python eval/hold_out_styles/generate-and-analyze-completions.py concept='${CONCEPT}' model_name_or_path='${CHECKPOINT_ROOT}/final_model'"
+      --wrap="cd ${REPO_DIR} && source \$HOME/anaconda3/etc/profile.d/conda.sh && conda activate py312 && python eval/hold_out_styles/generate-and-analyze-completions.py concept='${CONCEPT}' model_name_or_path='${CHECKPOINT_ROOT}/final_model' paths.storage_root='${STORAGE_ROOT}'"
   )"
 fi
 

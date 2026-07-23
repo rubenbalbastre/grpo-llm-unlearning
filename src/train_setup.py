@@ -96,7 +96,7 @@ def setup_run(cfg: DictConfig) -> tuple[bool, str, RunPaths]:
     setup_huggingface_hub()
     wandb_enabled = setup_wandb()
     run_name = str(cfg.wandb.run_name)
-    output_dir = Path(cfg.paths.output_root) / run_name
+    output_dir = Path(cfg.paths.storage_root) / "outputs" / run_name
     paths = RunPaths(
         output_dir=output_dir,
         events_log_path=output_dir / "events.jsonl",
@@ -210,6 +210,7 @@ def setup_training_data(cfg: DictConfig, events_log_path: Path, training_mode: L
         train_dataset, test_dataset = load_standard_dataset(
             cfg.experiment.forget_concept,
             mode=training_mode,
+            storage_root=cfg.paths.storage_root,
         )
         train_dataset = render_dataset_prompts(train_dataset, tokenizer)
         test_dataset = render_dataset_prompts(test_dataset, tokenizer)

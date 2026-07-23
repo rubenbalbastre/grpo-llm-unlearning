@@ -29,9 +29,10 @@ def filter_empty_prompts(dataset: Dataset, prompt_column: str) -> Dataset:
 def load_standard_dataset(
     forget_concept: str,
     mode: Literal["sft", "grpo"],
+    storage_root: str = ".",
 ) -> tuple[Dataset, Dataset]:
 
-    dataset_path = build_dataset_path(forget_concept)
+    dataset_path = build_dataset_path(forget_concept, storage_root=storage_root)
     dataset = load_from_disk(dataset_path)
 
     if mode in ["sft", "grpo"]:
@@ -63,6 +64,7 @@ def load_initial_adaptive_prompts(cfg: DictConfig) -> list[str]:
     dataset, _ = load_standard_dataset(
         cfg.experiment.forget_concept,
         mode="grpo",
+        storage_root=cfg.paths.storage_root,
     )
     if prompt_count > len(dataset):
         raise ValueError(

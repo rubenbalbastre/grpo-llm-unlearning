@@ -21,7 +21,7 @@ def main(cfg: DictConfig) -> None:
     model_name = cfg.model.name
     model, tokenizer = load_model_and_tokenizer(
         model_name,
-        output_root=cfg.paths.output_root,
+        storage_root=cfg.paths.storage_root,
     )
     peft_config = get_peft_config(cfg, num_hidden_layers=model.config.num_hidden_layers)
     
