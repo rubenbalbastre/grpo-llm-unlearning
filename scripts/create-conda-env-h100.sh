@@ -7,6 +7,11 @@
 #SBATCH --time=00:30:00
 hostname; pwd; date
 
+# Fixes the 'RECORD file is invalid' (os error 5) network filesystem errors
+export UV_CONCURRENT_WRITES=1
+export UV_NO_CACHE=1
+rm -rf ~/.cache/uv
+
 source "$HOME/anaconda3/etc/profile.d/conda.sh"
 ENV_PATH="$HOME/anaconda3/envs/py312"
 
@@ -21,19 +26,23 @@ fi
 echo "Activate environment"
 conda activate "$ENV_PATH"
 
-echo "Installing high-speed dependency manager"
+echo "Installing high-speed dependency manager and compilation tools"
 pip install --upgrade uv
+# ninja and wheel are strictly mandatory for flash-attn --no-build-isolation
+uv pip install ninja wheel 
 
 echo "Executing proper multi-repository installation"
 
-# 2. Run the unified installation explicitly locking onto pre-built cu126 binaries
-uv pip install \
+# FIXED: --torch-backend placed correctly at the top
+uv pip install --torch-backend=cu126 \
   torch torchvision torchaudio faiss-gpu-cu12 \
   trl peft transformers accelerate deepspeed datasets wandb hydra-core \
-  --torch-backend=cu126 \
   vllm
 
+echo "Building local hardware optimizations"
+# The cluster drivers will now link cleanly via your active cuda/12.1 module
 uv pip install flash-attn --no-build-isolation
 
+echo "Installing remaining utilities"
 uv pip install weave python-dotenv sentence-transformers openai rouge-score
 date
