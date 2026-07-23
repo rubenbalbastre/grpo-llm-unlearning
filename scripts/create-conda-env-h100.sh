@@ -30,6 +30,7 @@ echo "Executing proper multi-repository installation"
 uv pip install \
   torch torchvision torchaudio
   trl peft transformers accelerate deepspeed datasets wandb hydra-core \
+  --torch-backend=cu126
   vllm
 
 uv pip install weave python-dotenv sentence-transformers openai rouge-score
