@@ -38,8 +38,9 @@ echo "Executing proper multi-repository installation"
 # FIXED: --torch-backend placed correctly at the top
 uv pip install --torch-backend=cu121 \
   torch torchvision torchaudio faiss-gpu-cu12 \
-  trl peft transformers accelerate deepspeed datasets wandb hydra-core \
-  vllm
+  peft transformers accelerate deepspeed datasets wandb hydra-core
+
+uv pip install vllm trl
 
 echo "Building local hardware optimizations"
 # The cluster drivers will now link cleanly via your active cuda/12.1 module
