@@ -186,7 +186,7 @@ training:
         metric_names: ["train/reward", "reward"]
       low_reward_stop:
         threshold: 0.01
-        wait_optimizer_steps: 5
+        wait_optimizer_steps: 10
         metric_names: ["train/reward", "reward"]
 
 hydra:
