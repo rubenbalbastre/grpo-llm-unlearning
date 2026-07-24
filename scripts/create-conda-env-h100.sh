@@ -14,10 +14,9 @@ date
 
 STORAGE_DIR="/storage/scratch/lv13/lv13594"
 CONDA_DIR="$STORAGE_DIR/anaconda3"
-ENV_PATH="$STORAGE_DIR/conda-envs/py312"
+ENV_PATH="$STORAGE_DIR/anaconda3/envs/py312"
 
 mkdir -p "$STORAGE_DIR/logs"
-mkdir -p "$STORAGE_DIR/conda-envs"
 mkdir -p "$STORAGE_DIR/tmp"
 
 export TMPDIR="$STORAGE_DIR/tmp"
@@ -79,6 +78,14 @@ uv pip install \
     psutil
 
 echo "Installing FlashAttention-2"
+
+module load gcc/15.2_rhel8
+
+export CC="$(command -v gcc)"
+export CXX="$(command -v g++)"
+
+gcc --version
+g++ --version
 
 export MAX_JOBS=4
 uv pip install flash-attn --no-build-isolation
