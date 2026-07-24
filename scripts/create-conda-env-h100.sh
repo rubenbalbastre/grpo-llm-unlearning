@@ -5,6 +5,8 @@
 #SBATCH --partition=hopper
 #SBATCH --gres=gpu:1
 #SBATCH --time=01:00:00
+#SBATCH --cpus-per-task=4
+#SBATCH --mem=16G
 
 set -e
 
@@ -87,7 +89,7 @@ export CXX="$(command -v g++)"
 gcc --version
 g++ --version
 
-export MAX_JOBS=4
+export MAX_JOBS=2
 uv pip install flash-attn --no-build-isolation
 
 echo "Installation completed"
