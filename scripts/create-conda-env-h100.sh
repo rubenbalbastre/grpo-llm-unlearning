@@ -93,7 +93,7 @@ echo "MAX_JOBS=$MAX_JOBS"
 echo "NVCC_THREADS=$NVCC_THREADS"
 echo "FLASH_ATTN_CUDA_ARCHS=$FLASH_ATTN_CUDA_ARCHS"
 
-uv pip install flash-attn==2.8.3.post1 --no-build-isolation
+# uv pip install flash-attn==2.8.3.post1 --no-build-isolation
 
 echo "Installation completed"
 python -c "import torch; print(torch.__version__, torch.version.cuda)"
