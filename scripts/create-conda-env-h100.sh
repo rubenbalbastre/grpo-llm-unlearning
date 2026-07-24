@@ -5,7 +5,7 @@
 #SBATCH --partition=hopper
 #SBATCH --gres=gpu:1
 #SBATCH --time=01:00:00
-#SBATCH --cpus-per-task=4
+#SBATCH --cpus-per-task=2
 #SBATCH --mem=16G
 
 set -e
@@ -85,12 +85,15 @@ module load gcc/12.3_rhel8
 
 export CC="$(command -v gcc)"
 export CXX="$(command -v g++)"
+export MAX_JOBS=1
+export NVCC_THREADS=1
+export FLASH_ATTN_CUDA_ARCHS=90
 
-gcc --version
-g++ --version
+echo "MAX_JOBS=$MAX_JOBS"
+echo "NVCC_THREADS=$NVCC_THREADS"
+echo "FLASH_ATTN_CUDA_ARCHS=$FLASH_ATTN_CUDA_ARCHS"
 
-export MAX_JOBS=2
-uv pip install flash-attn --no-build-isolation
+uv pip install flash-attn==2.8.3.post1 --no-build-isolation
 
 echo "Installation completed"
 python -c "import torch; print(torch.__version__, torch.version.cuda)"
