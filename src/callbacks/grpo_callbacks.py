@@ -6,7 +6,7 @@ from omegaconf import OmegaConf
 from transformers import TrainerCallback
 
 
-LOW_REWARD_STOP_MARKER = "low_reward_stop.json"
+NO_LEARNING_STOP_MARKER = "low_reward_stop.json"
 
 
 class TokenMilestoneCheckpointCallback(TrainerCallback):
@@ -92,48 +92,51 @@ class StopOnHighRewardCallback(TrainerCallback):
         return control
 
 
-class StopOnLowRewardAfterWarmupCallback(TrainerCallback):
+class NoLearningCallback(TrainerCallback):
     def __init__(
         self,
         *,
         threshold: float,
-        wait_optimizer_steps: int,
-        metric_names: list[str],
     ):
         self.threshold = float(threshold)
-        self.wait_optimizer_steps = int(wait_optimizer_steps)
-        self.metric_names = [str(metric_name) for metric_name in metric_names]
-        self.reward_history: list[tuple[int, float]] = []
+        self.first_epoch_active_group_rates: list[float] = []
+        self.no_learning_check_done = False
+        self.latest_epoch: float | None = None
 
-    def _reward_metric(self, logs: dict[str, Any]) -> float | None:
-        for metric_name in self.metric_names:
+    def _epoch_metric(self, logs: dict[str, Any]) -> float | None:
+        for metric_name in ("train/epoch", "epoch"):
             if metric_name in logs and logs[metric_name] is not None:
                 return float(logs[metric_name])
         return None
+
+    def _active_group_rate(self, logs: dict[str, Any]) -> float | None:
+        for metric_name in ("train/frac_reward_zero_std", "frac_reward_zero_std"):
+            if metric_name in logs and logs[metric_name] is not None:
+                return 1.0 - float(logs[metric_name])
 
     def _write_stop_marker(
         self,
         args,
         state,
         *,
-        reward: float,
-        max_recent_reward: float,
+        first_epoch_active_group_rate_mean: float,
     ) -> None:
         if not getattr(state, "is_world_process_zero", True):
             return
 
         output_dir = Path(args.output_dir)
         output_dir.mkdir(parents=True, exist_ok=True)
-        marker_path = output_dir / LOW_REWARD_STOP_MARKER
+        marker_path = output_dir / NO_LEARNING_STOP_MARKER
         marker_path.write_text(
             json.dumps(
                 {
-                    "reason": "low_reward_after_warmup",
+                    "reason": "no_learning_after_first_epoch",
                     "global_step": int(getattr(state, "global_step", 0) or 0),
-                    "reward": reward,
-                    "max_recent_reward": max_recent_reward,
+                    "first_epoch_active_group_rate_mean": (
+                        first_epoch_active_group_rate_mean
+                    ),
+                    "epoch": self.latest_epoch,
                     "threshold": self.threshold,
-                    "wait_optimizer_steps": self.wait_optimizer_steps,
                 },
                 indent=2,
             )
@@ -145,32 +148,37 @@ class StopOnLowRewardAfterWarmupCallback(TrainerCallback):
         if not logs:
             return control
 
-        reward = self._reward_metric(logs)
-        if reward is None:
+        epoch = self._epoch_metric(logs)
+        if epoch is not None:
+            self.latest_epoch = epoch
+
+        active_group_rate = self._active_group_rate(logs)
+        if active_group_rate is None or self.latest_epoch is None:
             return control
 
-        current_step = int(getattr(state, "global_step", 0) or 0)
-        self.reward_history.append((current_step, reward))
-
-        earliest_recent_step = current_step - self.wait_optimizer_steps + 1
-        self.reward_history = [
-            (step, logged_reward)
-            for step, logged_reward in self.reward_history
-            if step >= earliest_recent_step
-        ]
-
-        if current_step < self.wait_optimizer_steps:
+        if self.no_learning_check_done:
             return control
 
-        max_recent_reward = max(logged_reward for _, logged_reward in self.reward_history)
-        if max_recent_reward <= self.threshold:
+        if self.latest_epoch <= 1.0:
+            self.first_epoch_active_group_rates.append(active_group_rate)
+
+        if self.latest_epoch < 1.0 or not self.first_epoch_active_group_rates:
+            return control
+
+        self.no_learning_check_done = True
+        first_epoch_active_group_rate_mean = (
+            sum(self.first_epoch_active_group_rates)
+            / len(self.first_epoch_active_group_rates)
+        )
+        if first_epoch_active_group_rate_mean <= self.threshold:
             control.should_training_stop = True
             control.should_save = True
             self._write_stop_marker(
                 args,
                 state,
-                reward=reward,
-                max_recent_reward=max_recent_reward,
+                first_epoch_active_group_rate_mean=(
+                    first_epoch_active_group_rate_mean
+                ),
             )
 
         return control
@@ -218,21 +226,11 @@ def get_training_callbacks(callback_cfg: Any) -> list[TrainerCallback] | None:
             )
         )
 
-    low_reward_stop = callback_cfg.get("low_reward_stop")
-    if low_reward_stop is not None:
-        metric_names = low_reward_stop.get(
-            "metric_names",
-            ["train/reward", "reward"],
-        )
-        if OmegaConf.is_config(metric_names):
-            metric_names = OmegaConf.to_container(metric_names, resolve=True)
-        else:
-            metric_names = list(metric_names)
+    no_learning_stop = callback_cfg.get("no_learning_stop")
+    if no_learning_stop is not None:
         callbacks.append(
-            StopOnLowRewardAfterWarmupCallback(
-                threshold=low_reward_stop.get("threshold", 0.01),
-                wait_optimizer_steps=low_reward_stop.get("wait_optimizer_steps", 10),
-                metric_names=metric_names,
+            NoLearningCallback(
+                threshold=no_learning_stop.get("threshold", 0.0),
             )
         )
 
