@@ -92,7 +92,7 @@ class StopOnHighRewardCallback(TrainerCallback):
         return control
 
 
-class StopOnLowRewardAfterBurnInEpochCallback(TrainerCallback):
+class StopOnLowRewardAfterFirstEpochCallback(TrainerCallback):
     def __init__(
         self,
         *,
@@ -101,7 +101,7 @@ class StopOnLowRewardAfterBurnInEpochCallback(TrainerCallback):
     ):
         self.threshold = float(threshold)
         self.metric_names = [str(metric_name) for metric_name in metric_names]
-        self.rewards_after_burn_in: list[float] = []
+        self.first_epoch_rewards: list[float] = []
         self.low_reward_check_done = False
         self.latest_epoch: float | None = None
 
@@ -133,12 +133,11 @@ class StopOnLowRewardAfterBurnInEpochCallback(TrainerCallback):
         marker_path.write_text(
             json.dumps(
                 {
-                    "reason": "low_reward_after_burn_in_epoch",
+                    "reason": "low_reward_after_first_epoch",
                     "global_step": int(getattr(state, "global_step", 0) or 0),
                     "epoch_reward_mean": epoch_reward_mean,
                     "epoch": self.latest_epoch,
                     "threshold": self.threshold,
-                    "burn_in_epochs": 1,
                 },
                 indent=2,
             )
@@ -158,16 +157,18 @@ class StopOnLowRewardAfterBurnInEpochCallback(TrainerCallback):
         if reward is None or self.latest_epoch is None:
             return control
 
-        if self.low_reward_check_done or self.latest_epoch <= 1.0:
+        if self.low_reward_check_done:
             return control
 
-        self.rewards_after_burn_in.append(reward)
-        if self.latest_epoch < 2.0:
+        if self.latest_epoch <= 1.0:
+            self.first_epoch_rewards.append(reward)
+
+        if self.latest_epoch < 1.0 or not self.first_epoch_rewards:
             return control
 
         self.low_reward_check_done = True
-        epoch_reward_mean = sum(self.rewards_after_burn_in) / len(
-            self.rewards_after_burn_in
+        epoch_reward_mean = sum(self.first_epoch_rewards) / len(
+            self.first_epoch_rewards
         )
         if epoch_reward_mean < self.threshold:
             control.should_training_stop = True
@@ -234,7 +235,7 @@ def get_training_callbacks(callback_cfg: Any) -> list[TrainerCallback] | None:
         else:
             metric_names = list(metric_names)
         callbacks.append(
-            StopOnLowRewardAfterBurnInEpochCallback(
+            StopOnLowRewardAfterFirstEpochCallback(
                 threshold=low_reward_stop.get("threshold", 0.01),
                 metric_names=metric_names,
             )
