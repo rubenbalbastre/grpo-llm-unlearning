@@ -11,7 +11,7 @@ paths:
   storage_root: .
 
 model:
-  name: Qwen/Qwen2.5-1.5B-Instruct # "microsoft/Phi-3-mini-4k-instruct", Qwen/Qwen2.5-3B-Instruct, "./outputs/unlearning-sft-4928/checkpoint-13/"
+  name: Qwen/Qwen2.5-3B-Instruct # "microsoft/Phi-3-mini-4k-instruct", Qwen/Qwen2.5-3B-Instruct, "./outputs/unlearning-sft-4928/checkpoint-13/"
 
 wandb:
   # Used by direct `python train.py` runs. `scripts/run-grpo.sh`
@@ -55,7 +55,7 @@ buffer:
   high_mean_reward_threshold: 0.3
 
 reward:
-  type: r1 # r0, r1, r2, r3, r4
+  type: r0 # r0, r1, r2, r3, r4
   functions:
     simple_match:
       mode: binary
@@ -167,7 +167,7 @@ training:
     lr_scheduler_type: "constant" #"constant"
     warmup_ratio: 0 #0.05
     # others
-    num_iterations: 2
+    num_iterations: 1
     beta: 0.04
     ddp_find_unused_parameters: false
     # eval
@@ -184,10 +184,8 @@ training:
         threshold: 0.90
         max_optimizer_steps_above_threshold: 5
         metric_names: ["train/reward", "reward"]
-      low_reward_stop:
-        threshold: 0.01
-        wait_optimizer_steps: 10
-        metric_names: ["train/reward", "reward"]
+      no_learning_stop:
+        threshold: 0.0
 
 hydra:
   job:
