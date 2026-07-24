@@ -6,7 +6,7 @@ cd "${REPO_DIR}"
 
 LOW_REWARD_STOP_MARKER="low_reward_stop.json"
 RUN_EVALS="${RUN_EVALS:-false}"
-RUN_SFT_WARMUP="${RUN_SFT_WARMUP:-false}"
+RUN_SFT_WARMUP="${RUN_SFT_WARMUP:-true}"
 STORAGE_ROOT="${STORAGE_ROOT:-.}"
 DATA_ROOT="${STORAGE_ROOT}/data"
 OUTPUT_ROOT="${STORAGE_ROOT}/outputs"
@@ -17,8 +17,8 @@ elif [[ -n "${ORIGINAL_MODEL:-}" ]]; then
   original_models=("${ORIGINAL_MODEL}")
 else
   original_models=(
-    "Qwen/Qwen2.5-0.5B-Instruct"
-    "Qwen/Qwen2.5-1.5B-Instruct"
+    # "Qwen/Qwen2.5-0.5B-Instruct"
+    # "Qwen/Qwen2.5-1.5B-Instruct"
     "Qwen/Qwen2.5-3B-Instruct"
     "Qwen/Qwen2.5-7B-Instruct"
   )
