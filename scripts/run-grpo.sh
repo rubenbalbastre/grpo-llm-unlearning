@@ -3,7 +3,9 @@
 #SBATCH --output=logs/slurm-run-unlearning-%j.log
 #SBATCH --gres=gpu:2
 #SBATCH --time=08:00:00
-#SBATCH --partition=sc-gpu
+#SBATCH --qos=hopper
+#SBATCH --partition=hopper
+
 set -euo pipefail
 
 hostname; pwd; date

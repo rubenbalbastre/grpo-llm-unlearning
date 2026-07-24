@@ -152,7 +152,7 @@ training:
     gradient_checkpointing: true
     fp16: false
     bf16: true
-    steps_per_generation: 8
+    steps_per_generation: 4
     use_vllm: true
     vllm_mode: colocate
     vllm_gpu_memory_utilization: 0.30
