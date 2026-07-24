@@ -184,10 +184,8 @@ training:
         threshold: 0.90
         max_optimizer_steps_above_threshold: 5
         metric_names: ["train/reward", "reward"]
-      low_reward_stop:
-        threshold: 0.01
-        wait_optimizer_steps: 10
-        metric_names: ["train/reward", "reward"]
+      no_learning_stop:
+        threshold: 0.0
 
 hydra:
   job:
