@@ -92,21 +92,27 @@ class StopOnHighRewardCallback(TrainerCallback):
         return control
 
 
-class StopOnLowRewardAfterWarmupCallback(TrainerCallback):
+class StopOnLowRewardAfterBurnInEpochCallback(TrainerCallback):
     def __init__(
         self,
         *,
         threshold: float,
-        wait_optimizer_steps: int,
         metric_names: list[str],
     ):
         self.threshold = float(threshold)
-        self.wait_optimizer_steps = int(wait_optimizer_steps)
         self.metric_names = [str(metric_name) for metric_name in metric_names]
-        self.reward_history: list[tuple[int, float]] = []
+        self.rewards_after_burn_in: list[float] = []
+        self.low_reward_check_done = False
+        self.latest_epoch: float | None = None
 
     def _reward_metric(self, logs: dict[str, Any]) -> float | None:
         for metric_name in self.metric_names:
+            if metric_name in logs and logs[metric_name] is not None:
+                return float(logs[metric_name])
+        return None
+
+    def _epoch_metric(self, logs: dict[str, Any]) -> float | None:
+        for metric_name in ("train/epoch", "epoch"):
             if metric_name in logs and logs[metric_name] is not None:
                 return float(logs[metric_name])
         return None
@@ -116,8 +122,7 @@ class StopOnLowRewardAfterWarmupCallback(TrainerCallback):
         args,
         state,
         *,
-        reward: float,
-        max_recent_reward: float,
+        epoch_reward_mean: float,
     ) -> None:
         if not getattr(state, "is_world_process_zero", True):
             return
@@ -128,12 +133,12 @@ class StopOnLowRewardAfterWarmupCallback(TrainerCallback):
         marker_path.write_text(
             json.dumps(
                 {
-                    "reason": "low_reward_after_warmup",
+                    "reason": "low_reward_after_burn_in_epoch",
                     "global_step": int(getattr(state, "global_step", 0) or 0),
-                    "reward": reward,
-                    "max_recent_reward": max_recent_reward,
+                    "epoch_reward_mean": epoch_reward_mean,
+                    "epoch": self.latest_epoch,
                     "threshold": self.threshold,
-                    "wait_optimizer_steps": self.wait_optimizer_steps,
+                    "burn_in_epochs": 1,
                 },
                 indent=2,
             )
@@ -145,32 +150,32 @@ class StopOnLowRewardAfterWarmupCallback(TrainerCallback):
         if not logs:
             return control
 
+        epoch = self._epoch_metric(logs)
+        if epoch is not None:
+            self.latest_epoch = epoch
+
         reward = self._reward_metric(logs)
-        if reward is None:
+        if reward is None or self.latest_epoch is None:
             return control
 
-        current_step = int(getattr(state, "global_step", 0) or 0)
-        self.reward_history.append((current_step, reward))
-
-        earliest_recent_step = current_step - self.wait_optimizer_steps + 1
-        self.reward_history = [
-            (step, logged_reward)
-            for step, logged_reward in self.reward_history
-            if step >= earliest_recent_step
-        ]
-
-        if current_step < self.wait_optimizer_steps:
+        if self.low_reward_check_done or self.latest_epoch <= 1.0:
             return control
 
-        max_recent_reward = max(logged_reward for _, logged_reward in self.reward_history)
-        if max_recent_reward <= self.threshold:
+        self.rewards_after_burn_in.append(reward)
+        if self.latest_epoch < 2.0:
+            return control
+
+        self.low_reward_check_done = True
+        epoch_reward_mean = sum(self.rewards_after_burn_in) / len(
+            self.rewards_after_burn_in
+        )
+        if epoch_reward_mean < self.threshold:
             control.should_training_stop = True
             control.should_save = True
             self._write_stop_marker(
                 args,
                 state,
-                reward=reward,
-                max_recent_reward=max_recent_reward,
+                epoch_reward_mean=epoch_reward_mean,
             )
 
         return control
@@ -229,9 +234,8 @@ def get_training_callbacks(callback_cfg: Any) -> list[TrainerCallback] | None:
         else:
             metric_names = list(metric_names)
         callbacks.append(
-            StopOnLowRewardAfterWarmupCallback(
+            StopOnLowRewardAfterBurnInEpochCallback(
                 threshold=low_reward_stop.get("threshold", 0.01),
-                wait_optimizer_steps=low_reward_stop.get("wait_optimizer_steps", 10),
                 metric_names=metric_names,
             )
         )
