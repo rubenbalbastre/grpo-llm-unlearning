@@ -1,7 +1,12 @@
+import json
+from pathlib import Path
 from typing import Any
 
 from omegaconf import OmegaConf
 from transformers import TrainerCallback
+
+
+LOW_REWARD_STOP_MARKER = "low_reward_stop.json"
 
 
 class TokenMilestoneCheckpointCallback(TrainerCallback):
@@ -98,6 +103,7 @@ class StopOnLowRewardAfterWarmupCallback(TrainerCallback):
         self.threshold = float(threshold)
         self.wait_optimizer_steps = int(wait_optimizer_steps)
         self.metric_names = [str(metric_name) for metric_name in metric_names]
+        self.reward_history: list[tuple[int, float]] = []
 
     def _reward_metric(self, logs: dict[str, Any]) -> float | None:
         for metric_name in self.metric_names:
@@ -105,21 +111,67 @@ class StopOnLowRewardAfterWarmupCallback(TrainerCallback):
                 return float(logs[metric_name])
         return None
 
+    def _write_stop_marker(
+        self,
+        args,
+        state,
+        *,
+        reward: float,
+        max_recent_reward: float,
+    ) -> None:
+        if not getattr(state, "is_world_process_zero", True):
+            return
+
+        output_dir = Path(args.output_dir)
+        output_dir.mkdir(parents=True, exist_ok=True)
+        marker_path = output_dir / LOW_REWARD_STOP_MARKER
+        marker_path.write_text(
+            json.dumps(
+                {
+                    "reason": "low_reward_after_warmup",
+                    "global_step": int(getattr(state, "global_step", 0) or 0),
+                    "reward": reward,
+                    "max_recent_reward": max_recent_reward,
+                    "threshold": self.threshold,
+                    "wait_optimizer_steps": self.wait_optimizer_steps,
+                },
+                indent=2,
+            )
+            + "\n",
+            encoding="utf-8",
+        )
+
     def on_log(self, args, state, control, logs=None, **kwargs):
         if not logs:
-            return control
-
-        current_step = int(getattr(state, "global_step", 0) or 0)
-        if current_step < self.wait_optimizer_steps:
             return control
 
         reward = self._reward_metric(logs)
         if reward is None:
             return control
 
-        if reward <= self.threshold:
+        current_step = int(getattr(state, "global_step", 0) or 0)
+        self.reward_history.append((current_step, reward))
+
+        earliest_recent_step = current_step - self.wait_optimizer_steps + 1
+        self.reward_history = [
+            (step, logged_reward)
+            for step, logged_reward in self.reward_history
+            if step >= earliest_recent_step
+        ]
+
+        if current_step < self.wait_optimizer_steps:
+            return control
+
+        max_recent_reward = max(logged_reward for _, logged_reward in self.reward_history)
+        if max_recent_reward <= self.threshold:
             control.should_training_stop = True
             control.should_save = True
+            self._write_stop_marker(
+                args,
+                state,
+                reward=reward,
+                max_recent_reward=max_recent_reward,
+            )
 
         return control
 

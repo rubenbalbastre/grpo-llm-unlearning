@@ -14,6 +14,10 @@ echo "Run program in virtual environment"
 
 REPO_DIR="${REPO_DIR:-/home/balalru/machine-unlearning-llm}"
 cd "${REPO_DIR}"
+if [[ -n "${SKIP_IF_MARKER:-}" && -f "${SKIP_IF_MARKER}" ]]; then
+  echo "Skipping RWKU evaluation because marker exists: ${SKIP_IF_MARKER}"
+  exit 0
+fi
 echo "Evaluate RWKU using config/eval.yaml"
 IFS=',' read -r -a GPU_IDS <<< "${CUDA_VISIBLE_DEVICES:-0}"
 GPU_COUNT="${#GPU_IDS[@]}"
@@ -87,13 +91,22 @@ if [[ -n "${CHECKPOINT_ROOT:-}" ]]; then
   fi
 
   CHECKPOINT_DIRS=()
-  while IFS= read -r checkpoint_dir; do
-    CHECKPOINT_DIRS+=("${checkpoint_dir}")
-  done < <(find "${CHECKPOINT_ROOT}" -maxdepth 1 -type d -name 'checkpoint-*' | sort -V)
-
-  if [[ "${INCLUDE_FINAL_MODEL:-false}" == "true" && -d "${CHECKPOINT_ROOT}/final_model" ]]; then
+  if [[ "${ONLY_FINAL_MODEL:-false}" == "true" ]]; then
+    if [[ ! -d "${CHECKPOINT_ROOT}/final_model" ]]; then
+      echo "Final model directory not found under ${CHECKPOINT_ROOT}" >&2
+      exit 1
+    fi
     CHECKPOINT_DIRS+=("${CHECKPOINT_ROOT}/final_model")
+  else
+    while IFS= read -r checkpoint_dir; do
+      CHECKPOINT_DIRS+=("${checkpoint_dir}")
+    done < <(find "${CHECKPOINT_ROOT}" -maxdepth 1 -type d -name 'checkpoint-*' | sort -V)
+
+    if [[ "${INCLUDE_FINAL_MODEL:-false}" == "true" && -d "${CHECKPOINT_ROOT}/final_model" ]]; then
+      CHECKPOINT_DIRS+=("${CHECKPOINT_ROOT}/final_model")
+    fi
   fi
+
   if [[ "${#CHECKPOINT_DIRS[@]}" -eq 0 ]]; then
     echo "No checkpoint-* directories found under ${CHECKPOINT_ROOT}" >&2
     exit 1

@@ -80,19 +80,12 @@ def make_avoid_refusal_reward_regex_func(
         step = getattr(trainer_state, "global_step", None)
         log_extra = kwargs.get("log_extra")
 
-        selected_prompts = kwargs.get("selected_prompt", prompts)
-        prompts_list = list(selected_prompts) if selected_prompts is not None else []
         completions_list = list(completions) if completions is not None else []
-        if len(prompts_list) != len(completions_list):
-            raise ValueError(
-                f"Avoid-refusal reward input mismatch: {len(prompts_list)} prompts, "
-                f"{len(completions_list)} completions."
-            )
 
         rewards: list[float] = []
         refusal_matches_log: list[str] = []
         redirection_matches_log: list[str] = []
-        for prompt, completion in zip(prompts_list, completions_list, strict=True):
+        for completion in completions_list:
             reward, matches = compute_avoid_refusal_reward_regex(
                 str(completion),
                 matchers,
@@ -149,7 +142,7 @@ def _refusal_probability_from_scores(scores: list[dict[str, Any]]) -> float:
         label = str(score_item["label"])
         score = float(score_item["score"])
         if _is_garak_refusal_label(label):
-            return max(0.0, min(1.0, score))
+            return round(score, 2)
     labels = [str(score_item["label"]) for score_item in scores]
     raise ValueError(
         "Refusal classifier returned no refusal class score; got labels "
@@ -170,13 +163,14 @@ def _refusal_classification_from_output(
 ) -> dict[str, Any]:
     prediction = _top_prediction(output)
     label = str(prediction["label"])
-    score = float(prediction["score"])
+    score = round(float(prediction["score"]), 2)
     top_label_is_refusal = _is_garak_refusal_label(label)
     refusal_probability = (
         _refusal_probability_from_scores(output)
         if isinstance(output, list)
         else (score if top_label_is_refusal else 1.0 - score)
     )
+    refusal_probability = round(refusal_probability, 2)
     is_refusal = refusal_probability >= threshold
     return {
         "label": label,
@@ -229,8 +223,6 @@ def make_refusal_classifier_reward_func(
         completions,
         **kwargs,
     ) -> list[float]:
-        selected_prompts = kwargs.get("selected_prompt", prompts)
-        prompts_list = list(selected_prompts) if selected_prompts is not None else []
         completions_list = list(completions) if completions is not None else []
 
         classify_kwargs: dict[str, Any] = {
@@ -262,6 +254,7 @@ def make_refusal_classifier_reward_func(
                 reward_for_refusal * refusal_probability
                 + reward_for_non_refusal * (1.0 - refusal_probability)
             )
+            classifier_reward = round(classifier_reward, 2)
             labels.append(label)
             scores.append(score)
             refusal_probabilities.append(refusal_probability)

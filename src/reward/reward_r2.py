@@ -35,7 +35,8 @@ def build_reward_funcs(reward_config: Any, forget_concept: str) -> list[Callable
         component_kwargs = dict(kwargs)
         component_kwargs["selected_prompt"] = prompts_list
 
-        classifier_kwargs = dict(component_kwargs)
+        classifier_kwargs = dict(kwargs)
+        classifier_kwargs.pop("selected_prompt", None)
         classifier_kwargs["log_extra"] = None
         refusal_classifications = refusal_classifier(
             prompts_list,
