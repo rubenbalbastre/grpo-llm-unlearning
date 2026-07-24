@@ -6,7 +6,7 @@ from omegaconf import OmegaConf
 from transformers import TrainerCallback
 
 
-LOW_REWARD_STOP_MARKER = "low_reward_stop.json"
+NO_LEARNING_STOP_MARKER = "low_reward_stop.json"
 
 
 class TokenMilestoneCheckpointCallback(TrainerCallback):
@@ -92,24 +92,16 @@ class StopOnHighRewardCallback(TrainerCallback):
         return control
 
 
-class StopOnLowRewardAfterFirstEpochCallback(TrainerCallback):
+class NoLearningCallback(TrainerCallback):
     def __init__(
         self,
         *,
         threshold: float,
-        metric_names: list[str],
     ):
         self.threshold = float(threshold)
-        self.metric_names = [str(metric_name) for metric_name in metric_names]
-        self.first_epoch_rewards: list[float] = []
-        self.low_reward_check_done = False
+        self.first_epoch_active_group_rates: list[float] = []
+        self.no_learning_check_done = False
         self.latest_epoch: float | None = None
-
-    def _reward_metric(self, logs: dict[str, Any]) -> float | None:
-        for metric_name in self.metric_names:
-            if metric_name in logs and logs[metric_name] is not None:
-                return float(logs[metric_name])
-        return None
 
     def _epoch_metric(self, logs: dict[str, Any]) -> float | None:
         for metric_name in ("train/epoch", "epoch"):
@@ -117,25 +109,32 @@ class StopOnLowRewardAfterFirstEpochCallback(TrainerCallback):
                 return float(logs[metric_name])
         return None
 
+    def _active_group_rate(self, logs: dict[str, Any]) -> float | None:
+        for metric_name in ("train/frac_reward_zero_std", "frac_reward_zero_std"):
+            if metric_name in logs and logs[metric_name] is not None:
+                return 1.0 - float(logs[metric_name])
+
     def _write_stop_marker(
         self,
         args,
         state,
         *,
-        epoch_reward_mean: float,
+        first_epoch_active_group_rate_mean: float,
     ) -> None:
         if not getattr(state, "is_world_process_zero", True):
             return
 
         output_dir = Path(args.output_dir)
         output_dir.mkdir(parents=True, exist_ok=True)
-        marker_path = output_dir / LOW_REWARD_STOP_MARKER
+        marker_path = output_dir / NO_LEARNING_STOP_MARKER
         marker_path.write_text(
             json.dumps(
                 {
-                    "reason": "low_reward_after_first_epoch",
+                    "reason": "no_learning_after_first_epoch",
                     "global_step": int(getattr(state, "global_step", 0) or 0),
-                    "epoch_reward_mean": epoch_reward_mean,
+                    "first_epoch_active_group_rate_mean": (
+                        first_epoch_active_group_rate_mean
+                    ),
                     "epoch": self.latest_epoch,
                     "threshold": self.threshold,
                 },
@@ -153,30 +152,33 @@ class StopOnLowRewardAfterFirstEpochCallback(TrainerCallback):
         if epoch is not None:
             self.latest_epoch = epoch
 
-        reward = self._reward_metric(logs)
-        if reward is None or self.latest_epoch is None:
+        active_group_rate = self._active_group_rate(logs)
+        if active_group_rate is None or self.latest_epoch is None:
             return control
 
-        if self.low_reward_check_done:
+        if self.no_learning_check_done:
             return control
 
         if self.latest_epoch <= 1.0:
-            self.first_epoch_rewards.append(reward)
+            self.first_epoch_active_group_rates.append(active_group_rate)
 
-        if self.latest_epoch < 1.0 or not self.first_epoch_rewards:
+        if self.latest_epoch < 1.0 or not self.first_epoch_active_group_rates:
             return control
 
-        self.low_reward_check_done = True
-        epoch_reward_mean = sum(self.first_epoch_rewards) / len(
-            self.first_epoch_rewards
+        self.no_learning_check_done = True
+        first_epoch_active_group_rate_mean = (
+            sum(self.first_epoch_active_group_rates)
+            / len(self.first_epoch_active_group_rates)
         )
-        if epoch_reward_mean < self.threshold:
+        if first_epoch_active_group_rate_mean <= self.threshold:
             control.should_training_stop = True
             control.should_save = True
             self._write_stop_marker(
                 args,
                 state,
-                epoch_reward_mean=epoch_reward_mean,
+                first_epoch_active_group_rate_mean=(
+                    first_epoch_active_group_rate_mean
+                ),
             )
 
         return control
@@ -224,20 +226,11 @@ def get_training_callbacks(callback_cfg: Any) -> list[TrainerCallback] | None:
             )
         )
 
-    low_reward_stop = callback_cfg.get("low_reward_stop")
-    if low_reward_stop is not None:
-        metric_names = low_reward_stop.get(
-            "metric_names",
-            ["train/reward", "reward"],
-        )
-        if OmegaConf.is_config(metric_names):
-            metric_names = OmegaConf.to_container(metric_names, resolve=True)
-        else:
-            metric_names = list(metric_names)
+    no_learning_stop = callback_cfg.get("no_learning_stop")
+    if no_learning_stop is not None:
         callbacks.append(
-            StopOnLowRewardAfterFirstEpochCallback(
-                threshold=low_reward_stop.get("threshold", 0.01),
-                metric_names=metric_names,
+            NoLearningCallback(
+                threshold=no_learning_stop.get("threshold", 0.0),
             )
         )
 
