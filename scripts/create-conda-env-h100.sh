@@ -79,7 +79,7 @@ uv pip install \
 
 echo "Installing FlashAttention-2"
 
-module load gcc/15.2_rhel8
+module load gcc/12.3_rhel8
 
 export CC="$(command -v gcc)"
 export CXX="$(command -v g++)"
