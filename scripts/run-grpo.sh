@@ -8,13 +8,17 @@
 
 set -euo pipefail
 
+STORAGE_DIR="${STORAGE_DIR:-/storage/scratch/lv13/lv13594}"
+CONDA_DIR="${CONDA_DIR:-${STORAGE_DIR}/anaconda3}"
+ENV_PATH="${ENV_PATH:-${CONDA_DIR}/envs/py312}"
+REPO_DIR="${REPO_DIR:-${STORAGE_DIR}/machine-unlearning-llm}"
+
 hostname; pwd; date
-source "$HOME/anaconda3/etc/profile.d/conda.sh"
+source "${CONDA_DIR}/etc/profile.d/conda.sh"
 echo "Activate virtual environment (must exist)"
-conda activate py312
+conda activate "${ENV_PATH}"
 echo "Run program in virtual environment"
 
-REPO_DIR="${REPO_DIR:-/home/balalru/machine-unlearning-llm}"
 cd "${REPO_DIR}"
 TRAIN_SCRIPT="${TRAIN_SCRIPT:-${REPO_DIR}/train.py}"
 TRAIN_CONFIG="${TRAIN_CONFIG:-${REPO_DIR}/config/train.yaml}"
