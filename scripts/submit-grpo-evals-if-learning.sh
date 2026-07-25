@@ -12,8 +12,14 @@ CHECKPOINT_ROOT="${CHECKPOINT_ROOT%/}"
 LOW_REWARD_STOP_MARKER="${LOW_REWARD_STOP_MARKER:-low_reward_stop.json}"
 MARKER_PATH="${CHECKPOINT_ROOT}/${LOW_REWARD_STOP_MARKER}"
 OUTPUT_ROOT="${STORAGE_ROOT}/outputs"
+RUN_RWKU_EVAL="${RUN_RWKU_EVAL:-true}"
+RUN_HOLDOUT_EVAL="${RUN_HOLDOUT_EVAL:-true}"
 
 cd "${REPO_DIR}"
+
+flag_enabled() {
+  [[ "$1" == "true" ]]
+}
 
 holdout_output_dir() {
   local concept="$1"
@@ -26,8 +32,13 @@ holdout_output_dir() {
   echo "${OUTPUT_ROOT}/hold_out_styles/${concept_part}-${model_part}"
 }
 
+if ! flag_enabled "${RUN_RWKU_EVAL}" && ! flag_enabled "${RUN_HOLDOUT_EVAL}"; then
+  echo "Skipping eval gate because both RUN_RWKU_EVAL and RUN_HOLDOUT_EVAL are disabled."
+  exit 0
+fi
+
 if [[ -f "${MARKER_PATH}" ]]; then
-  echo "Skipping RWKU and hold-out evals because low-reward stop marker exists: ${MARKER_PATH}"
+  echo "Skipping enabled evals because low-reward stop marker exists: ${MARKER_PATH}"
   cat "${MARKER_PATH}"
   exit 0
 fi
@@ -35,7 +46,9 @@ fi
 RWKU_OUTPUT_DIR="${CHECKPOINT_ROOT}/final_model/eval_rwku"
 HOLDOUT_OUTPUT_DIR="$(holdout_output_dir "${CONCEPT}" "${CHECKPOINT_ROOT}/final_model")"
 
-if [[ -f "${RWKU_OUTPUT_DIR}/rwku_summary_table.csv" ]]; then
+if ! flag_enabled "${RUN_RWKU_EVAL}"; then
+  rwku_job_id="disabled"
+elif [[ -f "${RWKU_OUTPUT_DIR}/rwku_summary_table.csv" ]]; then
   rwku_job_id="done"
 else
   rwku_job_id="$(
@@ -45,7 +58,9 @@ else
   )"
 fi
 
-if [[ -f "${HOLDOUT_OUTPUT_DIR}/metrics.csv" && -f "${HOLDOUT_OUTPUT_DIR}/summary.csv" ]]; then
+if ! flag_enabled "${RUN_HOLDOUT_EVAL}"; then
+  holdout_job_id="disabled"
+elif [[ -f "${HOLDOUT_OUTPUT_DIR}/metrics.csv" && -f "${HOLDOUT_OUTPUT_DIR}/summary.csv" ]]; then
   holdout_job_id="done"
 else
   holdout_job_id="$(
