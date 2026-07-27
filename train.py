@@ -115,9 +115,9 @@ def main(cfg: DictConfig) -> None:
         gradient_checkpointing=cfg.training.grpo.gradient_checkpointing,
         fp16=cfg.training.grpo.fp16,
         bf16=cfg.training.grpo.bf16,
-        use_vllm=cfg.training.grpo.use_vllm,
-        vllm_mode=cfg.training.grpo.vllm_mode,
-        vllm_gpu_memory_utilization=cfg.training.grpo.vllm_gpu_memory_utilization,
+        # use_vllm=cfg.training.grpo.use_vllm,
+        # vllm_mode=cfg.training.grpo.vllm_mode,
+        # vllm_gpu_memory_utilization=cfg.training.grpo.vllm_gpu_memory_utilization,
         num_train_epochs=cfg.training.grpo.num_train_epochs,
         max_steps=cfg.training.grpo.max_steps,
         ddp_find_unused_parameters=cfg.training.grpo.ddp_find_unused_parameters
