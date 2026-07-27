@@ -275,7 +275,6 @@ def make_refusal_classifier_reward_func(
 
 def make_refusal_classifier_func(
     config: Any,
-    log_path: Path,
 ):
     from transformers import pipeline
 
@@ -369,13 +368,8 @@ def make_refusal_classifier_func(
 
 def build_refusal_classifier(
     config: Any,
-    *,
-    log_path: Path,
 ):
-    return make_refusal_classifier_func(
-        config,
-        log_path,
-    )
+    return make_refusal_classifier_func(config)
 
 
 def make_refusal_reward_classifier_func(

@@ -5,8 +5,9 @@ REPO_DIR="${REPO_DIR:-/home/balalru/machine-unlearning-llm}"
 cd "${REPO_DIR}"
 
 LOW_REWARD_STOP_MARKER="low_reward_stop.json"
-RUN_EVALS="${RUN_EVALS:-false}"
-RUN_SFT_WARMUP="${RUN_SFT_WARMUP:-false}"
+RUN_RWKU_EVAL="${RUN_RWKU_EVAL:-false}"
+RUN_HOLDOUT_EVAL="${RUN_HOLDOUT_EVAL:-true}"
+RUN_SFT_WARMUP="${RUN_SFT_WARMUP:-true}"
 STORAGE_ROOT="${STORAGE_ROOT:-.}"
 DATA_ROOT="${STORAGE_ROOT}/data"
 OUTPUT_ROOT="${STORAGE_ROOT}/outputs"
@@ -17,31 +18,31 @@ elif [[ -n "${ORIGINAL_MODEL:-}" ]]; then
   original_models=("${ORIGINAL_MODEL}")
 else
   original_models=(
-    "Qwen/Qwen2.5-0.5B-Instruct"
-    "Qwen/Qwen2.5-1.5B-Instruct"
+    # "Qwen/Qwen2.5-0.5B-Instruct"
+    # "Qwen/Qwen2.5-1.5B-Instruct"
     "Qwen/Qwen2.5-3B-Instruct"
-    "Qwen/Qwen2.5-7B-Instruct"
+    # "Qwen/Qwen2.5-7B-Instruct"
   )
 fi
 
 targets=(
-  "Jennifer Lopez"
-  "Tony Blair"
-  "Marlon Brando"
-  "Bruce Lee"
-  "Serena Williams"
-  "John D. Rockefeller"
-  "Tom Clancy"
-  "Vincent van Gogh"
+  # "Jennifer Lopez"
+  # "Tony Blair"
+  # "Marlon Brando"
+  # "Bruce Lee"
+  # "Serena Williams"
+  # "John D. Rockefeller"
+  # "Tom Clancy"
+  # "Vincent van Gogh"
   "Karl Marx"
-  "Confucius"
+  # "Confucius"
 )
 
 rewards=(
-  "r0"
-  "r1"
-  # "r2"
-  "r4"
+  # "r0"
+  # "r1"
+  "r2"
+  # "r4"
 )
 
 slug() {
@@ -56,12 +57,24 @@ underscore_slug() {
     | sed -E 's/[^a-z0-9]+/_/g; s/^_+//; s/_+$//'
 }
 
-run_evals_enabled() {
-  [[ "${RUN_EVALS}" == "1" || "${RUN_EVALS}" == "true" || "${RUN_EVALS}" == "yes" ]]
+flag_enabled() {
+  [[ "$1" == "true" ]]
+}
+
+run_rwku_eval_enabled() {
+  flag_enabled "${RUN_RWKU_EVAL}"
+}
+
+run_holdout_eval_enabled() {
+  flag_enabled "${RUN_HOLDOUT_EVAL}"
+}
+
+run_any_eval_enabled() {
+  run_rwku_eval_enabled || run_holdout_eval_enabled
 }
 
 run_sft_warmup_enabled() {
-  [[ "${RUN_SFT_WARMUP}" == "1" || "${RUN_SFT_WARMUP}" == "true" || "${RUN_SFT_WARMUP}" == "yes" ]]
+  flag_enabled "${RUN_SFT_WARMUP}"
 }
 
 submit_data_splits() {
@@ -191,12 +204,19 @@ submit_eval_gate() {
 
   if [[ "${train_job_id}" == "done" ]]; then
     if [[ -f "${checkpoint_root}/${LOW_REWARD_STOP_MARKER}" ]]; then
-      echo "skipped-low-reward"
+      echo "skipped-stop-marker"
       return
     fi
-    if [[ -f "${rwku_output_dir}/rwku_summary_table.csv" \
-      && -f "${holdout_dir}/metrics.csv" \
-      && -f "${holdout_dir}/summary.csv" ]]; then
+    local rwku_done="true"
+    local holdout_done="true"
+    if run_rwku_eval_enabled && [[ ! -f "${rwku_output_dir}/rwku_summary_table.csv" ]]; then
+      rwku_done="false"
+    fi
+    if run_holdout_eval_enabled \
+      && [[ ! -f "${holdout_dir}/metrics.csv" || ! -f "${holdout_dir}/summary.csv" ]]; then
+      holdout_done="false"
+    fi
+    if [[ "${rwku_done}" == "true" && "${holdout_done}" == "true" ]]; then
       echo "done"
       return
     fi
@@ -209,7 +229,7 @@ submit_eval_gate() {
 
   sbatch --parsable \
     "${sbatch_args[@]}" \
-    --export="ALL,LOW_REWARD_STOP_MARKER=${LOW_REWARD_STOP_MARKER}" \
+    --export="ALL,LOW_REWARD_STOP_MARKER=${LOW_REWARD_STOP_MARKER},RUN_RWKU_EVAL=${RUN_RWKU_EVAL},RUN_HOLDOUT_EVAL=${RUN_HOLDOUT_EVAL}" \
     scripts/submit-grpo-evals-if-learning.sh \
     "${checkpoint_root}" \
     "${concept}" \
@@ -222,11 +242,23 @@ submit_holdout() {
   local model_name_or_path="$3"
   local dependency="${4:-}"
   local serial_dependency="${5:-}"
+  local stop_marker_root="${6:-}"
   local dependency_option
   local output_dir
+  local stop_marker_path
+  local marker_guard=""
   local -a sbatch_args=()
 
   output_dir="$(holdout_output_dir "${target}" "${model_name_or_path}")"
+  if [[ -n "${stop_marker_root}" ]]; then
+    stop_marker_path="${stop_marker_root%/}/${LOW_REWARD_STOP_MARKER}"
+    if [[ -f "${stop_marker_path}" ]]; then
+      echo "skipped-stop-marker"
+      return
+    fi
+    marker_guard="if [ -f '${stop_marker_path}' ]; then echo 'Skipping hold-out because stop marker exists: ${stop_marker_path}'; cat '${stop_marker_path}'; exit 0; fi && "
+  fi
+
   if [[ -f "${output_dir}/metrics.csv" && -f "${output_dir}/summary.csv" ]]; then
     echo "done"
     return
@@ -253,7 +285,7 @@ submit_holdout() {
     --gres=gpu:1 \
     --time="01:30:00" \
     --partition="sc-gpu" \
-    --wrap="cd ${REPO_DIR} && source \$HOME/anaconda3/etc/profile.d/conda.sh && conda activate py312 && python eval/hold_out_styles/generate-and-analyze-completions.py concept='${target}' model_name_or_path='${model_name_or_path}' paths.storage_root='${STORAGE_ROOT}'"
+    --wrap="cd ${REPO_DIR} && ${marker_guard}source \$HOME/anaconda3/etc/profile.d/conda.sh && conda activate py312 && python eval/hold_out_styles/generate-and-analyze-completions.py concept='${target}' model_name_or_path='${model_name_or_path}' paths.storage_root='${STORAGE_ROOT}'"
 }
 
 submit_grpo_and_evals() {
@@ -278,7 +310,7 @@ submit_grpo_and_evals() {
     if dependency_is_unavailable "${dependency}"; then
       echo "${base_label} | ${target} | ${reward}"
       echo "  train:   blocked by incomplete dependency (${dependency})"
-      if run_evals_enabled; then
+      if run_any_eval_enabled; then
         echo "  evals:   blocked"
       fi
       return
@@ -297,9 +329,9 @@ submit_grpo_and_evals() {
   if [[ -d "${checkpoint_root}/final_model" ]]; then
     echo "${base_label} | ${target} | ${reward}"
     echo "  train:   already exists (${run_name})"
-    if run_evals_enabled; then
+    if run_any_eval_enabled; then
       eval_gate_job_id="$(submit_eval_gate "done" "${checkpoint_root}" "${target}")"
-      echo "  evals:   ${eval_gate_job_id} (submits RWKU/hold-out only if learning was not low-reward stopped)"
+      echo "  evals:   ${eval_gate_job_id} (submits enabled evals only if no stop marker exists)"
     fi
     return
   fi
@@ -307,7 +339,7 @@ submit_grpo_and_evals() {
   if [[ -e "${checkpoint_root}" ]]; then
     echo "${base_label} | ${target} | ${reward}"
     echo "  train:   incomplete existing output (${run_name})"
-    if run_evals_enabled; then
+    if run_any_eval_enabled; then
       echo "  evals:   blocked"
     fi
     return
@@ -328,9 +360,9 @@ submit_grpo_and_evals() {
 
   echo "${base_label} | ${target} | ${reward}"
   echo "  train:   ${train_job_id} (${run_name})"
-  if run_evals_enabled; then
+  if run_any_eval_enabled; then
     eval_gate_job_id="$(submit_eval_gate "${train_job_id}" "${checkpoint_root}" "${target}")"
-    echo "  evals:   ${eval_gate_job_id} (submits RWKU/hold-out only if learning was not low-reward stopped)"
+    echo "  evals:   ${eval_gate_job_id} (submits enabled evals only if no stop marker exists)"
   fi
 }
 
@@ -358,13 +390,14 @@ done
 for original_model in "${original_models[@]}"; do
   ORIGINAL_MODEL="${original_model}"
   echo "Original model | ${ORIGINAL_MODEL}"
-  echo "Run evals | ${RUN_EVALS}"
+  echo "Run RWKU eval | ${RUN_RWKU_EVAL}"
+  echo "Run hold-out eval | ${RUN_HOLDOUT_EVAL}"
   echo "Run SFT warm-up | ${RUN_SFT_WARMUP}"
 
   for target in "${targets[@]}"; do
     data_job_id="${data_job_ids[${target}]}"
 
-    if run_evals_enabled; then
+    if run_holdout_eval_enabled; then
       original_holdout_job_id="$(submit_holdout "original" "${target}" "${ORIGINAL_MODEL}" "${data_job_id}")"
       echo "Original model hold-out | ${target}"
       if [[ "${original_holdout_job_id}" == "done" ]]; then
@@ -394,11 +427,21 @@ for original_model in "${original_models[@]}"; do
       fi
       echo "  model:   ${r2_warmed_model}"
 
-      if run_evals_enabled; then
-        sft_holdout_job_id="$(submit_holdout "sft" "${target}" "${r2_warmed_model}" "${sft_job_id}" "${previous_sft_holdout_job_id}")"
+      if run_holdout_eval_enabled; then
+        sft_holdout_job_id="$(
+          submit_holdout \
+            "sft" \
+            "${target}" \
+            "${r2_warmed_model}" \
+            "${sft_job_id}" \
+            "${previous_sft_holdout_job_id}" \
+            "${r2_warmed_model%/final_model}"
+        )"
         echo "R2 warm-up hold-out | ${target}"
         if [[ "${sft_holdout_job_id}" == "done" ]]; then
           echo "  holdout: already exists (${r2_warmed_model})"
+        elif [[ "${sft_holdout_job_id}" == "skipped-stop-marker" ]]; then
+          echo "  holdout: skipped because stop marker exists (${r2_warmed_model})"
         elif [[ "${sft_holdout_job_id}" == "partial" ]]; then
           echo "  holdout: incomplete existing output (${r2_warmed_model})"
         elif [[ "${sft_holdout_job_id}" == "blocked" ]]; then
