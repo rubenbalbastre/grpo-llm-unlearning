@@ -1,6 +1,6 @@
 #!/bin/bash -l
 #SBATCH --job-name=create-conda-env
-#SBATCH --output=logs/create-conda-env-%j.log
+#SBATCH --output=/storage/scratch/lv13/lv13594/logs/create-conda-env-%j.log
 #SBATCH --qos=hopper
 #SBATCH --partition=hopper
 #SBATCH --gres=gpu:1
