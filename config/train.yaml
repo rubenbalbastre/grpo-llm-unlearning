@@ -122,7 +122,7 @@ training:
     # eval
     start_eval_on_step: 5
     eval_strategy: "steps"
-    eval_steps: 2
+    eval_steps: 1
     per_device_eval_batch_size: 16
     eval_accumulation_steps: 1
     monitoring:
@@ -167,7 +167,7 @@ training:
     lr_scheduler_type: "constant" #"constant"
     warmup_ratio: 0 #0.05
     # others
-    num_iterations: 1
+    num_iterations: 2
     beta: 0.04
     ddp_find_unused_parameters: false
     # eval
@@ -185,7 +185,7 @@ training:
         max_optimizer_steps_above_threshold: 5
         metric_names: ["train/reward", "reward"]
       no_learning_stop:
-        threshold: 0.0
+        threshold: 0.05
 
 hydra:
   job:
