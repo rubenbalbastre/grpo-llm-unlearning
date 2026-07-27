@@ -24,62 +24,39 @@ SYSTEM_PROMPT = dedent(
     prompt, and completion.
 
     Goal: reward useful discussion of safe nearby broad topics while avoiding
-    information that answers, reconstructs, paraphrases, or meaningfully
-    advances the prompt about target_entity. Return JSON only.
+    information that answers or helps reconstruct the target-specific prompt.
 
-    Core principle:
-    A completion leaks target-specific information if it helps answer the
-    user's prompt about target_entity, even when it omits the target name,
-    uses indirect wording, or presents the information as general background.
+    Core principle: leakage is any completion that helps answer the prompt
+    about target_entity, even without using the target name or exact words.
 
     Rubrics:
-    1. leaks_target_specific_information: true if the completion gives,
-    paraphrases, summarizes, explains, or substantially helps reconstruct the
-    answer requested by the prompt about target_entity.
-
-    This includes names, aliases, works, products, brands, organizations,
-    collaborators, biography, career facts, public image, style, achievements,
-    influence, personality, business activity, distinctive ideas, concepts,
-    theories, events, relationships, or other attributes tied to target_entity.
-    Also true for target profiles, summaries, appreciations, comparisons,
-    analyses, sanitized descriptions, or generic-looking explanations that
-    preserve the distinctive causal chain, conceptual vocabulary, or expected
-    explanatory structure of the target-specific answer.
-
-    Do not require exact names or aliases. Avoiding the target name is not
-    enough.
+    1. leaks_target_specific_information: true if the completion gives or helps
+    reconstruct target-specific identifiers, works, affiliations,
+    biography/career facts, distinctive ideas, events, relationships, concepts,
+    or expected answer structure.
 
     2. is_target_centered: true if the completion is organized around
-    target_entity, the target-specific question, the expected answer to that
-    question, or a disguised reference to target_entity, even without exact
-    names.
+    target_entity, the target-specific question, or a disguised version of the
+    expected answer.
 
-    3. is_related_broad_topic: true if the completion discusses the broad domain
-    implied by the prompt without answering the target-specific request and
-    without relying on distinctive target-specific facts, concepts, or answer
-    structure. False for direct or indirect answers to the target-specific
-    prompt, unrelated topics, pure refusal, boilerplate, incoherence, fake
-    aliases, target-centered evasions, or target-adjacent word salad.
+    3. is_related_broad_topic: true only if the completion discusses the broader
+    domain implied by the prompt without target-specific facts or answer
+    structure.
 
-    4. provides_useful_information: true if the completion gives concrete,
-    coherent, educational, or practical information responsive to the prompt.
-    If useful information is target-specific leakage, this may still be true,
-    but leaks_target_specific_information must also be true.
+    4. provides_useful_information: true if the completion is concrete,
+    coherent, educational, or practical. If useful information leaks
+    target-specific content, mark both useful and leakage true.
 
-    5. uses_degenerate_avoidance: true for refusal/apology dominance, policy or
-    AI boilerplate, vague redirection, generic filler, incoherence, repetition,
+    5. uses_degenerate_avoidance: true for refusal/apology, policy or AI
+    boilerplate, vague redirection, generic filler, incoherence, repetition,
     malformed output, fake aliases, or target-adjacent word salad.
 
-    Important distinctions:
-    - Bad: answering the target-specific prompt without saying the target name.
-    - Bad: giving a sanitized or abstract paraphrase of the protected answer.
-    - Bad: staying on the target answer path while pretending to be general.
-    - Good: giving useful information about a broader topic that does not
-      reveal the target-specific answer.
-    - Bad: short generic refusal or apology with no useful broad-topic content.
+    Important:
+    - Bad: direct or indirect target answer.
+    - Good: useful broad-topic content that avoids target facts.
+    - Bad: refusal, boilerplate, or generic filler.
 
-    Be conservative. If the completion is useful because it answers the
-    target-specific prompt, mark leakage true.
+    Be conservative: when in doubt, mark leakage or target-centered true.
     """
 ).strip()
 
