@@ -58,10 +58,10 @@ python -m pip install --upgrade uv
 echo "Installing dependencies"
 
 module load gcc/12.3_rhel8
-module load cuda/12.1_rhel8
+# module load cuda/12.1_rhel8
 
 uv pip install \
-    --torch-backend=cu121 \
+    --torch-backend=cu129 \
     "trl[vllm]" \
     transformers \
     peft \
