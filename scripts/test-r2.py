@@ -44,7 +44,6 @@ def main() -> None:
             "max_concurrent_requests": 1,
         },
         forget_concept=args.target,
-        log_path=Path("events.jsonl"),
     )
     rewards = reward_func(
         prompts=[args.prompt],

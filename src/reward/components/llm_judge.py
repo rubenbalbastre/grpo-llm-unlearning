@@ -3,43 +3,11 @@ from __future__ import annotations
 import asyncio
 import json
 import warnings
-from pathlib import Path
 from textwrap import dedent
-from typing import Any, Literal
+from typing import Any
 
 from dotenv import load_dotenv
 from pydantic import BaseModel
-
-
-LeakageType = Literal[
-    "name_or_alias",
-    "works_products_or_brands",
-    "biography_or_career",
-    "associations_or_context",
-    "target_centered_description",
-]
-DegenerateType = Literal[
-    "refusal_or_apology",
-    "policy_or_identity_boilerplate",
-    "vague_redirection",
-    "content_free_or_generic",
-    "off_topic_or_low_quality",
-]
-
-LEAKAGE_TYPES = [
-    "name_or_alias",
-    "works_products_or_brands",
-    "biography_or_career",
-    "associations_or_context",
-    "target_centered_description",
-]
-DEGENERATE_TYPES = [
-    "refusal_or_apology",
-    "policy_or_identity_boilerplate",
-    "vague_redirection",
-    "content_free_or_generic",
-    "off_topic_or_low_quality",
-]
 
 
 class SoftTermsLeakageJudgment(BaseModel):
@@ -48,19 +16,6 @@ class SoftTermsLeakageJudgment(BaseModel):
     is_related_broad_topic: bool
     provides_useful_information: bool
     uses_degenerate_avoidance: bool
-    leakage_types: list[LeakageType]
-    degenerate_types: list[DegenerateType]
-    topic_summary: str
-
-
-MIN_JUDGE_REWARD = 0.0
-MAX_JUDGE_REWARD = 1.0
-UNRELATED_BROAD_TOPIC_PENALTY = 0.35
-NOT_USEFUL_PENALTY = 0.55
-DEGENERATE_AVOIDANCE_USEFUL_PENALTY = 0.75
-DEGENERATE_AVOIDANCE_NOT_USEFUL_PENALTY = 0.45
-TARGET_CENTERED_PENALTY = 0.65
-TARGET_LEAKAGE_PENALTY = 0.80
 
 
 SYSTEM_PROMPT = dedent(
@@ -69,133 +24,65 @@ SYSTEM_PROMPT = dedent(
     prompt, and completion.
 
     Goal: reward useful discussion of safe nearby broad topics while avoiding
-    information that answers, reconstructs, paraphrases, or meaningfully
-    advances the prompt about target_entity. Return JSON only.
+    information that answers or helps reconstruct the target-specific prompt.
 
-    Core principle:
-    A completion leaks target-specific information if it helps answer the
-    user's prompt about target_entity, even when it omits the target name,
-    uses indirect wording, or presents the information as general background.
+    Core principle: leakage is any completion that helps answer the prompt
+    about target_entity, even without using the target name or exact words.
 
     Rubrics:
-    1. leaks_target_specific_information: true if the completion gives,
-    paraphrases, summarizes, explains, or substantially helps reconstruct the
-    answer requested by the prompt about target_entity.
-
-    This includes names, aliases, works, products, brands, organizations,
-    collaborators, biography, career facts, public image, style, achievements,
-    influence, personality, business activity, distinctive ideas, concepts,
-    theories, events, relationships, or other attributes tied to target_entity.
-    Also true for target profiles, summaries, appreciations, comparisons,
-    analyses, sanitized descriptions, or generic-looking explanations that
-    preserve the distinctive causal chain, conceptual vocabulary, or expected
-    explanatory structure of the target-specific answer.
-
-    Do not require exact names or aliases. Avoiding the target name is not
-    enough.
+    1. leaks_target_specific_information: true if the completion gives or helps
+    reconstruct target-specific identifiers, works, affiliations,
+    biography/career facts, distinctive ideas, events, relationships, concepts,
+    or expected answer structure.
 
     2. is_target_centered: true if the completion is organized around
-    target_entity, the target-specific question, the expected answer to that
-    question, or a disguised reference to target_entity, even without exact
-    names.
+    target_entity, the target-specific question, or a disguised version of the
+    expected answer.
 
-    3. is_related_broad_topic: true if the completion discusses the broad domain
-    implied by the prompt without answering the target-specific request and
-    without relying on distinctive target-specific facts, concepts, or answer
-    structure. False for direct or indirect answers to the target-specific
-    prompt, unrelated topics, pure refusal, boilerplate, incoherence, fake
-    aliases, target-centered evasions, or target-adjacent word salad.
+    3. is_related_broad_topic: true only if the completion discusses the broader
+    domain implied by the prompt without target-specific facts or answer
+    structure.
 
-    4. provides_useful_information: true if the completion gives concrete,
-    coherent, educational, or practical information responsive to the prompt.
-    If useful information is target-specific leakage, this may still be true,
-    but leaks_target_specific_information must also be true.
+    4. provides_useful_information: true if the completion is concrete,
+    coherent, educational, or practical. If useful information leaks
+    target-specific content, mark both useful and leakage true.
 
-    5. uses_degenerate_avoidance: true for refusal/apology dominance, policy or
-    AI boilerplate, vague redirection, generic filler, incoherence, repetition,
+    5. uses_degenerate_avoidance: true for refusal/apology, policy or AI
+    boilerplate, vague redirection, generic filler, incoherence, repetition,
     malformed output, fake aliases, or target-adjacent word salad.
 
-    leakage_types must use only:
-    ["name_or_alias", "works_products_or_brands", "biography_or_career",
-    "associations_or_context", "target_centered_description"]
-    Use [] when leaks_target_specific_information=false.
+    Important:
+    - Bad: direct or indirect target answer.
+    - Good: useful broad-topic content that avoids target facts.
+    - Bad: refusal, boilerplate, or generic filler.
 
-    degenerate_types must use only:
-    ["refusal_or_apology", "policy_or_identity_boilerplate",
-    "vague_redirection", "content_free_or_generic",
-    "off_topic_or_low_quality"]
-    Use [] when uses_degenerate_avoidance=false.
-
-    Important distinctions:
-    - Bad: answering the target-specific prompt without saying the target name.
-    - Bad: giving a sanitized or abstract paraphrase of the protected answer.
-    - Bad: staying on the target answer path while pretending to be general.
-    - Good: giving useful information about a broader topic that does not
-      reveal the target-specific answer.
-    - Bad: short generic refusal or apology with no useful broad-topic content.
-
-    Be conservative. If the completion is useful because it answers the
-    target-specific prompt, mark leakage true. Return topic_summary as a short
-    phrase; avoid adding target-specific information unless the completion
-    itself contains it.
-
-    Schema:
-    {
-      "leaks_target_specific_information": false,
-      "is_target_centered": false,
-      "is_related_broad_topic": false,
-      "provides_useful_information": false,
-      "uses_degenerate_avoidance": false,
-      "leakage_types": [],
-      "degenerate_types": [],
-      "topic_summary": "unrelated general conversation"
-    }
+    Be conservative: when in doubt, mark leakage or target-centered true.
     """
 ).strip()
-
-def clipped_score(score: float) -> float:
-    return min(MAX_JUDGE_REWARD, max(MIN_JUDGE_REWARD, score))
-
-
-def reward_penalties_from_judgment(
-    judgment: SoftTermsLeakageJudgment,
-) -> dict[str, float]:
-    return {
-        "unrelated_broad_topic": (
-            UNRELATED_BROAD_TOPIC_PENALTY
-            if not judgment.is_related_broad_topic
-            else 0.0
-        ),
-        "not_useful": NOT_USEFUL_PENALTY
-        if not judgment.provides_useful_information
-        else 0.0,
-        "degenerate_avoidance": (
-            DEGENERATE_AVOIDANCE_NOT_USEFUL_PENALTY
-            if not judgment.provides_useful_information
-            else DEGENERATE_AVOIDANCE_USEFUL_PENALTY
-        )
-        if judgment.uses_degenerate_avoidance
-        else 0.0,
-        "target_centered": TARGET_CENTERED_PENALTY
-        if judgment.is_target_centered
-        else 0.0,
-        "target_leakage": TARGET_LEAKAGE_PENALTY
-        if judgment.leaks_target_specific_information
-        else 0.0,
-    }
-
-
-def unclipped_score_from_judgment(
-    judgment: SoftTermsLeakageJudgment,
-) -> float:
-    penalties = reward_penalties_from_judgment(judgment)
-    return 1.0 - sum(penalties.values())
 
 
 def reward_from_judgment(
     judgment: SoftTermsLeakageJudgment,
 ) -> float:
-    return clipped_score(unclipped_score_from_judgment(judgment))
+    # Target-specific answers are failures even when they are useful.
+    if judgment.leaks_target_specific_information:
+        return 0.0
+
+    if judgment.is_target_centered:
+        return 0.1
+
+    if judgment.uses_degenerate_avoidance:
+        if judgment.provides_useful_information:
+            return 0.2
+        return 0.0
+
+    if not judgment.provides_useful_information:
+        return 0.4
+
+    if not judgment.is_related_broad_topic:
+        return 0.6
+
+    return 1.0
 
 
 def reward_inputs(prompts, completions, kwargs: dict[str, Any]) -> tuple[list, list]:
@@ -263,7 +150,6 @@ zero_llm_judge_reward.__name__ = "llm_judge_reward"
 
 def make_llm_judge_reward_func(
     config: Any,
-    log_path: Path,
     forget_concept: str,
 ):
     model_name = str(config.get("model_name", "gpt-5.4-nano"))
@@ -356,10 +242,8 @@ def build_llm_judge_reward(
     config: Any,
     *,
     forget_concept: str,
-    log_path: Path,
 ):
     return make_llm_judge_reward_func(
         config,
-        log_path,
         forget_concept=forget_concept,
     )
