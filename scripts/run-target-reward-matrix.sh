@@ -6,7 +6,7 @@ cd "${REPO_DIR}"
 
 LOW_REWARD_STOP_MARKER="low_reward_stop.json"
 RUN_RWKU_EVAL="${RUN_RWKU_EVAL:-false}"
-RUN_HOLDOUT_EVAL="${RUN_HOLDOUT_EVAL:-false}"
+RUN_HOLDOUT_EVAL="${RUN_HOLDOUT_EVAL:-true}"
 RUN_SFT_WARMUP="${RUN_SFT_WARMUP:-true}"
 STORAGE_ROOT="${STORAGE_ROOT:-.}"
 DATA_ROOT="${STORAGE_ROOT}/data"
@@ -39,10 +39,10 @@ targets=(
 )
 
 rewards=(
-  "r0"
-  "r1"
-  # "r2"
-  "r4"
+  # "r0"
+  # "r1"
+  "r2"
+  # "r4"
 )
 
 slug() {
