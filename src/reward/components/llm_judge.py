@@ -73,7 +73,7 @@ def reward_from_judgment(
 
     if judgment.uses_degenerate_avoidance:
         if judgment.provides_useful_information:
-            return 0.25
+            return 0.2
         return 0.0
 
     if not judgment.provides_useful_information:
