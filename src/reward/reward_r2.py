@@ -1,7 +1,6 @@
 from __future__ import annotations
 
 from collections.abc import Callable
-from pathlib import Path
 from typing import Any
 
 from src.reward.components.avoid_refusal import build_refusal_classifier
@@ -17,28 +16,22 @@ def build_reward_funcs(reward_config: Any, forget_concept: str) -> list[Callable
     llm_judge_reward = build_llm_judge_reward(
         llm_judge_config,
         forget_concept=forget_concept,
-        log_path=Path("events.jsonl"),
     )
-    refusal_classifier_config = dict(
+    refusal_prefilter_config = dict(
         functions_config.get("refusal_reward_classifier", {})
     )
-    refusal_classifier = build_refusal_classifier(
-        refusal_classifier_config,
-        log_path=Path("events.jsonl"),
-    )
+    non_refusal_filter = build_refusal_classifier(refusal_prefilter_config)
 
     def reward_r2(prompts, completions, **kwargs) -> list[float]:
         selected_prompts = kwargs.get("selected_prompt", prompts)
         prompts_list = list(selected_prompts) if selected_prompts is not None else []
         completions_list = list(completions) if completions is not None else []
-
-        component_kwargs = dict(kwargs)
-        component_kwargs["selected_prompt"] = prompts_list
+        log_extra = kwargs.get("log_extra")
 
         classifier_kwargs = dict(kwargs)
         classifier_kwargs.pop("selected_prompt", None)
         classifier_kwargs["log_extra"] = None
-        refusal_classifications = refusal_classifier(
+        refusal_classifications = non_refusal_filter(
             prompts_list,
             completions_list,
             **classifier_kwargs,
@@ -52,24 +45,20 @@ def build_reward_funcs(reward_config: Any, forget_concept: str) -> list[Callable
         zero_judgment_logs = build_zero_judgment_log_values(len(completions_list))
 
         def scatter_judge_log(key, values) -> None:
-            log_extra = kwargs.get("log_extra")
             if log_extra is None:
                 return
-            values_list = list(values)
+
             full_values: list[Any] = list(
-                zero_judgment_logs.get(
-                    key,
-                    [None for _ in completions_list],
-                )
+                zero_judgment_logs.get(key, [None for _ in completions_list])
             )
-            for index, value in zip(judge_indices, values_list, strict=True):
+            for index, value in zip(judge_indices, values, strict=True):
                 full_values[index] = value
             log_extra(key, full_values)
 
         if judge_indices:
             judge_prompts = [prompts_list[index] for index in judge_indices]
             judge_completions = [completions_list[index] for index in judge_indices]
-            judge_kwargs = dict(component_kwargs)
+            judge_kwargs = dict(kwargs)
             judge_kwargs["selected_prompt"] = judge_prompts
             judge_kwargs["log_extra"] = scatter_judge_log
             judged_rewards = llm_judge_reward(
@@ -84,7 +73,6 @@ def build_reward_funcs(reward_config: Any, forget_concept: str) -> list[Callable
             ):
                 llm_judge_rewards[index] = judged_reward
         else:
-            log_extra = kwargs.get("log_extra")
             if log_extra is not None:
                 for key, values in zero_judgment_logs.items():
                     log_extra(key, values)
