@@ -21,21 +21,21 @@ else
     # "Qwen/Qwen2.5-0.5B-Instruct"
     # "Qwen/Qwen2.5-1.5B-Instruct"
     "Qwen/Qwen2.5-3B-Instruct"
-    "Qwen/Qwen2.5-7B-Instruct"
+    # "Qwen/Qwen2.5-7B-Instruct"
   )
 fi
 
 targets=(
-  "Jennifer Lopez"
-  "Tony Blair"
-  "Marlon Brando"
-  "Bruce Lee"
-  "Serena Williams"
-  "John D. Rockefeller"
-  "Tom Clancy"
-  "Vincent van Gogh"
+  # "Jennifer Lopez"
+  # "Tony Blair"
+  # "Marlon Brando"
+  # "Bruce Lee"
+  # "Serena Williams"
+  # "John D. Rockefeller"
+  # "Tom Clancy"
+  # "Vincent van Gogh"
   "Karl Marx"
-  "Confucius"
+  # "Confucius"
 )
 
 rewards=(
