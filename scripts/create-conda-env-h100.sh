@@ -61,7 +61,7 @@ module load gcc/12.3_rhel8
 # module load cuda/12.1_rhel8
 
 uv pip install \
-    --torch-backend=cu129 \
+    --torch-backend=cu130 \
     "trl[vllm]" \
     transformers \
     peft \
