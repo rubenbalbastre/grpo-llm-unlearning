@@ -150,8 +150,8 @@ training:
     num_generations: 8
     gradient_accumulation_steps: 2
     gradient_checkpointing: true
-    fp16: false
-    bf16: true
+    fp16: true
+    bf16: false
     steps_per_generation: 2
     use_vllm: true
     vllm_mode: colocate
