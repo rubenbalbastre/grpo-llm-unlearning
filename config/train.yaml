@@ -146,13 +146,13 @@ training:
   grpo:
     mode: standard # adaptive, standard
     # batch size
-    per_device_train_batch_size: 16
+    per_device_train_batch_size: 32
     num_generations: 8
-    gradient_accumulation_steps: 4
+    gradient_accumulation_steps: 2
     gradient_checkpointing: true
     fp16: false
     bf16: true
-    steps_per_generation: 4
+    steps_per_generation: 2
     use_vllm: true
     vllm_mode: colocate
     vllm_gpu_memory_utilization: 0.30
