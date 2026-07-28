@@ -16,7 +16,12 @@ date
 
 STORAGE_DIR="/storage/scratch/lv13/lv13594"
 CONDA_DIR="$STORAGE_DIR/anaconda3"
-ENV_PATH="$STORAGE_DIR/anaconda3/envs/py312_121"
+ENV_PATH="${ENV_PATH:-$STORAGE_DIR/anaconda3/envs/py312_cu118}"
+PYTORCH_VERSION="${PYTORCH_VERSION:-2.6.0}"
+TORCHVISION_VERSION="${TORCHVISION_VERSION:-0.21.0}"
+TORCHAUDIO_VERSION="${TORCHAUDIO_VERSION:-2.6.0}"
+TORCH_BACKEND="${TORCH_BACKEND:-cu118}"
+TRL_VERSION="${TRL_VERSION:-1.5.1}"
 
 mkdir -p "$STORAGE_DIR/logs"
 mkdir -p "$STORAGE_DIR/tmp"
@@ -58,11 +63,21 @@ python -m pip install --upgrade uv
 echo "Installing dependencies"
 
 module load gcc/12.3_rhel8
-module load cuda/12.1_rhel8
+module load cuda/11.8_rhel8
 
 uv pip install \
-    --torch-backend=cu121 \
-    "trl==1.5.1" \
+    --reinstall \
+    --torch-backend="${TORCH_BACKEND}" \
+    "torch==${PYTORCH_VERSION}" \
+    "torchvision==${TORCHVISION_VERSION}" \
+    "torchaudio==${TORCHAUDIO_VERSION}"
+
+uv pip install \
+    --torch-backend="${TORCH_BACKEND}" \
+    "torch==${PYTORCH_VERSION}" \
+    "torchvision==${TORCHVISION_VERSION}" \
+    "torchaudio==${TORCHAUDIO_VERSION}" \
+    "trl==${TRL_VERSION}" \
     transformers \
     peft \
     accelerate \
@@ -75,14 +90,14 @@ uv pip install \
     sentence-transformers \
     openai \
     rouge-score \
-    faiss-gpu-cu12 \
+    faiss-cpu \
     ninja \
     wheel \
     setuptools \
     packaging \
     psutil
 
-echo "Installing FlashAttention-2"
+echo "FlashAttention-2 build settings"
 
 export CC="$(command -v gcc)"
 export CXX="$(command -v g++)"
@@ -94,8 +109,10 @@ echo "MAX_JOBS=$MAX_JOBS"
 echo "NVCC_THREADS=$NVCC_THREADS"
 echo "FLASH_ATTN_CUDA_ARCHS=$FLASH_ATTN_CUDA_ARCHS"
 
+# Keep FlashAttention disabled unless the cluster CUDA module and PyTorch
+# version are known to match.
 # uv pip install flash-attn==2.8.3.post1 --no-build-isolation
 
 echo "Installation completed"
-python -c "import torch; print(torch.__version__, torch.version.cuda)"
+python -c "import torch, trl; import torch.distributed.fsdp as fsdp; print(torch.__version__, torch.version.cuda); print(trl.__version__); print('FSDPModule', hasattr(fsdp, 'FSDPModule')); torch.cuda.set_device(0); print(torch.ones(1, device='cuda'))"
 date
