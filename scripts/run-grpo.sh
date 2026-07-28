@@ -75,6 +75,9 @@ echo "Using accelerate config: ${ACCELERATE_CONFIG:-none}"
 echo "Using main process port: ${MAIN_PROCESS_PORT}"
 echo "Using accelerate args: ${ACCELERATE_ARGS[*]}"
 
+nvidia-smi
+nvidia-smi -q -d COMPUTE
+
 python -c 'import torch; print("Hi"); print("count", torch.cuda.device_count()); torch.cuda.set_device(0); x=torch.ones(1, device="cuda"); print(x, torch.cuda.get_device_name(0))'
 
 # echo "Run unlearning script"
