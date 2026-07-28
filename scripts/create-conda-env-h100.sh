@@ -16,7 +16,7 @@ date
 
 STORAGE_DIR="/storage/scratch/lv13/lv13594"
 CONDA_DIR="$STORAGE_DIR/anaconda3"
-ENV_PATH="$STORAGE_DIR/anaconda3/envs/py312"
+ENV_PATH="$STORAGE_DIR/anaconda3/envs/py312_121"
 
 mkdir -p "$STORAGE_DIR/logs"
 mkdir -p "$STORAGE_DIR/tmp"
@@ -58,11 +58,11 @@ python -m pip install --upgrade uv
 echo "Installing dependencies"
 
 module load gcc/12.3_rhel8
-# module load cuda/12.1_rhel8
+module load cuda/12.1_rhel8
 
 uv pip install \
-    --torch-backend=cu126 \
-    "trl" \
+    --torch-backend=cu121 \
+    "trl==1.5.1" \
     transformers \
     peft \
     accelerate \
