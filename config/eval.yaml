@@ -11,7 +11,7 @@ evaluation:
     forget: true
     neighbor: true
     mia: true
-    utility: false
+    utility: true
 
   metrics:
     generation: rouge_l_recall
