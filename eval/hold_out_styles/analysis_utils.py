@@ -15,12 +15,14 @@ def add_llm_judge_metrics(
     *,
     concept: str,
     judge_model: str = "gpt-5.4-nano",
+    judge_reasoning_effort: str = "low",
     max_concurrent_requests: int = 4,
     index_column: str = "index",
 ) -> pd.DataFrame:
     tool = AsyncCompletionClassificationTool(
         target_concept=concept,
         model_name=judge_model,
+        reasoning_effort=judge_reasoning_effort,
         max_concurrent_request=max_concurrent_requests,
     )
 
