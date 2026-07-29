@@ -14,8 +14,6 @@ MIA_METRIC_DESCRIPTIONS = {
     "min_k": "Min-K% token likelihood score",
     "min_k_plus_plus": "Min-K%++ token likelihood score",
 }
-
-
 def aggregate_generation(rows: List[Dict]) -> Dict:
     df = pd.DataFrame(rows)
 
@@ -170,7 +168,7 @@ def aggregate_utility(rows: List[Dict]) -> Dict:
             .rename(columns={"count": "n", "mean": "score"})
             .to_dict(orient="records")
         ),
-        "metric": "accuracy for multiple choice; exact match for reasoning; token F1 for factuality; weighted bi-/tri-gram entropy for fluency",
+        "metric": "official RWKU utility metrics: MMLU next-token accuracy; BBH exact match; TruthfulQA MC1; TriviaQA max-alias token F1; weighted bi-/tri-gram entropy",
         "interpretation": "higher is better",
     }
 

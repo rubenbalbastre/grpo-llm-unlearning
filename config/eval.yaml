@@ -11,7 +11,7 @@ evaluation:
     forget: true
     neighbor: true
     mia: true
-    utility: false
+    utility: true
 
   metrics:
     generation: rouge_l_recall
@@ -22,7 +22,7 @@ evaluation:
       min_k_plus_plus: false
 
   limits:
-    max_utility_examples: 300
+    max_utility_examples: null
     utility_sample_strategy: random # first or random; applied before sharding.
     utility_sample_seed: 42
 

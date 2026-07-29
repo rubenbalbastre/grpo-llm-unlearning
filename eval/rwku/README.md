@@ -43,11 +43,17 @@ evaluation:
     link_to_training_run: true
 ```
 
-Forget, neighbor, and MIA sets are always evaluated in full after optional
-subject filtering. Utility can be capped with `max_utility_examples`;
-`utility_sample_strategy: random` selects a fixed-seed random subset before
-sharding. Use `first` only when you intentionally want the first utility rows
-from the Hugging Face dataset.
+Forget, neighbor, MIA, and utility sets are evaluated after optional subject
+filtering. Utility can be capped with `max_utility_examples`;
+`utility_sample_strategy: random` selects a fixed-seed random subset after
+subject filtering and before sharding. Use `first` only when you intentionally
+want the first utility rows from the Hugging Face dataset. All utility metrics
+follow the released RWKU evaluator: MMLU uses its five-shot prompt and
+next-token probability over A-D; BBH uses few-shot chain-of-thought and
+normalized extracted-answer exact match; TruthfulQA uses the QA primer and MC1
+from summed completion log probabilities; TriviaQA uses its five-shot prompt
+and maximum token F1 over answer aliases; and fluency uses NLTK-tokenized,
+RWKU-weighted bigram/trigram entropy.
 
 When W&B logging is enabled, `WANDB_API_KEY` and `WANDB_PROJECT` are read from
 `.env`. With `link_to_training_run: true`, evaluation resumes the training W&B
@@ -68,11 +74,11 @@ the project recorded during training.grpo.
 | Neighbor Set | Knowledge Manipulation | Neighbor QA | ROUGE-L recall |
 | MIA Set | Knowledge Memorization | FM | Loss |
 | MIA Set | Knowledge Memorization | RM | Loss |
-| Utility Set | General Ability | MMLU | Accuracy via answer-option likelihood |
+| Utility Set | General Ability | MMLU | Next-token A-D accuracy |
 | Utility Set | Reasoning Ability | BBH | Exact match |
-| Utility Set | Truthfulness | TruthfulQA | Accuracy via answer-option likelihood |
-| Utility Set | Factuality | TriviaQA | Token F1 |
-| Utility Set | Fluency | AlpacaEval | Weighted bi-/tri-gram entropy |
+| Utility Set | Truthfulness | TruthfulQA | MC1 summed-log-probability accuracy |
+| Utility Set | Factuality | TriviaQA | Maximum token F1 over answer aliases |
+| Utility Set | Fluency | AlpacaEval | Official weighted bi-/tri-gram entropy |
 
 Only the MIA `loss` metric is implemented currently. Enabling `zlib`, `min_k`,
 or `min_k_plus_plus` raises `NotImplementedError`.

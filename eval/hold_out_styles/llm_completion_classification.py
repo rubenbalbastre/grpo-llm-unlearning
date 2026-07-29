@@ -8,6 +8,7 @@ import json
 
 
 llm_judge_metrics = ['lexical_leakage', 'semantic_leakage', 'helpful_relevant_answer', 'refusal', 'language_drift']
+SUPPORTED_REASONING_EFFORTS = {"none", "low", "medium", "high", "xhigh", "max"}
 
 
 class CompletionClassification(BaseModel):
@@ -39,11 +40,24 @@ class AsyncCompletionClassificationTool:
     system_prompt: str = system_prompt
     structured_response_format = CompletionClassification
 
-    def __init__(self, target_concept: str, forbidden_descriptors: str = None, model_name: str = "gpt-5.4-nano", max_concurrent_request: int = 4):
+    def __init__(
+        self,
+        target_concept: str,
+        forbidden_descriptors: str = None,
+        model_name: str = "gpt-5.4-nano",
+        reasoning_effort: str = "low",
+        max_concurrent_request: int = 4,
+    ):
         self._target_concept = target_concept
         self._forbidden_descriptors = forbidden_descriptors
         self._max_concurrent_request = max_concurrent_request
         self._model_name = model_name
+        self._reasoning_effort = str(reasoning_effort).lower()
+        if self._reasoning_effort not in SUPPORTED_REASONING_EFFORTS:
+            raise ValueError(
+                "judge_reasoning_effort must be one of "
+                f"{sorted(SUPPORTED_REASONING_EFFORTS)}."
+            )
         self._async_client = self._setup_async_client()
     
     @staticmethod
@@ -103,11 +117,16 @@ class AsyncCompletionClassificationTool:
                         message="Pydantic serializer warnings:.*",
                         category=UserWarning,
                     )
+                    request_kwargs = {
+                        "model": self._model_name,
+                        "input": request_spec,
+                        "text_format": self.structured_response_format,
+                        "reasoning": {"effort": self._reasoning_effort},
+                    }
+                    if self._reasoning_effort == "none":
+                        request_kwargs["temperature"] = 0
                     response = await self._async_client.responses.parse(
-                        model=self._model_name,
-                        input=request_spec,
-                        text_format=self.structured_response_format,
-                        temperature=0
+                        **request_kwargs
                     )
                     return response.output_parsed.model_dump()
 
@@ -120,5 +139,3 @@ class AsyncCompletionClassificationTool:
             {"role": "system", "content": system_prompt},
             {"role": "user", "content": self._create_user_prompt(prompt, completion)},
         ]
-
-
