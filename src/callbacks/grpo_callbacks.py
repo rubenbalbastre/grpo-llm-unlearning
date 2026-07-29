@@ -46,14 +46,18 @@ class StopOnHighRewardCallback(TrainerCallback):
         *,
         threshold: float,
         max_optimizer_steps_above_threshold: int,
-        frac_reward_zero_std_threshold: float,
+        frac_reward_zero_std_threshold: float | None,
         metric_names: list[str],
     ):
         self.threshold = float(threshold)
         self.max_optimizer_steps_above_threshold = int(
             max_optimizer_steps_above_threshold
         )
-        self.frac_reward_zero_std_threshold = float(frac_reward_zero_std_threshold)
+        self.frac_reward_zero_std_threshold = (
+            None
+            if frac_reward_zero_std_threshold is None
+            else float(frac_reward_zero_std_threshold)
+        )
         self.metric_names = [str(metric_name) for metric_name in metric_names]
         self.history: list[tuple[float, float]] = []
 
@@ -72,25 +76,38 @@ class StopOnHighRewardCallback(TrainerCallback):
             "train/frac_reward_zero_std",
             logs.get("frac_reward_zero_std"),
         )
-        if reward is None or frac_reward_zero_std is None:
+        if reward is None:
+            return control
+        if (
+            self.frac_reward_zero_std_threshold is not None
+            and frac_reward_zero_std is None
+        ):
             return control
 
-        self.history.append((reward, float(frac_reward_zero_std)))
+        self.history.append(
+            (
+                reward,
+                0.0 if frac_reward_zero_std is None else float(frac_reward_zero_std),
+            )
+        )
         self.history = self.history[-self.max_optimizer_steps_above_threshold :]
 
         if len(self.history) < self.max_optimizer_steps_above_threshold:
             return control
 
         mean_reward = sum(item[0] for item in self.history) / len(self.history)
-        mean_frac_reward_zero_std = sum(item[1] for item in self.history) / len(
-            self.history
-        )
-        if (
-            mean_reward >= self.threshold
-            and mean_frac_reward_zero_std >= self.frac_reward_zero_std_threshold
-        ):
-            control.should_training_stop = True
-            control.should_save = True
+        if mean_reward < self.threshold:
+            return control
+
+        if self.frac_reward_zero_std_threshold is not None:
+            mean_frac_reward_zero_std = sum(
+                item[1] for item in self.history
+            ) / len(self.history)
+            if mean_frac_reward_zero_std < self.frac_reward_zero_std_threshold:
+                return control
+
+        control.should_training_stop = True
+        control.should_save = True
 
         return control
 
@@ -227,7 +244,7 @@ def get_training_callbacks(callback_cfg: Any) -> list[TrainerCallback] | None:
                 ),
                 frac_reward_zero_std_threshold=high_reward_stop.get(
                     "frac_reward_zero_std_threshold",
-                    0.90,
+                    None,
                 ),
                 metric_names=metric_names,
             )
