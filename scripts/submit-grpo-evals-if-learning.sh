@@ -6,7 +6,7 @@ set -euo pipefail
 
 STORAGE_DIR="${STORAGE_DIR:-/storage/scratch/lv13/lv13594}"
 CONDA_DIR="${CONDA_DIR:-${STORAGE_DIR}/anaconda3}"
-ENV_PATH="${ENV_PATH:-${CONDA_DIR}/envs/py312}"
+ENV_PATH="${ENV_PATH:-${CONDA_DIR}/envs/py312_cu118}"
 REPO_DIR="${REPO_DIR:-${STORAGE_DIR}/machine-unlearning-llm}"
 CHECKPOINT_ROOT="${1:?Usage: submit-grpo-evals-if-learning.sh CHECKPOINT_ROOT CONCEPT}"
 CONCEPT="${2:?Usage: submit-grpo-evals-if-learning.sh CHECKPOINT_ROOT CONCEPT}"

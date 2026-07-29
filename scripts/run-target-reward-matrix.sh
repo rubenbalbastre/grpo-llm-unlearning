@@ -3,7 +3,7 @@ set -euo pipefail
 
 STORAGE_DIR="${STORAGE_DIR:-/storage/scratch/lv13/lv13594}"
 CONDA_DIR="${CONDA_DIR:-${STORAGE_DIR}/anaconda3}"
-ENV_PATH="${ENV_PATH:-${CONDA_DIR}/envs/py312}"
+ENV_PATH="${ENV_PATH:-${CONDA_DIR}/envs/py312_cu118}"
 REPO_DIR="${REPO_DIR:-${STORAGE_DIR}/machine-unlearning-llm}"
 cd "${REPO_DIR}"
 

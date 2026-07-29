@@ -97,7 +97,7 @@ submit_warmup_holdout() {
     --gres=gpu:1 \
     --time="01:30:00" \
     --partition="sc-gpu" \
-    --wrap="cd ${REPO_DIR} && if [ -f '${run_dir}/${LOW_REWARD_STOP_MARKER}' ]; then echo 'Skipping hold-out because stop marker exists: ${run_dir}/${LOW_REWARD_STOP_MARKER}'; cat '${run_dir}/${LOW_REWARD_STOP_MARKER}'; exit 0; fi && source \$HOME/anaconda3/etc/profile.d/conda.sh && conda activate py312 && python eval/hold_out_styles/generate-and-analyze-completions.py concept='${target}' model_name_or_path='${final_model}' paths.storage_root='${STORAGE_ROOT}'"
+    --wrap="cd ${REPO_DIR} && if [ -f '${run_dir}/${LOW_REWARD_STOP_MARKER}' ]; then echo 'Skipping hold-out because stop marker exists: ${run_dir}/${LOW_REWARD_STOP_MARKER}'; cat '${run_dir}/${LOW_REWARD_STOP_MARKER}'; exit 0; fi && source \$HOME/anaconda3/etc/profile.d/conda.sh && conda activate py312_cu118 && python eval/hold_out_styles/generate-and-analyze-completions.py concept='${target}' model_name_or_path='${final_model}' paths.storage_root='${STORAGE_ROOT}'"
 }
 
 previous_holdout_job_id=""

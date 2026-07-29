@@ -7,7 +7,7 @@ set -euo pipefail
 hostname; pwd; date
 
 source "$HOME/anaconda3/etc/profile.d/conda.sh"
-conda activate py312
+conda activate py312_cu118
 
 REPO_DIR="${REPO_DIR:-/home/balalru/machine-unlearning-llm}"
 cd "${REPO_DIR}"
