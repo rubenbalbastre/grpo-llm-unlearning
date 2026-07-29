@@ -89,7 +89,7 @@ uv pip install \
     python-dotenv \
     sentence-transformers \
     openai \
-    rouge-score \
+    rouge==1.0.1 \
     faiss-cpu \
     ninja \
     wheel \
