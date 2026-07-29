@@ -1,8 +1,8 @@
 #!/bin/bash -l
 #SBATCH --job-name=eval-rwku
 #SBATCH --output=logs/eval-rwku-%j.log
-#SBATCH --gres=gpu:2
-#SBATCH --time=05:30:00
+#SBATCH --gres=gpu:1
+#SBATCH --time=01:00:00
 #SBATCH --partition=hopper
 #SBATCH --qos=hopper
 set -euo pipefail
