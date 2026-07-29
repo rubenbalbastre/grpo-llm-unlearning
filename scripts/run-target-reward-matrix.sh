@@ -1,7 +1,8 @@
 #!/usr/bin/env bash
 set -euo pipefail
 
-REPO_DIR="${REPO_DIR:-/home/balalru/machine-unlearning-llm}"
+STORAGE_DIR="${STORAGE_DIR:-/storage/scratch/lv13/lv13594}"
+REPO_DIR="${REPO_DIR:-${STORAGE_DIR}/machine-unlearning-llm}"
 cd "${REPO_DIR}"
 
 LOW_REWARD_STOP_MARKER="low_reward_stop.json"
