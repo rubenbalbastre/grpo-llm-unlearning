@@ -16,7 +16,7 @@ date
 
 STORAGE_DIR="/storage/scratch/lv13/lv13594"
 CONDA_DIR="$STORAGE_DIR/anaconda3"
-ENV_PATH="${ENV_PATH:-$STORAGE_DIR/anaconda3/envs/py312_cu118_cu118}"
+TRAIN_ENV_PATH="${TRAIN_ENV_PATH:-$STORAGE_DIR/anaconda3/envs/py312_cu118}"
 PYTORCH_VERSION="${PYTORCH_VERSION:-2.6.0}"
 TORCHVISION_VERSION="${TORCHVISION_VERSION:-0.21.0}"
 TORCHAUDIO_VERSION="${TORCHAUDIO_VERSION:-2.6.0}"
@@ -45,17 +45,17 @@ fi
 
 source "$CONDA_DIR/etc/profile.d/conda.sh"
 
-echo "Checking environment at $ENV_PATH"
+echo "Checking environment at $TRAIN_ENV_PATH"
 
-if [ ! -f "$ENV_PATH/bin/python" ]; then
+if [ ! -f "$TRAIN_ENV_PATH/bin/python" ]; then
     echo "Creating environment"
-    conda create -y -p "$ENV_PATH" python=3.12.3 pip
+    conda create -y -p "$TRAIN_ENV_PATH" python=3.12.3 pip
 else
     echo "Environment already exists"
 fi
 
 echo "Activating environment"
-conda activate "$ENV_PATH"
+conda activate "$TRAIN_ENV_PATH"
 
 echo "Installing uv"
 python -m pip install --upgrade uv
