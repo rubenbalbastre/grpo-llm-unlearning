@@ -121,6 +121,7 @@ def main(args) -> None:
         df,
         concept=args.concept,
         judge_model=args.judge_model,
+        judge_reasoning_effort=args.judge_reasoning_effort,
         max_concurrent_requests=args.judge_concurrency,
     )
     summary = aggregate_results(df, args)

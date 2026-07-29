@@ -29,7 +29,8 @@ def main() -> None:
     parser.add_argument("--target", default=TARGET, help="Target entity/concept.")
     parser.add_argument("--prompt", default=PROMPT, help="Original user prompt.")
     parser.add_argument("--completion", default=COMPLETION, help="Assistant completion.")
-    parser.add_argument("--model", default="gpt-5.4-mini", help="OpenAI judge model.")
+    parser.add_argument("--model", default="gpt-5.4-nano", help="OpenAI judge model.")
+    parser.add_argument("--reasoning-effort", default="low", help="OpenAI reasoning effort.")
     args = parser.parse_args()
 
     logs: dict[str, list] = {}
@@ -40,6 +41,7 @@ def main() -> None:
     reward_func = build_llm_judge_reward(
         {
             "model_name": args.model,
+            "reasoning_effort": args.reasoning_effort,
             "temperature": 0.0,
             "max_concurrent_requests": 1,
         },

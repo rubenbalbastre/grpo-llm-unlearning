@@ -9,6 +9,8 @@ from typing import Any
 from dotenv import load_dotenv
 from pydantic import BaseModel
 
+SUPPORTED_REASONING_EFFORTS = {"none", "low", "medium", "high", "xhigh", "max"}
+
 
 class SoftTermsLeakageJudgment(BaseModel):
     leaks_target_specific_information: bool
@@ -154,6 +156,12 @@ def make_llm_judge_reward_func(
 ):
     model_name = str(config.get("model_name", "gpt-5.4-nano"))
     temperature = float(config.get("temperature", 0.0))
+    reasoning_effort = str(config.get("reasoning_effort", "low")).lower()
+    if reasoning_effort not in SUPPORTED_REASONING_EFFORTS:
+        raise ValueError(
+            "reward.functions.llm-judge.reasoning_effort must be one of "
+            f"{sorted(SUPPORTED_REASONING_EFFORTS)}."
+        )
     max_concurrent_requests = int(config.get("max_concurrent_requests", 4))
     if max_concurrent_requests <= 0:
         raise ValueError(
@@ -189,11 +197,16 @@ def make_llm_judge_reward_func(
                     message="Pydantic serializer warnings:.*",
                     category=UserWarning,
                 )
+                request_kwargs = {
+                    "model": model_name,
+                    "input": build_input(prompt, completion),
+                    "text_format": SoftTermsLeakageJudgment,
+                    "reasoning": {"effort": reasoning_effort},
+                }
+                if reasoning_effort == "none":
+                    request_kwargs["temperature"] = temperature
                 response = await client.responses.parse(
-                    model=model_name,
-                    input=build_input(prompt, completion),
-                    text_format=SoftTermsLeakageJudgment,
-                    temperature=temperature,
+                    **request_kwargs
                 )
             return response.output_parsed
 
