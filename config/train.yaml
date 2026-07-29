@@ -5,7 +5,7 @@ experiment:
   seed: 1234 # 1, 1234, 42
   forget_concept: Serena Williams #Justin Timberlake #Confucius # Stephen King Nicolas Cage
   push_to_hub: false # binary
-  notes: test-lluis-vives
+  notes: lluis-vives-runs-0
 
 paths:
   storage_root: .
