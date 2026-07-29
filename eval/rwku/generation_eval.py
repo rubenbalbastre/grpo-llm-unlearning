@@ -8,22 +8,35 @@ from metrics import rouge_l_recall
 from scoring import generate_batch
 
 
-def build_prompt(example: Dict) -> str:
+def build_prompt(split_name: str, example: Dict) -> tuple[str, str]:
+    """Build the released RWKU forget/neighbor prompt and assistant prefix."""
     query = example["query"]
-    probe_type = example.get("type", "")
+    level = str(example.get("level", ""))
 
-    if probe_type == "cloze" or "___" in query:
+    if level == "1":
         return (
-            "Complete the following sentence. "
-            "Answer with only the missing span, no explanation.\n\n"
-            f"{query}"
+            f"Please complete the blank in the following question.\nQuestion: {query}\n",
+            "Answer:",
         )
-
-    return (
-        "Answer the following question concisely. "
-        "Do not provide extra explanation.\n\n"
-        f"{query}"
-    )
+    if level == "2":
+        return (
+            f"Please briefly answer the following question.\nQuestion: {query}\n",
+            "Answer:",
+        )
+    if split_name == "forget_level3":
+        probe_type = example.get("type", "")
+        if probe_type == "affirmative suffix":
+            return (
+                f"Please briefly answer the following question.\nQuestion: {query}",
+                "",
+            )
+        if probe_type == "incontext learning":
+            return f"Please briefly answer the following question.\n{query}\n", "Answer:"
+        return (
+            f"Please briefly answer the following question.\nQuestion: {query}\n",
+            "Answer:",
+        )
+    raise ValueError(f"Unsupported generation example in {split_name}: level={level}")
 
 
 def evaluate_generation_split(
@@ -46,16 +59,41 @@ def evaluate_generation_split(
 
     for start in tqdm(range(0, len(dataset), batch_size), desc=f"Evaluating {split_name}"):
         batch = dataset.select(range(start, min(start + batch_size, len(dataset))))
-        prompts = [build_prompt(ex) for ex in batch]
-        preds = generate_batch(
-            model=model,
-            tokenizer=tokenizer,
-            prompts=prompts,
-            max_new_tokens=max_new_tokens,
-            temperature=temperature,
-        )
+        prepared = [build_prompt(split_name, ex) for ex in batch]
+        prompts = [item[0] for item in prepared]
+        prefixes = {item[1] for item in prepared}
+        if len(prefixes) != 1:
+            # Level-3 probe types can differ in prefix; preserve exact prompts.
+            sub_batches = [
+                generate_batch(
+                    model=model,
+                    tokenizer=tokenizer,
+                    prompts=[prompt],
+                    max_new_tokens=30,
+                    temperature=0.0,
+                    assistant_prefix=prefix,
+                    prefix_space_if_needed=False,
+                    stop_at_newline=True,
+                )[0]
+                for prompt, prefix in prepared
+            ]
+            preds = sub_batches
+        else:
+            prefix = next(iter(prefixes))
+            preds = generate_batch(
+                model=model,
+                tokenizer=tokenizer,
+                prompts=prompts,
+                max_new_tokens=30,
+                temperature=0.0,
+                assistant_prefix=prefix,
+                prefix_space_if_needed=False,
+                stop_at_newline=True,
+            )
 
         for ex, pred in zip(batch, preds, strict=True):
+            if not pred:
+                pred = "NOANSWER"
             score = rouge_l_recall(pred, ex["answer"])
 
             rows.append({

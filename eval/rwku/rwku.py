@@ -274,6 +274,7 @@ def run_evaluation(cfg: DictConfig) -> None:
         all_utility_rows = evaluate_utility_set(
             model=model,
             tokenizer=tokenizer,
+            subjects=subjects,
             max_examples=(
                 evaluation.limits.max_utility_examples
                 if evaluation.limits.max_utility_examples is not None

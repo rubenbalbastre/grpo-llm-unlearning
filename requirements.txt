@@ -108,7 +108,7 @@ referencing==0.37.0
 regex==2026.5.9
 requests==2.34.2
 rich==15.0.0
-rouge_score==0.1.2
+rouge==1.0.1
 rpds-py==0.30.0
 safetensors==0.7.0
 scikit-learn==1.8.0
