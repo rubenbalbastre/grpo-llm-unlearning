@@ -26,14 +26,14 @@ evaluation:
     utility_sample_strategy: random # first or random; applied before sharding.
     utility_sample_seed: 42
 
-  batch_size: 128
-  mia_batch_size: 128
+  batch_size: 64
+  mia_batch_size: 64
   utility_batch_size:
-    utility_general: 128
-    utility_reason: 128
-    utility_truthfulness: 128
-    utility_factuality: 128
-    utility_fluency: 128
+    utility_general: 64
+    utility_reason: 64
+    utility_truthfulness: 64
+    utility_factuality: 64
+    utility_fluency: 64
   choice_likelihood_batch_size: 16
   generation:
     max_new_tokens: 256
