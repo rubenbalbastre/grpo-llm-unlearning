@@ -52,6 +52,10 @@ DELTA_METRICS = [
     "mia_fm",
     "mia_rm",
 ]
+SPLIT_AGGREGATES = {
+    "forget": ["forget_fb", "forget_qa", "forget_aa"],
+    "neighbor": ["neighbor_fb", "neighbor_qa"],
+}
 UTILITY_METRICS = [
     "utility_ga",
     "utility_ra",
@@ -59,20 +63,21 @@ UTILITY_METRICS = [
     "utility_fac",
     "utility_flu",
 ]
-ALL_METRICS = [*DELTA_METRICS, *UTILITY_METRICS]
 METRIC_LABELS = {
-    "forget_fb": "Δ Forget FB",
-    "forget_qa": "Δ Forget QA",
-    "forget_aa": "Δ Forget AA",
-    "neighbor_fb": "Δ Neighbor FB",
-    "neighbor_qa": "Δ Neighbor QA",
-    "mia_fm": "Δ MIA FM",
-    "mia_rm": "Δ MIA RM",
-    "utility_ga": "Utility GA",
-    "utility_ra": "Utility RA",
-    "utility_tru": "Utility TRU",
-    "utility_fac": "Utility FAC",
-    "utility_flu": "Utility FLU",
+    "forget": "Δ Forget ↓",
+    "neighbor": "Δ Neighbor ↑",
+    "forget_fb": "Δ Forget FB ↓",
+    "forget_qa": "Δ Forget QA ↓",
+    "forget_aa": "Δ Forget AA ↓",
+    "neighbor_fb": "Δ Neighbor FB ↑",
+    "neighbor_qa": "Δ Neighbor QA ↑",
+    "mia_fm": "Δ MIA FM ↑",
+    "mia_rm": "Δ MIA RM ↓",
+    "utility_ga": "Utility GA ↑",
+    "utility_ra": "Utility RA ↑",
+    "utility_tru": "Utility TRU ↑",
+    "utility_fac": "Utility FAC ↑",
+    "utility_flu": "Utility FLU ↑",
 }
 
 AUTHOR_COLUMNS = [
@@ -83,6 +88,7 @@ AUTHOR_COLUMNS = [
     "rlvr_mode",
     "run_name",
     "baseline_run_name",
+    *[f"{metric}_delta" for metric in SPLIT_AGGREGATES],
     *[f"{metric}_delta" for metric in DELTA_METRICS],
     *UTILITY_METRICS,
 ]
@@ -93,6 +99,14 @@ FINAL_COLUMNS = [
     "rlvr_mode",
     "author_count",
 ]
+for _metric in SPLIT_AGGREGATES:
+    FINAL_COLUMNS.extend(
+        [
+            f"{_metric}_delta_mean",
+            f"{_metric}_delta_std_across_authors",
+            f"{_metric}_author_count",
+        ]
+    )
 for _metric in DELTA_METRICS:
     FINAL_COLUMNS.extend(
         [
@@ -186,6 +200,13 @@ def build_author_rows(
                 if value is not None and baseline_value is not None
                 else None
             )
+        for aggregate, components in SPLIT_AGGREGATES.items():
+            component_values = [row.get(f"{metric}_delta") for metric in components]
+            row[f"{aggregate}_delta"] = (
+                statistics.mean(float(value) for value in component_values)
+                if all(value is not None for value in component_values)
+                else None
+            )
         for metric in UTILITY_METRICS:
             row[metric] = trained[metric]
         rows.append(row)
@@ -220,6 +241,15 @@ def aggregate_author_rows(rows: list[dict[str, object]]) -> list[dict[str, objec
             "rlvr_mode": mode,
             "author_count": len({str(row["author"]) for row in group}),
         }
+        for metric in SPLIT_AGGREGATES:
+            values = [
+                float(row[f"{metric}_delta"])
+                for row in group
+                if row.get(f"{metric}_delta") is not None
+            ]
+            output[f"{metric}_delta_mean"] = mean(values)
+            output[f"{metric}_delta_std_across_authors"] = sample_std(values)
+            output[f"{metric}_author_count"] = len(values)
         for metric in DELTA_METRICS:
             values = [
                 float(row[f"{metric}_delta"])
@@ -254,13 +284,13 @@ def write_csv(path: Path, columns: list[str], rows: list[dict[str, object]]) -> 
         )
 
 
-def format_mean_std(mean_value: object, std_value: object, count: object) -> str:
+def format_mean_std(mean_value: object, std_value: object) -> str:
     if mean_value is None:
         return "NA"
     text = f"{float(mean_value):.3f}"
     if std_value is not None:
         text += f" ± {float(std_value):.3f}"
-    return f"{text} (n={count})"
+    return text
 
 
 def write_markdown(path: Path, rows: list[dict[str, object]]) -> None:
@@ -269,7 +299,9 @@ def write_markdown(path: Path, rows: list[dict[str, object]]) -> None:
         "reward_function",
         "rlvr_mode",
         "author_count",
-        *[METRIC_LABELS[metric] for metric in ALL_METRICS],
+        METRIC_LABELS["forget"],
+        METRIC_LABELS["neighbor"],
+        *[METRIC_LABELS[metric] for metric in ["mia_fm", "mia_rm", *UTILITY_METRICS]],
     ]
     lines = [
         "| " + " | ".join(headers) + " |",
@@ -282,12 +314,18 @@ def write_markdown(path: Path, rows: list[dict[str, object]]) -> None:
             str(row["rlvr_mode"]),
             str(row["author_count"]),
         ]
-        for metric in DELTA_METRICS:
+        for metric in SPLIT_AGGREGATES:
             cells.append(
                 format_mean_std(
                     row.get(f"{metric}_delta_mean"),
                     row.get(f"{metric}_delta_std_across_authors"),
-                    row.get(f"{metric}_author_count"),
+                )
+            )
+        for metric in ["mia_fm", "mia_rm"]:
+            cells.append(
+                format_mean_std(
+                    row.get(f"{metric}_delta_mean"),
+                    row.get(f"{metric}_delta_std_across_authors"),
                 )
             )
         for metric in UTILITY_METRICS:
@@ -295,7 +333,6 @@ def write_markdown(path: Path, rows: list[dict[str, object]]) -> None:
                 format_mean_std(
                     row.get(f"{metric}_mean"),
                     row.get(f"{metric}_std_across_authors"),
-                    row.get(f"{metric}_author_count"),
                 )
             )
         lines.append("| " + " | ".join(cells) + " |")
