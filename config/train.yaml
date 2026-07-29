@@ -123,7 +123,7 @@ training:
     lr_scheduler_type: "constant" #"constant"
     warmup_steps: 3
     # eval
-    start_eval_on_step: 3
+    start_eval_on_step: 2
     eval_strategy: "steps"
     eval_steps: 1
     per_device_eval_batch_size: 64
