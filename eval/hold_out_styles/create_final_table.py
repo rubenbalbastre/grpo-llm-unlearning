@@ -3,6 +3,7 @@ from __future__ import annotations
 
 import argparse
 import csv
+import json
 import re
 import statistics
 from collections import defaultdict
@@ -13,6 +14,8 @@ REPO_ROOT = Path(__file__).resolve().parents[2]
 DEFAULT_INPUT_ROOT = REPO_ROOT / "outputs" / "hold_out_styles"
 DEFAULT_OUTPUT_CSV = DEFAULT_INPUT_ROOT / "final_table.csv"
 DEFAULT_SFT_WARMUP_CSV = DEFAULT_INPUT_ROOT / "final_table_sft_warmup.csv"
+DEFAULT_CONDITIONAL_CSV = DEFAULT_INPUT_ROOT / "final_table_conditional.csv"
+DEFAULT_FULL_CSV = DEFAULT_INPUT_ROOT / "final_table_full.csv"
 SUMMARY_METADATA_COLUMNS = {"forget_concept", "model_name_or_path", "stat"}
 RUN_RE = re.compile(r"(unlearning-\d+)")
 BASELINE_FOLDER_RE = re.compile(
@@ -28,6 +31,12 @@ UNLEARNING_FOLDER_RE = re.compile(
 WARMUP_FOLDER_RE = re.compile(
     r"^(?P<concept>.+)-\.-outputs-r2warmup_qwen_qwen2_5_"
     r"(?P<size>0_5b|1_5b|3b|7b)_instruct_.+-final_model$",
+    re.IGNORECASE,
+)
+STOPPED_RUN_RE = re.compile(
+    r"^unlearning-(?P<training_variant>original|r2-warmed)-qwen-qwen2-5-"
+    r"(?P<size>0-5b|1-5b|3b|7b)-instruct-(?P<concept>.+)-"
+    r"(?P<reward_type>r\d+)$",
     re.IGNORECASE,
 )
 MODEL_SIZES = {
@@ -185,6 +194,70 @@ def build_table(summary_paths: list[Path]) -> list[dict[str, str]]:
     return rows
 
 
+def concept_key(value: str) -> str:
+    return re.sub(r"[^a-z0-9]+", "", value.lower())
+
+
+def add_observed_provenance(rows: list[dict[str, str]]) -> list[dict[str, str]]:
+    return [
+        {
+            **row,
+            "result_source": "observed",
+            "run_status": "observed",
+            "stop_reason": "",
+        }
+        for row in rows
+    ]
+
+
+def add_confirmed_no_learning_baselines(
+    rows: list[dict[str, str]], outputs_root: Path
+) -> list[dict[str, str]]:
+    """Add baseline-valued rows only for runs carrying a low-reward stop marker."""
+    baselines = {
+        (concept_key(row["forget_concept"]), row["model_size"]): row
+        for row in rows
+        if row.get("training_variant") == "baseline"
+    }
+    observed_keys = {
+        (
+            concept_key(row["forget_concept"]),
+            row["training_variant"],
+            row["model_size"],
+            row["reward_type"],
+        )
+        for row in rows
+    }
+    imputed_rows: list[dict[str, str]] = []
+    for marker_path in sorted(outputs_root.glob("*/low_reward_stop.json")):
+        match = STOPPED_RUN_RE.fullmatch(marker_path.parent.name)
+        if not match:
+            continue
+        size = MODEL_SIZES[match.group("size").lower()]
+        training_variant = match.group("training_variant").lower()
+        reward_type = match.group("reward_type").lower()
+        key = (concept_key(match.group("concept")), training_variant, size, reward_type)
+        if key in observed_keys:
+            continue
+        baseline = baselines.get((key[0], size))
+        if baseline is None:
+            continue
+        marker = json.loads(marker_path.read_text(encoding="utf-8"))
+        imputed_rows.append(
+            {
+                **baseline,
+                "reward_type": reward_type,
+                "training_variant": training_variant,
+                "rlvr_mode": "zero-RLVR" if training_variant == "original" else "warm-up",
+                "run_name": marker_path.parent.name,
+                "result_source": "baseline-imputed",
+                "run_status": "no-learning",
+                "stop_reason": str(marker.get("reason", "")),
+            }
+        )
+    return [*rows, *imputed_rows]
+
+
 def numeric_value(value: str) -> float | None:
     if value == "":
         return None
@@ -242,6 +315,15 @@ def aggregate_by_reward_type(rows: list[dict[str, str]]) -> list[dict[str, str]]
                 sorted({row.get("training_variant", "") for row in group_rows})
             ),
             "run_count": str(len(group_rows)),
+            "observed_run_count": str(
+                sum(row.get("result_source", "observed") == "observed" for row in group_rows)
+            ),
+            "no_learning_count": str(
+                sum(row.get("run_status") == "no-learning" for row in group_rows)
+            ),
+            "baseline_imputed_count": str(
+                sum(row.get("result_source") == "baseline-imputed" for row in group_rows)
+            ),
             "forget_concepts": "|".join(sorted({row.get("forget_concept", "") for row in group_rows})),
             "run_names": "|".join(sorted({row.get("run_name", "") for row in group_rows})),
             "experiment_seeds": "|".join(sorted({row.get("experiment_seed", "") for row in group_rows})),
@@ -406,6 +488,9 @@ def write_reward_type_markdown(path: Path, rows: list[dict[str, str]]) -> None:
         "rlvr_mode",
         "training_variants",
         "run_count",
+        "observed_run_count",
+        "no_learning_count",
+        "baseline_imputed_count",
         "experiment_seeds",
     ]
     headers.extend(column.removesuffix("_mean") for column in mean_columns)
@@ -418,6 +503,9 @@ def write_reward_type_markdown(path: Path, rows: list[dict[str, str]]) -> None:
             row.get("rlvr_mode", ""),
             row.get("training_variants", ""),
             row.get("run_count", ""),
+            row.get("observed_run_count", ""),
+            row.get("no_learning_count", ""),
+            row.get("baseline_imputed_count", ""),
             row.get("experiment_seeds", ""),
         ]
         for mean_column in mean_columns:
@@ -495,6 +583,18 @@ def parse_args() -> argparse.Namespace:
         help="Markdown output averaging SFT warm-up model results across authors.",
     )
     parser.add_argument(
+        "--conditional-csv",
+        type=Path,
+        default=DEFAULT_CONDITIONAL_CSV,
+        help="Aggregate output using observed/successful runs only.",
+    )
+    parser.add_argument(
+        "--full-csv",
+        type=Path,
+        default=DEFAULT_FULL_CSV,
+        help="Aggregate output with confirmed no-learning runs replaced by baselines.",
+    )
+    parser.add_argument(
         "--summary-glob",
         default="*/summary.csv",
         help="Glob below --input-root selecting completion summary CSV files.",
@@ -508,7 +608,7 @@ def main() -> None:
     if not summary_paths:
         raise SystemExit(f"No summary CSV files found with {args.input_root / args.summary_glob}")
 
-    rows = build_table(summary_paths)
+    rows = add_observed_provenance(build_table(summary_paths))
     if not rows:
         raise SystemExit("No non-empty summary CSV files found.")
 
@@ -518,8 +618,13 @@ def main() -> None:
     output_md = args.output_md or args.output_csv.with_suffix(".md")
     by_reward_type_md = args.by_reward_type_md or by_reward_type_csv.with_suffix(".md")
     sft_warmup_md = args.sft_warmup_md or args.sft_warmup_csv.with_suffix(".md")
+    conditional_md = args.conditional_csv.with_suffix(".md")
+    full_md = args.full_csv.with_suffix(".md")
 
     reward_type_rows = aggregate_by_reward_type(rows)
+    conditional_rows = reward_type_rows
+    full_run_rows = add_confirmed_no_learning_baselines(rows, REPO_ROOT / "outputs")
+    full_rows = aggregate_by_reward_type(full_run_rows)
     sft_warmup_rows = aggregate_sft_warmup_by_model(rows)
     write_csv(
         args.output_csv,
@@ -555,9 +660,27 @@ def main() -> None:
         sft_warmup_rows,
         preferred_columns=["model_size", "model_name_or_path", "author_count"],
     )
+    aggregate_columns = [
+        "reward_type",
+        "model_size",
+        "model_name_or_path",
+        "rlvr_mode",
+        "training_variants",
+        "run_count",
+        "observed_run_count",
+        "no_learning_count",
+        "baseline_imputed_count",
+        "forget_concepts",
+        "run_names",
+        "experiment_seeds",
+    ]
+    write_csv(args.conditional_csv, conditional_rows, preferred_columns=aggregate_columns)
+    write_csv(args.full_csv, full_rows, preferred_columns=aggregate_columns)
     write_run_markdown(output_md, rows)
     write_reward_type_markdown(by_reward_type_md, reward_type_rows)
     write_sft_warmup_markdown(sft_warmup_md, sft_warmup_rows)
+    write_reward_type_markdown(conditional_md, conditional_rows)
+    write_reward_type_markdown(full_md, full_rows)
     print(f"read {len(summary_paths)} summary CSV file(s)")
     print(f"wrote final table: {args.output_csv}")
     print(f"wrote reward-type aggregate table: {by_reward_type_csv}")
@@ -565,6 +688,10 @@ def main() -> None:
     print(f"wrote reward-type aggregate markdown table: {by_reward_type_md}")
     print(f"wrote SFT warm-up author aggregate table: {args.sft_warmup_csv}")
     print(f"wrote SFT warm-up author aggregate markdown table: {sft_warmup_md}")
+    print(f"wrote conditional aggregate table: {args.conditional_csv}")
+    print(f"wrote conditional aggregate markdown table: {conditional_md}")
+    print(f"wrote full baseline-substituted table: {args.full_csv}")
+    print(f"wrote full baseline-substituted markdown table: {full_md}")
 
 
 if __name__ == "__main__":
