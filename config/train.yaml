@@ -189,6 +189,7 @@ training:
       high_reward_stop:
         threshold: 0.90
         max_optimizer_steps_above_threshold: 5
+        frac_reward_zero_std_threshold: 0.90
         metric_names: ["train/reward", "reward"]
       no_learning_stop:
         threshold: 0.05
