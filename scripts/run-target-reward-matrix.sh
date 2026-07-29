@@ -80,6 +80,25 @@ run_sft_warmup_enabled() {
   flag_enabled "${RUN_SFT_WARMUP}"
 }
 
+submit_model_cache() {
+  local model_name="$1"
+  local cache_name="${model_name//\//--}"
+  local model_dir="${OUTPUT_ROOT}/model/${cache_name}"
+  local tokenizer_dir="${OUTPUT_ROOT}/tokenizer/${cache_name}"
+
+  if [[ -f "${model_dir}/.cache_complete" \
+    && -f "${model_dir}/config.json" \
+    && -f "${tokenizer_dir}/tokenizer_config.json" ]]; then
+    echo "done"
+    return
+  fi
+
+  sbatch --parsable \
+    scripts/cache-model-and-tokenizer.sh \
+    "${model_name}" \
+    "${STORAGE_ROOT}"
+}
+
 submit_data_splits() {
   local target="$1"
   local serial_dependency="${2:-}"
@@ -163,7 +182,7 @@ submit_sft_warmup() {
     return
   fi
 
-  dependency_option="$(dependency_arg "${dependency}" "${serial_dependency}")"
+  dependency_option="$(dependency_arg "${dependency}" "${serial_dependency}" "${MODEL_CACHE_JOB_ID:-}")"
   if [[ -n "${dependency_option}" ]]; then
     sbatch_args+=("${dependency_option}")
   fi
@@ -247,6 +266,8 @@ submit_rwku_baseline() {
   local target_slug
   local baseline_label
   local output_dir
+  local dependency_option
+  local -a sbatch_args=()
 
   model_slug="$(slug "${model_name_or_path}")"
   target_slug="$(slug "${target}")"
@@ -258,7 +279,13 @@ submit_rwku_baseline() {
     return
   fi
 
+  dependency_option="$(dependency_arg "${MODEL_CACHE_JOB_ID:-}")"
+  if [[ -n "${dependency_option}" ]]; then
+    sbatch_args+=("${dependency_option}")
+  fi
+
   sbatch --parsable \
+    ${sbatch_args[@]+"${sbatch_args[@]}"} \
     scripts/eval-rwku.sh \
     "evaluation.model_name_or_path=${model_name_or_path}" \
     "evaluation.output_dir=${output_dir}" \
@@ -306,7 +333,7 @@ submit_holdout() {
     return
   fi
 
-  dependency_option="$(dependency_arg "${dependency}" "${serial_dependency}")"
+  dependency_option="$(dependency_arg "${dependency}" "${serial_dependency}" "${MODEL_CACHE_JOB_ID:-}")"
   if [[ -n "${dependency_option}" ]]; then
     sbatch_args+=("${dependency_option}")
   fi
@@ -349,12 +376,12 @@ submit_grpo_and_evals() {
       fi
       return
     fi
-    dependency_option="$(dependency_arg "${dependency}" "${serial_dependency}")"
+    dependency_option="$(dependency_arg "${dependency}" "${serial_dependency}" "${MODEL_CACHE_JOB_ID:-}")"
     if [[ -n "${dependency_option}" ]]; then
       sbatch_args+=("${dependency_option}")
     fi
   elif [[ -n "${serial_dependency}" ]]; then
-    dependency_option="$(dependency_arg "${serial_dependency}")"
+    dependency_option="$(dependency_arg "${serial_dependency}" "${MODEL_CACHE_JOB_ID:-}")"
     if [[ -n "${dependency_option}" ]]; then
       sbatch_args+=("${dependency_option}")
     fi
@@ -423,7 +450,13 @@ done
 
 for original_model in "${original_models[@]}"; do
   ORIGINAL_MODEL="${original_model}"
+  MODEL_CACHE_JOB_ID="$(submit_model_cache "${ORIGINAL_MODEL}")"
   echo "Original model | ${ORIGINAL_MODEL}"
+  if [[ "${MODEL_CACHE_JOB_ID}" == "done" ]]; then
+    echo "Model cache | already exists"
+  else
+    echo "Model cache | ${MODEL_CACHE_JOB_ID}"
+  fi
   echo "Run RWKU eval | ${RUN_RWKU_EVAL}"
   echo "Run hold-out eval | ${RUN_HOLDOUT_EVAL}"
   echo "Run SFT warm-up | ${RUN_SFT_WARMUP}"
