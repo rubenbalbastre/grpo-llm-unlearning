@@ -106,7 +106,7 @@ submit_data_splits() {
   fi
 
   sbatch --parsable \
-    "${sbatch_args[@]}" \
+    ${sbatch_args[@]+"${sbatch_args[@]}"} \
     scripts/generate-data-splits.sh \
     "experiment.forget_concept=${target}" \
     "paths.storage_root=${STORAGE_ROOT}"
@@ -180,7 +180,7 @@ submit_sft_warmup() {
 
   job_id="$(
     sbatch --parsable \
-      "${sbatch_args[@]}" \
+      ${sbatch_args[@]+"${sbatch_args[@]}"} \
       scripts/run-sft.sh \
       "wandb.run_name=${run_name}" \
       "model.name=${ORIGINAL_MODEL}" \
@@ -232,7 +232,7 @@ submit_eval_gate() {
   fi
 
   sbatch --parsable \
-    "${sbatch_args[@]}" \
+    ${sbatch_args[@]+"${sbatch_args[@]}"} \
     --export="ALL,LOW_REWARD_STOP_MARKER=${LOW_REWARD_STOP_MARKER},RUN_RWKU_EVAL=${RUN_RWKU_EVAL},RUN_HOLDOUT_EVAL=${RUN_HOLDOUT_EVAL}" \
     scripts/submit-grpo-evals-if-learning.sh \
     "${checkpoint_root}" \
@@ -312,7 +312,7 @@ submit_holdout() {
   fi
 
   sbatch --parsable \
-    "${sbatch_args[@]}" \
+    ${sbatch_args[@]+"${sbatch_args[@]}"} \
     --job-name="holdout-${label}" \
     --output="logs/holdout-${label}-%j.log" \
     --gres=gpu:1 \
@@ -381,7 +381,7 @@ submit_grpo_and_evals() {
 
   train_job_id="$(
     sbatch --parsable \
-      "${sbatch_args[@]}" \
+      ${sbatch_args[@]+"${sbatch_args[@]}"} \
       --export="ALL,RUN_NAME=${run_name}" \
       scripts/run-grpo.sh \
       "model.name=${base_model}" \
