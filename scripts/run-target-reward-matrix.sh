@@ -5,8 +5,8 @@ REPO_DIR="${REPO_DIR:-/home/balalru/machine-unlearning-llm}"
 cd "${REPO_DIR}"
 
 LOW_REWARD_STOP_MARKER="low_reward_stop.json"
-RUN_RWKU_EVAL="${RUN_RWKU_EVAL:-false}"
-RUN_HOLDOUT_EVAL="${RUN_HOLDOUT_EVAL:-true}"
+RUN_RWKU_EVAL="${RUN_RWKU_EVAL:-true}"
+RUN_HOLDOUT_EVAL="${RUN_HOLDOUT_EVAL:-false}"
 RUN_SFT_WARMUP="${RUN_SFT_WARMUP:-true}"
 STORAGE_ROOT="${STORAGE_ROOT:-.}"
 DATA_ROOT="${STORAGE_ROOT}/data"
@@ -18,31 +18,31 @@ elif [[ -n "${ORIGINAL_MODEL:-}" ]]; then
   original_models=("${ORIGINAL_MODEL}")
 else
   original_models=(
-    # "Qwen/Qwen2.5-0.5B-Instruct"
-    # "Qwen/Qwen2.5-1.5B-Instruct"
+    "Qwen/Qwen2.5-0.5B-Instruct"
+    "Qwen/Qwen2.5-1.5B-Instruct"
     "Qwen/Qwen2.5-3B-Instruct"
-    # "Qwen/Qwen2.5-7B-Instruct"
+    "Qwen/Qwen2.5-7B-Instruct"
   )
 fi
 
 targets=(
-  # "Jennifer Lopez"
-  # "Tony Blair"
-  # "Marlon Brando"
-  # "Bruce Lee"
-  # "Serena Williams"
-  # "John D. Rockefeller"
-  # "Tom Clancy"
-  # "Vincent van Gogh"
+  "Jennifer Lopez"
+  "Tony Blair"
+  "Marlon Brando"
+  "Bruce Lee"
+  "Serena Williams"
+  "John D. Rockefeller"
+  "Tom Clancy"
+  "Vincent van Gogh"
   "Karl Marx"
-  # "Confucius"
+  "Confucius"
 )
 
 rewards=(
-  # "r0"
-  # "r1"
+  "r0"
+  "r1"
   "r2"
-  # "r4"
+  "r4"
 )
 
 slug() {
@@ -209,7 +209,8 @@ submit_eval_gate() {
     fi
     local rwku_done="true"
     local holdout_done="true"
-    if run_rwku_eval_enabled && [[ ! -f "${rwku_output_dir}/rwku_summary_table.csv" ]]; then
+    if run_rwku_eval_enabled \
+      && [[ ! -f "${rwku_output_dir}/rwku_summary_table.csv" ]]; then
       rwku_done="false"
     fi
     if run_holdout_eval_enabled \
@@ -234,6 +235,35 @@ submit_eval_gate() {
     "${checkpoint_root}" \
     "${concept}" \
     "${STORAGE_ROOT}"
+}
+
+submit_rwku_baseline() {
+  local target="$1"
+  local model_name_or_path="$2"
+  local model_slug
+  local target_slug
+  local baseline_label
+  local output_dir
+
+  model_slug="$(slug "${model_name_or_path}")"
+  target_slug="$(slug "${target}")"
+  baseline_label="rwku-baseline-${model_slug}-${target_slug}"
+  output_dir="${OUTPUT_ROOT}/${baseline_label}/eval_rwku"
+
+  if [[ -f "${output_dir}/rwku_summary_table.csv" ]]; then
+    echo "done"
+    return
+  fi
+
+  sbatch --parsable \
+    scripts/eval-rwku.sh \
+    "evaluation.model_name_or_path=${model_name_or_path}" \
+    "evaluation.output_dir=${output_dir}" \
+    "evaluation.subjects=${target}" \
+    "evaluation.model.label=baseline" \
+    "evaluation.checkpoint.label=baseline" \
+    "evaluation.wandb.run_name=${baseline_label}" \
+    "evaluation.wandb.artifact_name=${baseline_label}"
 }
 
 submit_holdout() {
@@ -396,6 +426,16 @@ for original_model in "${original_models[@]}"; do
 
   for target in "${targets[@]}"; do
     data_job_id="${data_job_ids[${target}]}"
+
+    if run_rwku_eval_enabled; then
+      baseline_rwku_job_id="$(submit_rwku_baseline "${target}" "${ORIGINAL_MODEL}")"
+      echo "Original model RWKU | ${target}"
+      if [[ "${baseline_rwku_job_id}" == "done" ]]; then
+        echo "  rwku:    already exists (${ORIGINAL_MODEL})"
+      else
+        echo "  rwku:    ${baseline_rwku_job_id} (${ORIGINAL_MODEL})"
+      fi
+    fi
 
     if run_holdout_eval_enabled; then
       original_holdout_job_id="$(submit_holdout "original" "${target}" "${ORIGINAL_MODEL}" "${data_job_id}")"
