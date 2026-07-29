@@ -21,10 +21,10 @@ elif [[ -n "${ORIGINAL_MODEL:-}" ]]; then
   original_models=("${ORIGINAL_MODEL}")
 else
   original_models=(
-    "Qwen/Qwen2.5-0.5B-Instruct"
+    # "Qwen/Qwen2.5-0.5B-Instruct"
     "Qwen/Qwen2.5-1.5B-Instruct"
-    "Qwen/Qwen2.5-3B-Instruct"
-    "Qwen/Qwen2.5-7B-Instruct"
+    # "Qwen/Qwen2.5-3B-Instruct"
+    # "Qwen/Qwen2.5-7B-Instruct"
   )
 fi
 
