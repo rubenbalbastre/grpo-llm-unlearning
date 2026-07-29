@@ -1,8 +1,11 @@
 #!/bin/bash -l
 #SBATCH --job-name=cache-model
 #SBATCH --output=logs/cache-model-%j.log
+#SBATCH --gres=gpu:1
 #SBATCH --time=02:00:00
 #SBATCH --mem=32G
+#SBATCH --partition=hopper
+#SBATCH --qos=hopper
 set -euo pipefail
 
 STORAGE_DIR="${STORAGE_DIR:-/storage/scratch/lv13/lv13594}"
