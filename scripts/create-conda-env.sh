@@ -89,13 +89,14 @@ uv pip install \
     python-dotenv \
     sentence-transformers \
     openai \
-    rouge==1.0.1 \
     faiss-cpu \
     ninja \
     wheel \
     setuptools \
     packaging \
     psutil
+
+uv pip install rouge
 
 echo "FlashAttention-2 build settings"
 
