@@ -4,7 +4,10 @@
 #SBATCH --time=00:05:00
 set -euo pipefail
 
-REPO_DIR="${REPO_DIR:-/home/balalru/machine-unlearning-llm}"
+STORAGE_DIR="${STORAGE_DIR:-/storage/scratch/lv13/lv13594}"
+CONDA_DIR="${CONDA_DIR:-${STORAGE_DIR}/anaconda3}"
+ENV_PATH="${ENV_PATH:-${CONDA_DIR}/envs/py312}"
+REPO_DIR="${REPO_DIR:-${STORAGE_DIR}/machine-unlearning-llm}"
 CHECKPOINT_ROOT="${1:?Usage: submit-grpo-evals-if-learning.sh CHECKPOINT_ROOT CONCEPT}"
 CONCEPT="${2:?Usage: submit-grpo-evals-if-learning.sh CHECKPOINT_ROOT CONCEPT}"
 STORAGE_ROOT="${3:-${STORAGE_ROOT:-.}}"
@@ -69,8 +72,9 @@ else
       --output="logs/holdout-%j.log" \
       --gres=gpu:1 \
       --time="01:30:00" \
-      --partition="sc-gpu" \
-      --wrap="cd ${REPO_DIR} && source \$HOME/anaconda3/etc/profile.d/conda.sh && conda activate py312 && python eval/hold_out_styles/generate-and-analyze-completions.py concept='${CONCEPT}' model_name_or_path='${CHECKPOINT_ROOT}/final_model' paths.storage_root='${STORAGE_ROOT}'"
+      --partition="hopper" \
+      --qos="hopper" \
+      --wrap="cd ${REPO_DIR} && source ${CONDA_DIR}/etc/profile.d/conda.sh && conda activate ${ENV_PATH} && python eval/hold_out_styles/generate-and-analyze-completions.py concept='${CONCEPT}' model_name_or_path='${CHECKPOINT_ROOT}/final_model' paths.storage_root='${STORAGE_ROOT}'"
   )"
 fi
 

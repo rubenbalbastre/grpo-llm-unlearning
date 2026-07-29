@@ -2,6 +2,8 @@
 set -euo pipefail
 
 STORAGE_DIR="${STORAGE_DIR:-/storage/scratch/lv13/lv13594}"
+CONDA_DIR="${CONDA_DIR:-${STORAGE_DIR}/anaconda3}"
+ENV_PATH="${ENV_PATH:-${CONDA_DIR}/envs/py312}"
 REPO_DIR="${REPO_DIR:-${STORAGE_DIR}/machine-unlearning-llm}"
 cd "${REPO_DIR}"
 
@@ -9,7 +11,7 @@ LOW_REWARD_STOP_MARKER="low_reward_stop.json"
 RUN_RWKU_EVAL="${RUN_RWKU_EVAL:-true}"
 RUN_HOLDOUT_EVAL="${RUN_HOLDOUT_EVAL:-false}"
 RUN_SFT_WARMUP="${RUN_SFT_WARMUP:-false}"
-STORAGE_ROOT="${STORAGE_ROOT:-.}"
+STORAGE_ROOT="${STORAGE_ROOT:-${REPO_DIR}}"
 DATA_ROOT="${STORAGE_ROOT}/data"
 OUTPUT_ROOT="${STORAGE_ROOT}/outputs"
 
@@ -315,8 +317,9 @@ submit_holdout() {
     --output="logs/holdout-${label}-%j.log" \
     --gres=gpu:1 \
     --time="01:30:00" \
-    --partition="sc-gpu" \
-    --wrap="cd ${REPO_DIR} && ${marker_guard}source \$HOME/anaconda3/etc/profile.d/conda.sh && conda activate py312 && python eval/hold_out_styles/generate-and-analyze-completions.py concept='${target}' model_name_or_path='${model_name_or_path}' paths.storage_root='${STORAGE_ROOT}'"
+    --partition="hopper" \
+    --qos="hopper" \
+    --wrap="cd ${REPO_DIR} && ${marker_guard}source ${CONDA_DIR}/etc/profile.d/conda.sh && conda activate ${ENV_PATH} && python eval/hold_out_styles/generate-and-analyze-completions.py concept='${target}' model_name_or_path='${model_name_or_path}' paths.storage_root='${STORAGE_ROOT}'"
 }
 
 submit_grpo_and_evals() {
