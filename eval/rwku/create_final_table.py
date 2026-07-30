@@ -73,11 +73,11 @@ METRIC_LABELS = {
     "neighbor_qa": "Δ Neighbor QA ↑",
     "mia_fm": "Δ MIA FM ↑",
     "mia_rm": "Δ MIA RM ↓",
-    "utility_ga": "Utility GA ↑",
-    "utility_ra": "Utility RA ↑",
-    "utility_tru": "Utility TRU ↑",
-    "utility_fac": "Utility FAC ↑",
-    "utility_flu": "Utility FLU ↑",
+    "utility_ga": "Δ Utility GA ↑",
+    "utility_ra": "Δ Utility RA ↑",
+    "utility_tru": "Δ Utility TRU ↑",
+    "utility_fac": "Δ Utility FAC ↑",
+    "utility_flu": "Δ Utility FLU ↑",
 }
 
 AUTHOR_COLUMNS = [
@@ -90,6 +90,7 @@ AUTHOR_COLUMNS = [
     "baseline_run_name",
     *[f"{metric}_delta" for metric in SPLIT_AGGREGATES],
     *[f"{metric}_delta" for metric in DELTA_METRICS],
+    *[f"{metric}_delta" for metric in UTILITY_METRICS],
     *UTILITY_METRICS,
 ]
 FINAL_COLUMNS = [
@@ -118,6 +119,9 @@ for _metric in DELTA_METRICS:
 for _metric in UTILITY_METRICS:
     FINAL_COLUMNS.extend(
         [
+            f"{_metric}_delta_mean",
+            f"{_metric}_delta_std_across_authors",
+            f"{_metric}_delta_author_count",
             f"{_metric}_mean",
             f"{_metric}_std_across_authors",
             f"{_metric}_author_count",
@@ -208,7 +212,14 @@ def build_author_rows(
                 else None
             )
         for metric in UTILITY_METRICS:
-            row[metric] = trained[metric]
+            value = trained[metric]
+            baseline_value = baseline[metric]
+            row[metric] = value
+            row[f"{metric}_delta"] = (
+                value - baseline_value
+                if value is not None and baseline_value is not None
+                else None
+            )
         rows.append(row)
     return rows, unmatched
 
@@ -235,6 +246,7 @@ def build_baseline_author_rows(outputs_root: Path) -> list[dict[str, object]]:
             )
         for metric in UTILITY_METRICS:
             row[metric] = baseline[metric]
+            row[f"{metric}_delta"] = 0.0 if baseline[metric] is not None else None
         rows.append(row)
     return rows
 
@@ -286,6 +298,14 @@ def aggregate_author_rows(rows: list[dict[str, object]]) -> list[dict[str, objec
             output[f"{metric}_delta_std_across_authors"] = sample_std(values)
             output[f"{metric}_author_count"] = len(values)
         for metric in UTILITY_METRICS:
+            delta_values = [
+                float(row[f"{metric}_delta"])
+                for row in group
+                if row.get(f"{metric}_delta") is not None
+            ]
+            output[f"{metric}_delta_mean"] = mean(delta_values)
+            output[f"{metric}_delta_std_across_authors"] = sample_std(delta_values)
+            output[f"{metric}_delta_author_count"] = len(delta_values)
             values = [
                 float(row[metric]) for row in group if row.get(metric) is not None
             ]
@@ -357,8 +377,8 @@ def write_markdown(path: Path, rows: list[dict[str, object]]) -> None:
         for metric in UTILITY_METRICS:
             cells.append(
                 format_mean_std(
-                    row.get(f"{metric}_mean"),
-                    row.get(f"{metric}_std_across_authors"),
+                    row.get(f"{metric}_delta_mean"),
+                    row.get(f"{metric}_delta_std_across_authors"),
                 )
             )
         lines.append("| " + " | ".join(cells) + " |")
