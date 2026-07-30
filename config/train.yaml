@@ -167,8 +167,8 @@ training:
     logging_steps: 1
     save_final_model: false # Set false to keep only checkpoint-* snapshots.
     # learning rate, scheduler
-    num_train_epochs: 1000
-    max_steps: 1000 # too large since token budget callback will stop training when the token budget is reached. Set to -1 to disable.
+    num_train_epochs: 100
+    max_steps: 150 # too large since token budget callback will stop training when the token budget is reached. Set to -1 to disable.
     learning_rate: 1.0e-5 # for 1.5B model, 1.0e-4 for 3B model
     lr_scheduler_type: "constant" #"constant"
     warmup_ratio: 0 #0.05
@@ -184,9 +184,9 @@ training:
     num_generations_eval: 8
     # callbacks
     callback:
-      checkpoint_token_milestones: [1_000_000] #[100_000, 200_000, 300_000, 400_000, 500_000, 600_000, 700_000, 800_000, 900_000, 1_000_000, 1_200_000, 1_500_000] # Save checkpoints at token counts.
-      token_budget: 1_000_000 #3_000_000 # null if not using StopOnTokenBudgetCallback
-      # high_reward_stop:
+      checkpoint_token_milestones: null # [1_000_000] #[100_000, 200_000, 300_000, 400_000, 500_000, 600_000, 700_000, 800_000, 900_000, 1_000_000, 1_200_000, 1_500_000] # Save checkpoints at token counts.
+      token_budget: null #3_000_000 # null if not using StopOnTokenBudgetCallback
+      high_reward_stop: null
       #   threshold: 0.90
       #   max_optimizer_steps_above_threshold: 10
       #   frac_reward_zero_std_threshold: null
