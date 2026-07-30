@@ -106,7 +106,7 @@ peft:
 training:
   sft:
     objective: broad # refusal or broad
-    per_device_train_batch_size: 32
+    per_device_train_batch_size: 16
     gradient_accumulation_steps: 1
     gradient_checkpointing: true
     fp16: false
@@ -123,7 +123,7 @@ training:
     lr_scheduler_type: "constant" #"constant"
     warmup_steps: 3
     # eval
-    start_eval_on_step: 2
+    start_eval_on_step: 5
     eval_strategy: "steps"
     eval_steps: 1
     per_device_eval_batch_size: 64
@@ -147,13 +147,13 @@ training:
   grpo:
     mode: standard # adaptive, standard
     # batch size
-    per_device_train_batch_size: 64 # 32 for 7B
+    per_device_train_batch_size: 64
     num_generations: 8
-    gradient_accumulation_steps: 1 # 2 for 7B
+    gradient_accumulation_steps: 1
     gradient_checkpointing: true
     fp16: false
     bf16: true
-    steps_per_generation: 1 # 2 for 7B
+    steps_per_generation: 1
     use_vllm: false
     vllm_mode: colocate
     vllm_gpu_memory_utilization: 0.30
