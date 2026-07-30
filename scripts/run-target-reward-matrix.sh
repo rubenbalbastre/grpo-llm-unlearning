@@ -10,9 +10,9 @@ REPO_DIR="${REPO_DIR:-${STORAGE_DIR}/machine-unlearning-llm}"
 cd "${REPO_DIR}"
 
 LOW_REWARD_STOP_MARKER="low_reward_stop.json"
-RUN_RWKU_EVAL="${RUN_RWKU_EVAL:-true}"
+RUN_RWKU_EVAL="${RUN_RWKU_EVAL:-false}"
 RUN_HOLDOUT_EVAL="${RUN_HOLDOUT_EVAL:-false}"
-RUN_SFT_WARMUP="${RUN_SFT_WARMUP:-false}"
+RUN_SFT_WARMUP="${RUN_SFT_WARMUP:-true}"
 STORAGE_ROOT="${STORAGE_ROOT:-${REPO_DIR}}"
 DATA_ROOT="${STORAGE_ROOT}/data"
 OUTPUT_ROOT="${STORAGE_ROOT}/outputs"
@@ -25,7 +25,7 @@ else
   original_models=(
     # "Qwen/Qwen2.5-0.5B-Instruct"
     # "Qwen/Qwen2.5-1.5B-Instruct"
-    # "Qwen/Qwen2.5-3B-Instruct"
+    "Qwen/Qwen2.5-3B-Instruct"
     "Qwen/Qwen2.5-7B-Instruct"
   )
 fi
@@ -34,20 +34,20 @@ targets=(
   "Jennifer Lopez"
   "Tony Blair"
   "Marlon Brando"
-  "Bruce Lee"
-  "Serena Williams"
-  "John D. Rockefeller"
-  "Tom Clancy"
-  "Vincent van Gogh"
-  "Karl Marx"
-  "Confucius"
+  # "Bruce Lee"
+  # "Serena Williams"
+  # "John D. Rockefeller"
+  # "Tom Clancy"
+  # "Vincent van Gogh"
+  # "Karl Marx"
+  # "Confucius"
 )
 
 rewards=(
-  "r0"
-  "r1"
-  # "r2"
-  "r4"
+  # "r0"
+  # "r1"
+  # # "r2"
+  # "r4"
 )
 
 slug() {
