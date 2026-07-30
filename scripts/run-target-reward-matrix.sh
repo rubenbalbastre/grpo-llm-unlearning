@@ -12,7 +12,7 @@ cd "${REPO_DIR}"
 LOW_REWARD_STOP_MARKER="low_reward_stop.json"
 RUN_RWKU_EVAL="${RUN_RWKU_EVAL:-true}"
 RUN_HOLDOUT_EVAL="${RUN_HOLDOUT_EVAL:-false}"
-RUN_SFT_WARMUP="${RUN_SFT_WARMUP:-true}"
+RUN_SFT_WARMUP="${RUN_SFT_WARMUP:-false}"
 STORAGE_ROOT="${STORAGE_ROOT:-${REPO_DIR}}"
 DATA_ROOT="${STORAGE_ROOT}/data"
 OUTPUT_ROOT="${STORAGE_ROOT}/outputs"
@@ -23,10 +23,10 @@ elif [[ -n "${ORIGINAL_MODEL:-}" ]]; then
   original_models=("${ORIGINAL_MODEL}")
 else
   original_models=(
-    # "Qwen/Qwen2.5-0.5B-Instruct"
-    # "Qwen/Qwen2.5-1.5B-Instruct"
-    "Qwen/Qwen2.5-3B-Instruct"
-    "Qwen/Qwen2.5-7B-Instruct"
+    "Qwen/Qwen2.5-0.5B-Instruct"
+    "Qwen/Qwen2.5-1.5B-Instruct"
+    # "Qwen/Qwen2.5-3B-Instruct"
+    # "Qwen/Qwen2.5-7B-Instruct"
   )
 fi
 
@@ -34,13 +34,13 @@ targets=(
   "Jennifer Lopez"
   "Tony Blair"
   "Marlon Brando"
-  # "Bruce Lee"
-  # "Serena Williams"
-  # "John D. Rockefeller"
+  "Bruce Lee"
+  "Serena Williams"
+  "John D. Rockefeller"
   # "Tom Clancy"
   # "Vincent van Gogh"
   # "Karl Marx"
-  # "Confucius"
+  "Confucius"
 )
 
 rewards=(
