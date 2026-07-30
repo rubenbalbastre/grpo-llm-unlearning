@@ -34,13 +34,13 @@ targets=(
   "Jennifer Lopez"
   "Tony Blair"
   "Marlon Brando"
-  "Bruce Lee"
-  "Serena Williams"
-  "John D. Rockefeller"
+  # "Bruce Lee"
+  # "Serena Williams"
+  # "John D. Rockefeller"
   # "Tom Clancy"
   # "Vincent van Gogh"
   # "Karl Marx"
-  "Confucius"
+  # "Confucius"
 )
 
 rewards=(
