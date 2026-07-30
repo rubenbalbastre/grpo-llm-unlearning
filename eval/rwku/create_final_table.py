@@ -213,6 +213,32 @@ def build_author_rows(
     return rows, unmatched
 
 
+def build_baseline_author_rows(outputs_root: Path) -> list[dict[str, object]]:
+    rows: list[dict[str, object]] = []
+    for (size, author), (run_name, baseline) in find_baselines(outputs_root).items():
+        row: dict[str, object] = {
+            "author": author,
+            "model_name_or_path": f"Qwen/Qwen2.5-{size}-Instruct",
+            "model_size": size,
+            "reward_function": "baseline",
+            "rlvr_mode": "baseline",
+            "run_name": run_name,
+            "baseline_run_name": run_name,
+        }
+        for metric in DELTA_METRICS:
+            row[f"{metric}_delta"] = 0.0 if baseline[metric] is not None else None
+        for aggregate, components in SPLIT_AGGREGATES.items():
+            row[f"{aggregate}_delta"] = (
+                0.0
+                if all(baseline[metric] is not None for metric in components)
+                else None
+            )
+        for metric in UTILITY_METRICS:
+            row[metric] = baseline[metric]
+        rows.append(row)
+    return rows
+
+
 def mean(values: list[float]) -> float | None:
     return statistics.mean(values) if values else None
 
@@ -364,11 +390,13 @@ def main() -> None:
             f"{len(unmatched)} trained RWKU result(s) lack a matching baseline:\n{examples}"
         )
 
-    final_rows = aggregate_author_rows(author_rows)
+    baseline_rows = build_baseline_author_rows(args.outputs_root)
+    final_rows = aggregate_author_rows([*author_rows, *baseline_rows])
     write_csv(args.author_output_csv, AUTHOR_COLUMNS, author_rows)
     write_csv(args.output_csv, FINAL_COLUMNS, final_rows)
     write_markdown(output_md, final_rows)
     print(f"matched {len(author_rows)} trained result(s) to baselines")
+    print(f"included {len(baseline_rows)} author-level baseline result(s)")
     print(f"unmatched trained results: {len(unmatched)}")
     print(f"wrote author-level deltas: {args.author_output_csv}")
     print(f"wrote final table: {args.output_csv}")
