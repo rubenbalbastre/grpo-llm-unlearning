@@ -147,13 +147,13 @@ training:
   grpo:
     mode: standard # adaptive, standard
     # batch size
-    per_device_train_batch_size: 32 # 32 for 7B
+    per_device_train_batch_size: 64 # 32 for 7B
     num_generations: 8
-    gradient_accumulation_steps: 2 # 2 for 7B
+    gradient_accumulation_steps: 1 # 2 for 7B
     gradient_checkpointing: true
     fp16: false
     bf16: true
-    steps_per_generation: 2 # 2 for 7B
+    steps_per_generation: 1 # 2 for 7B
     use_vllm: false
     vllm_mode: colocate
     vllm_gpu_memory_utilization: 0.30
@@ -184,7 +184,7 @@ training:
     num_generations_eval: 8
     # callbacks
     callback:
-      checkpoint_token_milestones: [100_000, 200_000, 300_000, 400_000, 500_000, 600_000, 700_000, 800_000, 900_000, 1_000_000, 1_200_000, 1_500_000] # Save checkpoints at token counts.
+      checkpoint_token_milestones: [1_500_000] #[100_000, 200_000, 300_000, 400_000, 500_000, 600_000, 700_000, 800_000, 900_000, 1_000_000, 1_200_000, 1_500_000] # Save checkpoints at token counts.
       token_budget: 1_500_000 #3_000_000 # null if not using StopOnTokenBudgetCallback
       high_reward_stop:
         threshold: 0.90
