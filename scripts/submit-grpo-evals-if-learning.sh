@@ -16,7 +16,6 @@ STORAGE_ROOT="${3:-${STORAGE_ROOT:-.}}"
 CHECKPOINT_ROOT="${CHECKPOINT_ROOT%/}"
 LOW_REWARD_STOP_MARKER="${LOW_REWARD_STOP_MARKER:-low_reward_stop.json}"
 MARKER_PATH="${CHECKPOINT_ROOT}/${LOW_REWARD_STOP_MARKER}"
-OUTPUT_ROOT="${STORAGE_ROOT}/outputs"
 RUN_RWKU_EVAL="${RUN_RWKU_EVAL:-true}"
 RUN_HOLDOUT_EVAL="${RUN_HOLDOUT_EVAL:-true}"
 
@@ -24,17 +23,6 @@ cd "${REPO_DIR}"
 
 flag_enabled() {
   [[ "$1" == "true" ]]
-}
-
-holdout_output_dir() {
-  local concept="$1"
-  local model_name_or_path="$2"
-  local concept_part
-  local model_part
-
-  concept_part="$(echo "${concept// /-}" | tr '[:upper:]' '[:lower:]')"
-  model_part="${model_name_or_path//\//-}"
-  echo "${OUTPUT_ROOT}/hold_out_styles/${concept_part}-${model_part}"
 }
 
 if ! flag_enabled "${RUN_RWKU_EVAL}" && ! flag_enabled "${RUN_HOLDOUT_EVAL}"; then
@@ -49,7 +37,7 @@ if [[ -f "${MARKER_PATH}" ]]; then
 fi
 
 RWKU_OUTPUT_DIR="${CHECKPOINT_ROOT}/final_model/eval_rwku"
-HOLDOUT_OUTPUT_DIR="$(holdout_output_dir "${CONCEPT}" "${CHECKPOINT_ROOT}/final_model")"
+HOLDOUT_OUTPUT_DIR="${CHECKPOINT_ROOT}/final_model/hold_out_eval"
 
 if ! flag_enabled "${RUN_RWKU_EVAL}"; then
   rwku_job_id="disabled"
@@ -76,7 +64,7 @@ else
       --time="01:30:00" \
       --partition="hopper" \
       --qos="hopper" \
-      --wrap="cd ${REPO_DIR} && source ${CONDA_DIR}/etc/profile.d/conda.sh && conda activate ${TRAIN_ENV_PATH} && python eval/hold_out_styles/generate-and-analyze-completions.py concept='${CONCEPT}' model_name_or_path='${CHECKPOINT_ROOT}/final_model' paths.storage_root='${STORAGE_ROOT}'"
+      --wrap="cd ${REPO_DIR} && source ${CONDA_DIR}/etc/profile.d/conda.sh && conda activate ${TRAIN_ENV_PATH} && python eval/hold_out_styles/generate-and-analyze-completions.py concept='${CONCEPT}' model_name_or_path='${CHECKPOINT_ROOT}/final_model' output_dir='${HOLDOUT_OUTPUT_DIR}' paths.storage_root='${STORAGE_ROOT}'"
   )"
 fi
 
