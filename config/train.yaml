@@ -79,7 +79,7 @@ reward:
       model_name: gpt-5.4-nano
       reasoning_effort: null # low for mini
       temperature: 0.0 # Used only when reasoning_effort is none.
-      max_concurrent_requests: 8
+      max_concurrent_requests: 16
     refusal_reward_classifier:
       mode: reward_non_refusal # reward_non_refusal or reward_refusal
       model_name: garak-llm/garak-refusal-detector
