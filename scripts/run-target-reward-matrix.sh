@@ -215,6 +215,34 @@ submit_sft_warmup() {
   echo "${job_id}|${output_dir}/final_model|${run_name}"
 }
 
+submit_sft_rwku() {
+  local checkpoint_root="$1"
+  local dependency="${2:-}"
+  local output_dir="${checkpoint_root}/final_model/eval_rwku"
+  local dependency_option
+  local -a sbatch_args=()
+
+  if [[ -f "${output_dir}/rwku_summary_table.csv" ]]; then
+    echo "done"
+    return
+  fi
+
+  if dependency_is_unavailable "${dependency}"; then
+    echo "blocked"
+    return
+  fi
+
+  dependency_option="$(dependency_arg "${dependency}")"
+  if [[ -n "${dependency_option}" ]]; then
+    sbatch_args+=("${dependency_option}")
+  fi
+
+  sbatch --parsable \
+    ${sbatch_args[@]+"${sbatch_args[@]}"} \
+    --export="ALL,CHECKPOINT_ROOT=${checkpoint_root},ONLY_FINAL_MODEL=true" \
+    scripts/eval-rwku.sh
+}
+
 submit_eval_gate() {
   local train_job_id="$1"
   local checkpoint_root="$2"
@@ -505,6 +533,22 @@ for original_model in "${original_models[@]}"; do
         previous_sft_job_id="${sft_job_id}"
       fi
       echo "  model:   ${r2_warmed_model}"
+
+      if run_rwku_eval_enabled; then
+        sft_rwku_job_id="$(
+          submit_sft_rwku \
+            "${r2_warmed_model%/final_model}" \
+            "${sft_job_id}"
+        )"
+        echo "R2 warm-up RWKU | ${target}"
+        if [[ "${sft_rwku_job_id}" == "done" ]]; then
+          echo "  rwku:    already exists (${r2_warmed_model})"
+        elif [[ "${sft_rwku_job_id}" == "blocked" ]]; then
+          echo "  rwku:    blocked by incomplete SFT warm-up (${r2_warmed_model})"
+        else
+          echo "  rwku:    ${sft_rwku_job_id} (${r2_warmed_model})"
+        fi
+      fi
 
       if run_holdout_eval_enabled; then
         sft_holdout_job_id="$(

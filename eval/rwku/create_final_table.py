@@ -22,12 +22,24 @@ TRAINED_RUN_RE = re.compile(
     r"(?P<reward>r\d+)$",
     re.IGNORECASE,
 )
+WARMUP_RUN_RE = re.compile(
+    r"^r2warmup_qwen_qwen2_5_"
+    r"(?P<size>0_5b|1_5b|3b|7b)_instruct_(?P<author>.+)$",
+    re.IGNORECASE,
+)
 BASELINE_RUN_RE = re.compile(
     r"^rwku-baseline-qwen-qwen2-5-(?P<size>0-5b|1-5b|3b|7b)-"
     r"instruct-(?P<author>.+)$",
     re.IGNORECASE,
 )
-SIZE_NAMES = {"0-5b": "0.5B", "1-5b": "1.5B", "3b": "3B", "7b": "7B"}
+SIZE_NAMES = {
+    "0-5b": "0.5B",
+    "0_5b": "0.5B",
+    "1-5b": "1.5B",
+    "1_5b": "1.5B",
+    "3b": "3B",
+    "7b": "7B",
+}
 
 CSV_METRICS = {
     "Forget Set FB down": "forget_fb",
@@ -171,28 +183,48 @@ def build_author_rows(
     rows: list[dict[str, object]] = []
     unmatched: list[Path] = []
     paths = sorted(
-        outputs_root.glob("unlearning-*/final_model/eval_rwku/rwku_summary_table.csv")
+        [
+            *outputs_root.glob(
+                "unlearning-*/final_model/eval_rwku/rwku_summary_table.csv"
+            ),
+            *outputs_root.glob(
+                "r2warmup_*/final_model/eval_rwku/rwku_summary_table.csv"
+            ),
+        ]
     )
     for path in paths:
         run_name = path.parents[2].name
         match = TRAINED_RUN_RE.fullmatch(run_name)
-        if match is None:
+        warmup_match = WARMUP_RUN_RE.fullmatch(run_name)
+        if match is None and warmup_match is None:
             continue
-        size = SIZE_NAMES[match.group("size").lower()]
-        baseline_entry = baselines.get((size, author_key(match.group("author"))))
+
+        if match is not None:
+            size = SIZE_NAMES[match.group("size").lower()]
+            author = match.group("author")
+            variant = match.group("variant").lower()
+            reward_function = match.group("reward").lower()
+            rlvr_mode = "zero-RLVR" if variant == "original" else "warm-up"
+        else:
+            assert warmup_match is not None
+            size = SIZE_NAMES[warmup_match.group("size").lower()]
+            author = warmup_match.group("author")
+            reward_function = "r2-warmup"
+            rlvr_mode = "warm-up"
+
+        baseline_entry = baselines.get((size, author_key(author)))
         if baseline_entry is None:
             unmatched.append(path)
             continue
 
         baseline_name, baseline = baseline_entry
         trained = read_rwku_summary(path)
-        variant = match.group("variant").lower()
         row: dict[str, object] = {
-            "author": match.group("author"),
+            "author": author,
             "model_name_or_path": f"Qwen/Qwen2.5-{size}-Instruct",
             "model_size": size,
-            "reward_function": match.group("reward").lower(),
-            "rlvr_mode": "zero-RLVR" if variant == "original" else "warm-up",
+            "reward_function": reward_function,
+            "rlvr_mode": rlvr_mode,
             "run_name": run_name,
             "baseline_run_name": baseline_name,
         }
