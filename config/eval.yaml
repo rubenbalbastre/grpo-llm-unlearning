@@ -29,11 +29,11 @@ evaluation:
   batch_size: 64
   mia_batch_size: 64
   utility_batch_size:
-    utility_general: 64
-    utility_reason: 64
-    utility_truthfulness: 64
-    utility_factuality: 64
-    utility_fluency: 64
+    utility_general: 32 # 64 general, 32 for 7B
+    utility_reason: 32 # 64 general, 32 for 7B
+    utility_truthfulness: 32 # 64 general, 32 for 7B
+    utility_factuality: 32 # 64 general, 32 for 7B
+    utility_fluency: 32 # 64 general, 32 for 7B
   choice_likelihood_batch_size: 16
   generation:
     max_new_tokens: 256
