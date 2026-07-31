@@ -158,15 +158,13 @@ dependency_is_unavailable() {
   [[ "${dependency}" == "partial" || "${dependency}" == "blocked" ]]
 }
 
-holdout_output_dir() {
+baseline_holdout_output_dir() {
   local concept="$1"
   local model_name_or_path="$2"
-  local concept_part
-  local model_part
+  local baseline_label
 
-  concept_part="$(echo "${concept// /-}" | tr '[:upper:]' '[:lower:]')"
-  model_part="${model_name_or_path//\//-}"
-  echo "${OUTPUT_ROOT}/hold_out_styles/${concept_part}-${model_part}"
+  baseline_label="holdout-baseline-$(slug "${model_name_or_path}")-$(slug "${concept}")"
+  echo "${OUTPUT_ROOT}/${baseline_label}/final_model/hold_out_eval"
 }
 
 submit_sft_warmup() {
@@ -252,7 +250,7 @@ submit_eval_gate() {
   local holdout_dir
   local -a sbatch_args=()
 
-  holdout_dir="$(holdout_output_dir "${concept}" "${checkpoint_root}/final_model")"
+  holdout_dir="${checkpoint_root}/final_model/hold_out_eval"
 
   if [[ "${train_job_id}" == "done" ]]; then
     if [[ -f "${checkpoint_root}/${LOW_REWARD_STOP_MARKER}" ]]; then
@@ -339,7 +337,11 @@ submit_holdout() {
   local marker_guard=""
   local -a sbatch_args=()
 
-  output_dir="$(holdout_output_dir "${target}" "${model_name_or_path}")"
+  if [[ "${label}" == "original" ]]; then
+    output_dir="$(baseline_holdout_output_dir "${target}" "${model_name_or_path}")"
+  else
+    output_dir="${model_name_or_path%/}/hold_out_eval"
+  fi
   if [[ -n "${stop_marker_root}" ]]; then
     stop_marker_path="${stop_marker_root%/}/${LOW_REWARD_STOP_MARKER}"
     if [[ -f "${stop_marker_path}" ]]; then
@@ -376,7 +378,7 @@ submit_holdout() {
     --time="01:30:00" \
     --partition="hopper" \
     --qos="hopper" \
-    --wrap="cd ${REPO_DIR} && ${marker_guard}source ${CONDA_DIR}/etc/profile.d/conda.sh && conda activate ${TRAIN_ENV_PATH} && python eval/hold_out_styles/generate-and-analyze-completions.py concept='${target}' model_name_or_path='${model_name_or_path}' paths.storage_root='${STORAGE_ROOT}'"
+    --wrap="cd ${REPO_DIR} && ${marker_guard}source ${CONDA_DIR}/etc/profile.d/conda.sh && conda activate ${TRAIN_ENV_PATH} && python eval/hold_out_styles/generate-and-analyze-completions.py concept='${target}' model_name_or_path='${model_name_or_path}' output_dir='${output_dir}' paths.storage_root='${STORAGE_ROOT}'"
 }
 
 submit_grpo_and_evals() {

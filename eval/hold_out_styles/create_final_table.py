@@ -11,32 +11,27 @@ from pathlib import Path
 
 
 REPO_ROOT = Path(__file__).resolve().parents[2]
-DEFAULT_INPUT_ROOT = REPO_ROOT / "outputs" / "hold_out_styles"
-DEFAULT_OUTPUT_CSV = DEFAULT_INPUT_ROOT / "final_table.csv"
-DEFAULT_SFT_WARMUP_CSV = DEFAULT_INPUT_ROOT / "final_table_sft_warmup.csv"
-DEFAULT_CONDITIONAL_CSV = DEFAULT_INPUT_ROOT / "final_table_conditional.csv"
-DEFAULT_FULL_CSV = DEFAULT_INPUT_ROOT / "final_table_full.csv"
+DEFAULT_INPUT_ROOT = REPO_ROOT / "outputs"
+DEFAULT_TABLE_ROOT = DEFAULT_INPUT_ROOT / "hold_out_styles"
+DEFAULT_OUTPUT_CSV = DEFAULT_TABLE_ROOT / "final_table.csv"
+DEFAULT_SFT_WARMUP_CSV = DEFAULT_TABLE_ROOT / "final_table_sft_warmup.csv"
+DEFAULT_CONDITIONAL_CSV = DEFAULT_TABLE_ROOT / "final_table_conditional.csv"
+DEFAULT_FULL_CSV = DEFAULT_TABLE_ROOT / "final_table_full.csv"
 SUMMARY_METADATA_COLUMNS = {"forget_concept", "model_name_or_path", "stat"}
-RUN_RE = re.compile(r"(unlearning-\d+)")
-BASELINE_FOLDER_RE = re.compile(
-    r"^(?P<concept>.+)-Qwen-Qwen2\.5-(?P<size>0\.5B|1\.5B|3B|7B)-Instruct$",
-    re.IGNORECASE,
-)
-UNLEARNING_FOLDER_RE = re.compile(
-    r"^(?P<concept>.+)-\.-outputs-unlearning-"
-    r"(?P<training_variant>original|r2-warmed)-qwen-qwen2-5-"
-    r"(?P<size>0-5b|1-5b|3b|7b)-instruct-.+-(?P<reward_type>r\d+)-final_model$",
-    re.IGNORECASE,
-)
-WARMUP_FOLDER_RE = re.compile(
-    r"^(?P<concept>.+)-\.-outputs-r2warmup_qwen_qwen2_5_"
-    r"(?P<size>0_5b|1_5b|3b|7b)_instruct_.+-final_model$",
-    re.IGNORECASE,
-)
 STOPPED_RUN_RE = re.compile(
     r"^unlearning-(?P<training_variant>original|r2-warmed)-qwen-qwen2-5-"
     r"(?P<size>0-5b|1-5b|3b|7b)-instruct-(?P<concept>.+)-"
     r"(?P<reward_type>r\d+)$",
+    re.IGNORECASE,
+)
+WARMUP_RUN_RE = re.compile(
+    r"^r2warmup_qwen_qwen2_5_"
+    r"(?P<size>0_5b|1_5b|3b|7b)_instruct_.+$",
+    re.IGNORECASE,
+)
+HOLDOUT_BASELINE_RUN_RE = re.compile(
+    r"^holdout-baseline-qwen-qwen2-5-"
+    r"(?P<size>0-5b|1-5b|3b|7b)-instruct-.+$",
     re.IGNORECASE,
 )
 MODEL_SIZES = {
@@ -91,35 +86,46 @@ def read_summary(path: Path) -> list[dict[str, str]]:
         return list(csv.DictReader(handle))
 
 
-def folder_metadata(summary_path: Path, rows: list[dict[str, str]]) -> dict[str, str]:
-    """Extract run metadata from a hold_out_styles run directory name."""
-    folder_name = summary_path.parent.name
-    first_row = rows[0] if rows else {}
+def nested_run_metadata(
+    summary_path: Path, rows: list[dict[str, str]]
+) -> dict[str, str]:
+    if (
+        summary_path.parent.name != "hold_out_eval"
+        or summary_path.parent.parent.name != "final_model"
+    ):
+        raise ValueError(
+            "Hold-out summaries must use "
+            f"<run>/final_model/hold_out_eval/summary.csv: {summary_path}"
+        )
 
-    match = BASELINE_FOLDER_RE.fullmatch(folder_name)
+    run_name = summary_path.parents[2].name
+    match = STOPPED_RUN_RE.fullmatch(run_name)
     if match:
-        training_variant = "baseline"
-        reward_type = "baseline"
+        size = MODEL_SIZES[match.group("size").lower()]
+        training_variant = match.group("training_variant").lower()
+        reward_type = match.group("reward_type").lower()
     else:
-        match = UNLEARNING_FOLDER_RE.fullmatch(folder_name)
+        match = WARMUP_RUN_RE.fullmatch(run_name)
         if match:
-            training_variant = match.group("training_variant").lower()
-            reward_type = match.group("reward_type").lower()
-        else:
-            match = WARMUP_FOLDER_RE.fullmatch(folder_name)
-            if not match:
-                raise ValueError(
-                    f"Cannot extract metadata from hold-out-style folder: {summary_path.parent}"
-                )
+            size = MODEL_SIZES[match.group("size").lower()]
             training_variant = "r2-warmup"
             reward_type = "r2-warmup"
+        else:
+            match = HOLDOUT_BASELINE_RUN_RE.fullmatch(run_name)
+            if not match:
+                raise ValueError(
+                    f"Cannot extract metadata from nested hold-out run: {run_name}"
+                )
+            size = MODEL_SIZES[match.group("size").lower()]
+            training_variant = "baseline"
+            reward_type = "baseline"
 
-    size = MODEL_SIZES[match.group("size").lower()]
-    folder_concept = match.group("concept")
-    csv_concept = first_row.get("forget_concept", "").strip()
-    csv_concept_slug = re.sub(r"[\s_]+", "-", csv_concept.lower()).strip("-")
-    forget_concept = csv_concept if csv_concept_slug == folder_concept.lower() else folder_concept
+    first_row = rows[0] if rows else {}
+    forget_concept = first_row.get("forget_concept", "").strip()
+    if not forget_concept:
+        raise ValueError(f"Missing forget_concept in hold-out summary: {summary_path}")
 
+    config = parse_simple_hydra_scalars(summary_path.parents[2] / "hydra_config.yaml")
     return {
         "forget_concept": forget_concept,
         "model_name_or_path": f"Qwen/Qwen2.5-{size}-Instruct",
@@ -132,26 +138,9 @@ def folder_metadata(summary_path: Path, rows: list[dict[str, str]]) -> dict[str,
             "r2-warmup": "warm-up",
             "baseline": "baseline",
         }[training_variant],
-        "run_name": folder_name,
-        "experiment_seed": "",
+        "run_name": run_name,
+        "experiment_seed": config.get("experiment.seed", ""),
     }
-
-
-def find_run_name(summary_path: Path, rows: list[dict[str, str]]) -> str:
-    for row in rows:
-        match = RUN_RE.search(row.get("model_name_or_path", ""))
-        if match:
-            return match.group(1)
-
-    match = RUN_RE.search(str(summary_path.parent))
-    if match:
-        return match.group(1)
-
-    return summary_path.parent.name
-
-
-def run_config_path(run_name: str) -> Path:
-    return REPO_ROOT / "outputs" / run_name / "hydra_config.yaml"
 
 
 def summary_metric_columns(rows: list[dict[str, str]]) -> list[str]:
@@ -176,7 +165,7 @@ def flatten_summary_metrics(rows: list[dict[str, str]]) -> dict[str, str]:
 
 
 def metadata_for_summary(summary_path: Path, rows: list[dict[str, str]]) -> dict[str, str]:
-    return folder_metadata(summary_path, rows)
+    return nested_run_metadata(summary_path, rows)
 
 
 def build_table(summary_paths: list[Path]) -> list[dict[str, str]]:
@@ -596,7 +585,7 @@ def parse_args() -> argparse.Namespace:
     )
     parser.add_argument(
         "--summary-glob",
-        default="*/summary.csv",
+        default="*/final_model/hold_out_eval/summary.csv",
         help="Glob below --input-root selecting completion summary CSV files.",
     )
     return parser.parse_args()
