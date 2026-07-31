@@ -11,7 +11,7 @@ cd "${REPO_DIR}"
 
 LOW_REWARD_STOP_MARKER="low_reward_stop.json"
 RUN_RWKU_EVAL="${RUN_RWKU_EVAL:-true}"
-RUN_HOLDOUT_EVAL="${RUN_HOLDOUT_EVAL:-false}"
+RUN_HOLDOUT_EVAL="${RUN_HOLDOUT_EVAL:-true}"
 RUN_SFT_WARMUP="${RUN_SFT_WARMUP:-true}"
 STORAGE_ROOT="${STORAGE_ROOT:-${REPO_DIR}}"
 DATA_ROOT="${STORAGE_ROOT}/data"
@@ -25,8 +25,8 @@ else
   original_models=(
     "Qwen/Qwen2.5-0.5B-Instruct"
     "Qwen/Qwen2.5-1.5B-Instruct"
-    # "Qwen/Qwen2.5-3B-Instruct"
-    # "Qwen/Qwen2.5-7B-Instruct"
+    "Qwen/Qwen2.5-3B-Instruct"
+    "Qwen/Qwen2.5-7B-Instruct"
   )
 fi
 
