@@ -11,8 +11,8 @@ cd "${REPO_DIR}"
 
 LOW_REWARD_STOP_MARKER="low_reward_stop.json"
 RUN_RWKU_EVAL="${RUN_RWKU_EVAL:-true}"
-RUN_HOLDOUT_EVAL="${RUN_HOLDOUT_EVAL:-false}"
-RUN_SFT_WARMUP="${RUN_SFT_WARMUP:-false}"
+RUN_HOLDOUT_EVAL="${RUN_HOLDOUT_EVAL:-true}"
+RUN_SFT_WARMUP="${RUN_SFT_WARMUP:-true}"
 STORAGE_ROOT="${STORAGE_ROOT:-${REPO_DIR}}"
 DATA_ROOT="${STORAGE_ROOT}/data"
 OUTPUT_ROOT="${STORAGE_ROOT}/outputs"
@@ -36,17 +36,17 @@ targets=(
   "Marlon Brando"
   "Bruce Lee"
   "Serena Williams"
-  "John D. Rockefeller"
-  "Tom Clancy"
-  "Vincent van Gogh"
-  "Karl Marx"
-  "Confucius"
+  # "John D. Rockefeller"
+  # "Tom Clancy"
+  # "Vincent van Gogh"
+  # "Karl Marx"
+  # "Confucius"
 )
 
 rewards=(
   "r0"
   "r1"
-  # "r2"
+  "r2"
   "r4"
 )
 
