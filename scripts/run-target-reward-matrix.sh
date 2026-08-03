@@ -31,9 +31,9 @@ else
 fi
 
 targets=(
-  "Jennifer Lopez"
+  # "Jennifer Lopez"
   # "Tony Blair"
-  # "Marlon Brando"
+  "Marlon Brando"
   # "Bruce Lee"
   # "Serena Williams"
   # "John D. Rockefeller"
