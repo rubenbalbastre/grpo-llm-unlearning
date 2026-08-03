@@ -1,97 +1,27 @@
 #!/usr/bin/env bash
+set -euo pipefail
 
-authors=(
-  # "Rihanna"
-  "Karl Marx"
-  # "Confucius"
-  # "Nicolas Cage"
-  # "Justin Timberlake"
-)
+# Example:
+#   SUBJECTS="Karl Marx,Serena Williams" REWARDS="r0,r2" SEEDS="12,1234" bash scripts/run-batch-grpo.sh
 
-rewards=(
-  # "r0"
-  # "r1"
-  # "r2"
-  "r4"
-)
+SUBJECTS="${SUBJECTS:-Karl Marx}"
+REWARDS="${REWARDS:-r4}"
+SEEDS="${SEEDS:-1234}"
+MODEL_NAME="${MODEL_NAME:-./outputs/unlearning-sft-5259/checkpoint-17/}"
 
-seeds=(
-  # 12
-  1234
-  # 42
-)
+IFS=',' read -r -a subjects <<< "${SUBJECTS}"
+IFS=',' read -r -a rewards <<< "${REWARDS}"
+IFS=',' read -r -a seeds <<< "${SEEDS}"
 
-for author in "${authors[@]}"; do
+for subject in "${subjects[@]}"; do
   for reward in "${rewards[@]}"; do
     for seed in "${seeds[@]}"; do
-      sbatch scripts/run-grpo.sh "model.name=./outputs/unlearning-sft-5259/checkpoint-17/" "experiment.forget_concept=${author}" "experiment.seed=${seed}" "reward.type=${reward}"
+      sbatch scripts/run-grpo.sh \
+        "model.name=${MODEL_NAME}" \
+        "experiment.forget_concept=${subject}" \
+        "experiment.seed=${seed}" \
+        "reward.type=${reward}" \
+        "$@"
     done
   done
 done
-
-# sbatch scripts/run-grpo.sh "reward.functions.llm-judge.model_name=gpt-5.4-mini" "experiment.forget_concept=${author}" "experiment.seed=1234" "reward.type=r2"
-
-# sbatch scripts/run-grpo.sh
-
-# sbatch scripts/run-grpo.sh "experiment.forget_concept=Confucius" "experiment.seed=12" "reward=r2"
-# sbatch scripts/run-grpo.sh "experiment.forget_concept=Rihanna" "experiment.seed=12" "reward=r2"
-# sbatch scripts/run-grpo.sh "experiment.forget_concept=Confucius" "experiment.seed=12" "reward=r1"
-# sbatch scripts/run-grpo.sh "experiment.forget_concept=Confucius" "experiment.seed=12" "reward=r0"
-# sbatch scripts/run-grpo.sh "experiment.forget_concept='Karl Marx'" "experiment.seed=1234" "reward=r0"
-# sbatch scripts/run-grpo.sh "experiment.forget_concept='Nicolas Cage'" "experiment.seed=12" "reward=r0"
-# # --------------------------------------------
-# 1st R0 runs:
-# --------------------------------------------
-
-# for author in "${authors[@]}"; do
-#   sbatch scripts/run-grpo.sh "experiment.forget_concept=${author}" "experiment.seed=12"
-# done
-
-
-# for author in "${authors[@]}"; do
-#   sbatch scripts/run-grpo.sh \
-#     "experiment.forget_concept=${author}" \
-#     "training.grpo.mode=adaptive" \
-#     "data_generator.data_proposer.objective=general" \
-#     "data_generator.initial_standard_prompt_count=0"
-# done
-
-
-# --------------------------------------------
-# 2nd R1 runs:
-# --------------------------------------------
-
-# for author in "${authors[@]}"; do
-#   sbatch scripts/run-grpo.sh "experiment.forget_concept=${author}" \
-#     "reward=r1" \
-#     "experiment.seed=12"
-# done
-
-# for author in "${authors[@]}"; do
-#   sbatch scripts/run-grpo.sh \
-#     "experiment.forget_concept=${author}" \
-#     "training.grpo.mode=adaptive" \
-#     "data_generator.initial_standard_prompt_count=0" \
-#     "reward=r1" \
-#     "data_generator.data_proposer.objective=general"
-# done
-
-
-# --------------------------------------------
-# 3rd R2 runs:
-# --------------------------------------------
-
-# for author in "${authors[@]}"; do
-#   sbatch scripts/run-grpo.sh "experiment.forget_concept=${author}" \
-#     "reward=r2"  \
-#     "experiment.seed=12"
-# done
-
-# for author in "${authors[@]}"; do
-#   sbatch scripts/run-grpo.sh \
-#     "experiment.forget_concept=${author}" \
-#     "training.grpo.mode=adaptive" \
-#     "data_generator.initial_standard_prompt_count=0" \
-#     "reward=r2" \
-#     "data_generator.data_proposer.objective=general"
-# done

@@ -8,20 +8,13 @@
 
 set -euo pipefail
 
-STORAGE_DIR="${STORAGE_DIR:-/storage/scratch/lv13/lv13594}"
-export HF_HOME="${HF_HOME:-${STORAGE_DIR}/huggingface}"
-export HF_TOKEN_PATH="${HF_TOKEN_PATH:-${HOME}/.cache/huggingface/token}"
-CONDA_DIR="${CONDA_DIR:-${STORAGE_DIR}/anaconda3}"
-TRAIN_ENV_PATH="${TRAIN_ENV_PATH:-${CONDA_DIR}/envs/py312_cu118}"
-REPO_DIR="${REPO_DIR:-${STORAGE_DIR}/machine-unlearning-llm}"
+source "$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)/slurm-env.sh"
 
 hostname; pwd; date
-source "${CONDA_DIR}/etc/profile.d/conda.sh"
 echo "Activate virtual environment (must exist)"
-conda activate "${TRAIN_ENV_PATH}"
+activate_training_env
 echo "Run program in virtual environment"
 
-cd "${REPO_DIR}"
 TRAIN_SCRIPT="${TRAIN_SCRIPT:-${REPO_DIR}/train.py}"
 TRAIN_CONFIG="${TRAIN_CONFIG:-${REPO_DIR}/config/train.yaml}"
 SINGLE_GPU_CONFIG="${SINGLE_GPU_CONFIG:-${REPO_DIR}/config/accelerate_single_gpu.yaml}"
@@ -105,11 +98,6 @@ echo "PEFT enabled: ${PEFT_ENABLED}"
 echo "Using accelerate config: ${ACCELERATE_CONFIG:-none}"
 echo "Using main process port: ${MAIN_PROCESS_PORT}"
 echo "Using accelerate args: ${ACCELERATE_ARGS[*]}"
-
-nvidia-smi
-nvidia-smi -q -d COMPUTE
-
-python -c 'import torch; print("Hi"); print("count", torch.cuda.device_count()); torch.cuda.set_device(0); x=torch.ones(1, device="cuda"); print(x, torch.cuda.get_device_name(0))'
 
 # echo "Run unlearning script"
 accelerate launch \

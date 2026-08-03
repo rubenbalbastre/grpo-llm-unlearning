@@ -1,7 +1,8 @@
 #!/bin/bash -l
 set -euo pipefail
 
-REPO_DIR="${REPO_DIR:-/home/balalru/machine-unlearning-llm}"
+SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+REPO_DIR="${REPO_DIR:-$(dirname "${SCRIPT_DIR}")}"
 cd "${REPO_DIR}"
 
 TRAIN_SCRIPT="${TRAIN_SLURM_SCRIPT:-${REPO_DIR}/scripts/run-grpo.sh}"
