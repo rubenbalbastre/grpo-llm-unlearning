@@ -4,12 +4,7 @@
 #SBATCH --time=00:05:00
 set -euo pipefail
 
-STORAGE_DIR="${STORAGE_DIR:-/storage/scratch/lv13/lv13594}"
-export HF_HOME="${HF_HOME:-${STORAGE_DIR}/huggingface}"
-export HF_TOKEN_PATH="${HF_TOKEN_PATH:-${HOME}/.cache/huggingface/token}"
-CONDA_DIR="${CONDA_DIR:-${STORAGE_DIR}/anaconda3}"
-TRAIN_ENV_PATH="${TRAIN_ENV_PATH:-${CONDA_DIR}/envs/py312_cu118}"
-REPO_DIR="${REPO_DIR:-${STORAGE_DIR}/machine-unlearning-llm}"
+source "$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)/slurm-env.sh"
 CHECKPOINT_ROOT="${1:?Usage: submit-grpo-evals-if-learning.sh CHECKPOINT_ROOT CONCEPT}"
 CONCEPT="${2:?Usage: submit-grpo-evals-if-learning.sh CHECKPOINT_ROOT CONCEPT}"
 STORAGE_ROOT="${3:-${STORAGE_ROOT:-.}}"
@@ -64,7 +59,12 @@ else
       --time="01:30:00" \
       --partition="hopper" \
       --qos="hopper" \
-      --wrap="cd ${REPO_DIR} && source ${CONDA_DIR}/etc/profile.d/conda.sh && conda activate ${TRAIN_ENV_PATH} && python eval/hold_out_styles/generate-and-analyze-completions.py concept='${CONCEPT}' model_name_or_path='${CHECKPOINT_ROOT}/final_model' output_dir='${HOLDOUT_OUTPUT_DIR}' paths.storage_root='${STORAGE_ROOT}'"
+      --export="ALL,SKIP_IF_MARKER=${MARKER_PATH}" \
+      scripts/run-hold-out-completions-analysis.sh \
+      "concept=${CONCEPT}" \
+      "model_name_or_path=${CHECKPOINT_ROOT}/final_model" \
+      "output_dir=${HOLDOUT_OUTPUT_DIR}" \
+      "paths.storage_root=${STORAGE_ROOT}"
   )"
 fi
 

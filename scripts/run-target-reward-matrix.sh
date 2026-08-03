@@ -334,7 +334,6 @@ submit_holdout() {
   local dependency_option
   local output_dir
   local stop_marker_path
-  local marker_guard=""
   local -a sbatch_args=()
 
   if [[ "${label}" == "original" ]]; then
@@ -348,7 +347,6 @@ submit_holdout() {
       echo "skipped-stop-marker"
       return
     fi
-    marker_guard="if [ -f '${stop_marker_path}' ]; then echo 'Skipping hold-out because stop marker exists: ${stop_marker_path}'; cat '${stop_marker_path}'; exit 0; fi && "
   fi
 
   if [[ -f "${output_dir}/metrics.csv" && -f "${output_dir}/summary.csv" ]]; then
@@ -378,7 +376,12 @@ submit_holdout() {
     --time="01:30:00" \
     --partition="hopper" \
     --qos="hopper" \
-    --wrap="cd ${REPO_DIR} && ${marker_guard}source ${CONDA_DIR}/etc/profile.d/conda.sh && conda activate ${TRAIN_ENV_PATH} && python eval/hold_out_styles/generate-and-analyze-completions.py concept='${target}' model_name_or_path='${model_name_or_path}' output_dir='${output_dir}' paths.storage_root='${STORAGE_ROOT}'"
+    --export="ALL,SKIP_IF_MARKER=${stop_marker_path:-}" \
+    scripts/run-hold-out-completions-analysis.sh \
+    "concept=${target}" \
+    "model_name_or_path=${model_name_or_path}" \
+    "output_dir=${output_dir}" \
+    "paths.storage_root=${STORAGE_ROOT}"
 }
 
 submit_grpo_and_evals() {
