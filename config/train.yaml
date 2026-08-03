@@ -77,7 +77,7 @@ reward:
       length_aware_alpha: 30.0
     llm-judge:
       model_name: gpt-5.4-nano
-      reasoning_effort: medium # low for mini
+      reasoning_effort: null # low for mini
       temperature: 0.0 # Used only when reasoning_effort is none.
       max_concurrent_requests: 16
     refusal_reward_classifier:
