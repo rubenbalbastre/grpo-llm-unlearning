@@ -2,8 +2,9 @@
 #SBATCH --job-name=analyze-completions
 #SBATCH --output=logs/analyze-completions-%j.log
 #SBATCH --gres=gpu:1
-#SBATCH --time=01:30:00
-#SBATCH --partition=sc-gpu
+#SBATCH --time=00:30:00
+#SBATCH --partition=hopper
+#SBATCH --qos=hopper
 set -euo pipefail
 
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
