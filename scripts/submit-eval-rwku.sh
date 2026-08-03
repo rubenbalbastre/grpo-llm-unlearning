@@ -2,7 +2,8 @@
 #SBATCH --job-name=evals
 #SBATCH --output=logs/evals-%j.log
 #SBATCH --time=00:30:00
-#SBATCH --partition=sc-gpu
+#SBATCH --partition=hopper
+#SBATCH --qos=hopper
 
 # Example:
 #   scripts/submit-eval-rwku.sh unlearning-12345
