@@ -8,7 +8,12 @@
 #SBATCH --qos=hopper
 set -euo pipefail
 
-source "$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)/slurm-env.sh"
+SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+SLURM_ENV="${SCRIPT_DIR}/slurm-env.sh"
+if [[ ! -f "${SLURM_ENV}" ]]; then
+  SLURM_ENV="${REPO_DIR:-/storage/scratch/lv13/lv13594/machine-unlearning-llm}/scripts/slurm-env.sh"
+fi
+source "${SLURM_ENV}"
 
 activate_training_env
 

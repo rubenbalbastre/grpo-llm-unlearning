@@ -4,7 +4,12 @@
 #SBATCH --time=00:05:00
 set -euo pipefail
 
-source "$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)/slurm-env.sh"
+SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+SLURM_ENV="${SCRIPT_DIR}/slurm-env.sh"
+if [[ ! -f "${SLURM_ENV}" ]]; then
+  SLURM_ENV="${REPO_DIR:-/storage/scratch/lv13/lv13594/machine-unlearning-llm}/scripts/slurm-env.sh"
+fi
+source "${SLURM_ENV}"
 CHECKPOINT_ROOT="${1:?Usage: submit-grpo-evals-if-learning.sh CHECKPOINT_ROOT CONCEPT}"
 CONCEPT="${2:?Usage: submit-grpo-evals-if-learning.sh CHECKPOINT_ROOT CONCEPT}"
 STORAGE_ROOT="${3:-${STORAGE_ROOT:-.}}"
