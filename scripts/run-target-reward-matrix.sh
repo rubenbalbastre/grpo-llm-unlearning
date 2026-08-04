@@ -393,7 +393,12 @@ submit_grpo_and_evals() {
   local dependency="${6:-}"
   local serial_dependency="${7:-}"
 
-  local run_name="unlearning-$(slug "${base_label}")-$(slug "${model_label}")-$(slug "${target}")-${reward}"
+  local run_suffix="${reward}"
+  if [[ "${reward}" == "r2" ]]; then
+    run_suffix="r2-reasoning-low"
+  fi
+
+  local run_name="unlearning-$(slug "${base_label}")-$(slug "${model_label}")-$(slug "${target}")-${run_suffix}"
   local checkpoint_root="${OUTPUT_ROOT}/${run_name}"
   local train_job_id
   local eval_gate_job_id
