@@ -19,7 +19,7 @@ DEFAULT_AUTHOR_CSV = DEFAULT_OUTPUTS_ROOT / "rwku_author_deltas.csv"
 TRAINED_RUN_RE = re.compile(
     r"^unlearning-(?P<variant>original|r2-warmed)-qwen-qwen2-5-"
     r"(?P<size>0-5b|1-5b|3b|7b)-instruct-(?P<author>.+)-"
-    r"(?P<reward>r\d+)(?:-reasoning-low)?$",
+    r"(?P<reward_type>r\d+)(?:-reasoning-low)?$",
     re.IGNORECASE,
 )
 WARMUP_RUN_RE = re.compile(
@@ -203,7 +203,7 @@ def build_author_rows(
             size = SIZE_NAMES[match.group("size").lower()]
             author = match.group("author")
             variant = match.group("variant").lower()
-            reward_function = match.group("reward").lower()
+            reward_function = match.group("reward_type").lower()
             rlvr_mode = "zero-RLVR" if variant == "original" else "warm-up"
         else:
             assert warmup_match is not None
