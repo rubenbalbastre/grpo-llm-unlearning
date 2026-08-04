@@ -17,6 +17,7 @@ MODEL_NAMES = {
     "3B": "Qwen/Qwen2.5-3B-Instruct",
     "7B": "Qwen/Qwen2.5-7B-Instruct",
 }
+KL_STD_SMOOTHING_WINDOW = 7
 METRICS = {
     "train/reward": ("Reward", "train/reward"),
     "active_group": ("Active group", "1 - train/frac_reward_zero_std"),
@@ -269,8 +270,21 @@ def plot_figures(grouped, output_dir: Path) -> list[Path]:
             for reward, reward_df in metric_df.groupby("reward_type"):
                 reward_df = reward_df.sort_values("train_global_step")
                 x = reward_df["train_global_step"].to_numpy()
-                mean = reward_df["mean"].to_numpy()
-                std = reward_df["std"].fillna(0.0).to_numpy()
+                mean_series = reward_df["mean"]
+                std_series = reward_df["std"].fillna(0.0)
+                if metric == "train/kl":
+                    mean_series = mean_series.rolling(
+                        window=KL_STD_SMOOTHING_WINDOW,
+                        center=True,
+                        min_periods=1,
+                    ).median()
+                    std_series = std_series.rolling(
+                        window=KL_STD_SMOOTHING_WINDOW,
+                        center=True,
+                        min_periods=1,
+                    ).median()
+                mean = mean_series.to_numpy()
+                std = std_series.to_numpy()
                 (line,) = ax.plot(x, mean, color=colors[reward], label=reward)
                 ax.fill_between(x, mean - std, mean + std, color=colors[reward], alpha=0.16)
                 handles.setdefault(reward, line)
