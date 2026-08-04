@@ -19,7 +19,7 @@ DEFAULT_AUTHOR_CSV = DEFAULT_OUTPUTS_ROOT / "rwku_author_deltas.csv"
 TRAINED_RUN_RE = re.compile(
     r"^unlearning-(?P<variant>original|r2-warmed)-qwen-qwen2-5-"
     r"(?P<size>0-5b|1-5b|3b|7b)-instruct-(?P<author>.+)-"
-    r"(?P<reward>r\d+)$",
+    r"(?P<reward>r\d+)(?:-reasoning-low)?$",
     re.IGNORECASE,
 )
 WARMUP_RUN_RE = re.compile(

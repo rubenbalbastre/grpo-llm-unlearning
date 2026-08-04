@@ -21,7 +21,7 @@ SUMMARY_METADATA_COLUMNS = {"forget_concept", "model_name_or_path", "stat"}
 STOPPED_RUN_RE = re.compile(
     r"^unlearning-(?P<training_variant>original|r2-warmed)-qwen-qwen2-5-"
     r"(?P<size>0-5b|1-5b|3b|7b)-instruct-(?P<concept>.+)-"
-    r"(?P<reward_type>r\d+)$",
+    r"(?P<reward_type>r\d+)(?:-reasoning-low)?$",
     re.IGNORECASE,
 )
 WARMUP_RUN_RE = re.compile(
