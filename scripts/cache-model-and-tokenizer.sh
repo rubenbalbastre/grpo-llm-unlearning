@@ -1,7 +1,11 @@
 #!/bin/bash -l
-#SBATCH --job-name=check-broad-completions
-#SBATCH --output=logs/check-broad-completions-%j.log
-#SBATCH --time=00:20:00
+#SBATCH --job-name=cache-model
+#SBATCH --output=logs/cache-model-%j.log
+#SBATCH --gres=gpu:1
+#SBATCH --time=02:00:00
+#SBATCH --mem=32G
+#SBATCH --partition=hopper
+#SBATCH --qos=hopper
 set -euo pipefail
 
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
@@ -11,7 +15,6 @@ if [[ ! -f "${SLURM_ENV}" ]]; then
 fi
 source "${SLURM_ENV}"
 
-hostname; pwd; date
 activate_training_env
 
-python3 scripts/check-broad-completions-r2.py
+python -m scripts.cache_model_and_tokenizer "$@"

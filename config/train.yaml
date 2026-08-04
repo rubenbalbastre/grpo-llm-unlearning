@@ -3,15 +3,17 @@ defaults:
   
 experiment:
   seed: 1234 # 1, 1234, 42
-  forget_concept: Serena Williams #Justin Timberlake #Confucius # Stephen King Nicolas Cage
+  forget_concept: Jennifer Lopez #Justin Timberlake #Confucius # Stephen King Nicolas Cage
   push_to_hub: false # binary
-  notes: draft-paper-run
+  notes: lluis-vives-runs-1-1M
 
 paths:
   storage_root: .
 
 model:
-  name: ./outputs/r2warmup_qwen_qwen2_5_7b_instruct_karl_marx/final_model/ # "microsoft/Phi-3-mini-4k-instruct", Qwen/Qwen2.5-3B-Instruct, "./outputs/unlearning-sft-4928/checkpoint-13/"
+  name: ./outputs/r2warmup_qwen_qwen2_5_3b_instruct_jennifer_lopez/final_model/ # "microsoft/Phi-3-mini-4k-instruct", Qwen/Qwen2.5-3B-Instruct, "./outputs/unlearning-sft-4928/checkpoint-13/"
+  torch_dtype: bfloat16
+  attn_implementation: null
 
 wandb:
   # Used by direct `python train.py` runs. `scripts/run-grpo.sh`
@@ -75,9 +77,9 @@ reward:
       length_aware_alpha: 30.0
     llm-judge:
       model_name: gpt-5.4-nano
-      reasoning_effort: null # low for mini
+      reasoning_effort: low # low for mini
       temperature: 0.0 # Used only when reasoning_effort is none.
-      max_concurrent_requests: 8
+      max_concurrent_requests: 16
     refusal_reward_classifier:
       mode: reward_non_refusal # reward_non_refusal or reward_refusal
       model_name: garak-llm/garak-refusal-detector
@@ -107,16 +109,16 @@ training:
     per_device_train_batch_size: 16
     gradient_accumulation_steps: 1
     gradient_checkpointing: true
-    fp16: true # V100 supports FP16, not BF16.
-    bf16: false
+    fp16: false
+    bf16: true
     # logging
     logging_steps: 1
-    save_final_model: false # Set false to keep only checkpoint-* snapshots.
+    save_final_model: true # Set false to keep only checkpoint-* snapshots.
     save_strategy: "steps"
-    save_steps: 1
+    save_steps: 20
     # learning rate, scheduler
-    num_train_epochs: 10
-    max_steps: 12 # too large since token budget callback will stop training when the token budget is reached. Set to -1 to disable.
+    num_train_epochs: 15
+    max_steps: 15 # too large since token budget callback will stop training when the token budget is reached. Set to -1 to disable.
     learning_rate: 1.0e-5
     lr_scheduler_type: "constant" #"constant"
     warmup_steps: 3
@@ -124,7 +126,7 @@ training:
     start_eval_on_step: 5
     eval_strategy: "steps"
     eval_steps: 1
-    per_device_eval_batch_size: 16
+    per_device_eval_batch_size: 64
     eval_accumulation_steps: 1
     monitoring:
       generation:
@@ -145,13 +147,16 @@ training:
   grpo:
     mode: standard # adaptive, standard
     # batch size
-    per_device_train_batch_size: 8
+    per_device_train_batch_size: 64
     num_generations: 8
-    gradient_accumulation_steps: 8
+    gradient_accumulation_steps: 1
     gradient_checkpointing: true
-    fp16: true # V100 supports FP16, not BF16.
-    bf16: false
-    steps_per_generation: 8
+    fp16: false
+    bf16: true
+    steps_per_generation: 1
+    use_vllm: false
+    vllm_mode: colocate
+    vllm_gpu_memory_utilization: 0.30
     # sampling
     temperature: 1.0
     top_p: 1.0
@@ -162,7 +167,7 @@ training:
     logging_steps: 1
     save_final_model: false # Set false to keep only checkpoint-* snapshots.
     # learning rate, scheduler
-    num_train_epochs: 40
+    num_train_epochs: 100
     max_steps: 150 # too large since token budget callback will stop training when the token budget is reached. Set to -1 to disable.
     learning_rate: 1.0e-5 # for 1.5B model, 1.0e-4 for 3B model
     lr_scheduler_type: "constant" #"constant"
@@ -179,12 +184,13 @@ training:
     num_generations_eval: 8
     # callbacks
     callback:
-      checkpoint_token_milestones: [100_000, 200_000, 300_000, 400_000, 500_000, 600_000, 700_000, 800_000, 900_000, 1_000_000, 1_200_000, 1_500_000] # Save checkpoints at token counts.
-      token_budget: 1_500_000 #3_000_000 # null if not using StopOnTokenBudgetCallback
-      high_reward_stop:
-        threshold: 0.90
-        max_optimizer_steps_above_threshold: 5
-        metric_names: ["train/reward", "reward"]
+      checkpoint_token_milestones: null # [1_000_000] #[100_000, 200_000, 300_000, 400_000, 500_000, 600_000, 700_000, 800_000, 900_000, 1_000_000, 1_200_000, 1_500_000] # Save checkpoints at token counts.
+      token_budget: null #3_000_000 # null if not using StopOnTokenBudgetCallback
+      high_reward_stop: null
+      #   threshold: 0.90
+      #   max_optimizer_steps_above_threshold: 10
+      #   frac_reward_zero_std_threshold: null
+      #   metric_names: ["train/reward", "reward"]
       no_learning_stop:
         threshold: 0.05
 

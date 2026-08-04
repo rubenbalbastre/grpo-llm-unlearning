@@ -1,19 +1,25 @@
 #!/bin/bash -l
 #SBATCH --job-name=slurm-run-unlearning
 #SBATCH --output=logs/slurm-run-unlearning-%j.log
-#SBATCH --gres=gpu:2
+#SBATCH --gres=gpu:1
 #SBATCH --time=08:00:00
-#SBATCH --partition=sc-gpu
+#SBATCH --qos=hopper
+#SBATCH --partition=hopper
+
 set -euo pipefail
 
+SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+SLURM_ENV="${SCRIPT_DIR}/slurm-env.sh"
+if [[ ! -f "${SLURM_ENV}" ]]; then
+  SLURM_ENV="${REPO_DIR:-/storage/scratch/lv13/lv13594/machine-unlearning-llm}/scripts/slurm-env.sh"
+fi
+source "${SLURM_ENV}"
+
 hostname; pwd; date
-source "$HOME/anaconda3/etc/profile.d/conda.sh"
 echo "Activate virtual environment (must exist)"
-conda activate py312
+activate_training_env
 echo "Run program in virtual environment"
 
-REPO_DIR="${REPO_DIR:-/home/balalru/machine-unlearning-llm}"
-cd "${REPO_DIR}"
 TRAIN_SCRIPT="${TRAIN_SCRIPT:-${REPO_DIR}/train.py}"
 TRAIN_CONFIG="${TRAIN_CONFIG:-${REPO_DIR}/config/train.yaml}"
 SINGLE_GPU_CONFIG="${SINGLE_GPU_CONFIG:-${REPO_DIR}/config/accelerate_single_gpu.yaml}"
@@ -37,6 +43,24 @@ PEFT_ENABLED="$(
   ' "${TRAIN_CONFIG}"
 )"
 PEFT_ENABLED="${PEFT_ENABLED:-true}"
+REWARD_TYPE="$(
+  awk '
+    $1 == "reward:" { in_reward=1; next }
+    in_reward && $1 == "type:" { print tolower($2); exit }
+    in_reward && /^[^[:space:]]/ { exit }
+  ' "${TRAIN_CONFIG}"
+)"
+REWARD_TYPE="${REWARD_TYPE:-r0}"
+LLM_JUDGE_REASONING_EFFORT="$(
+  awk '
+    $1 == "reward:" { in_reward=1; next }
+    in_reward && $1 == "functions:" { in_functions=1; next }
+    in_reward && in_functions && $1 == "llm-judge:" { in_llm_judge=1; next }
+    in_reward && in_functions && in_llm_judge && $1 == "reasoning_effort:" { print tolower($2); exit }
+    in_reward && /^[^[:space:]]/ { exit }
+  ' "${TRAIN_CONFIG}"
+)"
+LLM_JUDGE_REASONING_EFFORT="${LLM_JUDGE_REASONING_EFFORT:-low}"
 for arg in "$@"; do
   case "${arg}" in
     peft.enabled=false|peft.enabled=False|peft.enabled=0)
@@ -45,8 +69,19 @@ for arg in "$@"; do
     peft.enabled=true|peft.enabled=True|peft.enabled=1)
       PEFT_ENABLED="true"
       ;;
+    reward.type=*)
+      REWARD_TYPE="${arg#reward.type=}"
+      REWARD_TYPE="${REWARD_TYPE,,}"
+      ;;
+    reward.functions.llm-judge.reasoning_effort=*)
+      LLM_JUDGE_REASONING_EFFORT="${arg#reward.functions.llm-judge.reasoning_effort=}"
+      LLM_JUDGE_REASONING_EFFORT="${LLM_JUDGE_REASONING_EFFORT,,}"
+      ;;
   esac
 done
+if [[ "${REWARD_TYPE}" == "r2" && "${RUN_NAME}" != *"-reasoning-"* ]]; then
+  RUN_NAME="${RUN_NAME}-reasoning-${LLM_JUDGE_REASONING_EFFORT}"
+fi
 
 if [[ -n "${ACCELERATE_CONFIG:-}" ]]; then
   ACCELERATE_ARGS=(--config_file "${ACCELERATE_CONFIG}" --num_processes "${NUM_GPUS}")

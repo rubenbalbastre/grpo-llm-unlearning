@@ -2,6 +2,7 @@ from __future__ import annotations
 
 from pathlib import Path
 
+import torch
 from peft import PeftConfig, PeftModel
 from transformers import AutoModelForCausalLM, AutoTokenizer
 
@@ -35,17 +36,29 @@ def has_cached_tokenizer(path: Path) -> bool:
     )
 
 
-def load_cached_model(model_name: str, storage_root: str | Path = "."):
+def load_cached_model(
+    model_name: str,
+    storage_root: str | Path = ".",
+    *,
+    torch_dtype: torch.dtype | None = None,
+    attn_implementation: str | None = None,
+):
+    model_kwargs = {
+        "torch_dtype": torch_dtype,
+        "attn_implementation": attn_implementation,
+    }
+    model_kwargs = {key: value for key, value in model_kwargs.items() if value is not None}
+
     if is_local_model_source(model_name):
-        return AutoModelForCausalLM.from_pretrained(model_name)
+        return AutoModelForCausalLM.from_pretrained(model_name, **model_kwargs)
 
     cache_dir = model_cache_dir(model_name, storage_root)
     if has_cached_model(cache_dir):
         print(f"Loading model from local cache: {cache_dir}", flush=True)
-        return AutoModelForCausalLM.from_pretrained(cache_dir)
+        return AutoModelForCausalLM.from_pretrained(cache_dir, **model_kwargs)
 
     print(f"Downloading model {model_name} and caching at {cache_dir}", flush=True)
-    model = AutoModelForCausalLM.from_pretrained(model_name)
+    model = AutoModelForCausalLM.from_pretrained(model_name, **model_kwargs)
     if is_main_process():
         cache_dir.mkdir(parents=True, exist_ok=True)
         model.save_pretrained(cache_dir)
@@ -74,7 +87,11 @@ def load_cached_tokenizer(tokenizer_name: str, storage_root: str | Path = "."):
 def load_model_and_tokenizer(
     model_name: str,
     storage_root: str | Path = ".",
+    *,
+    torch_dtype: str | None = None,
+    attn_implementation: str | None = None,
 ):
+    resolved_dtype = getattr(torch, torch_dtype) if torch_dtype else None
     tokenizer_source = model_name
     if is_peft_adapter_path(model_name):
         peft_config = PeftConfig.from_pretrained(model_name)
@@ -82,6 +99,8 @@ def load_model_and_tokenizer(
         base_model = load_cached_model(
             peft_config.base_model_name_or_path,
             storage_root,
+            torch_dtype=resolved_dtype,
+            attn_implementation=attn_implementation,
         )
         model = PeftModel.from_pretrained(
             base_model,
@@ -89,7 +108,12 @@ def load_model_and_tokenizer(
             is_trainable=True,
         )
     else:
-        model = load_cached_model(model_name, storage_root)
+        model = load_cached_model(
+            model_name,
+            storage_root,
+            torch_dtype=resolved_dtype,
+            attn_implementation=attn_implementation,
+        )
 
     tokenizer = load_cached_tokenizer(tokenizer_source, storage_root)
     if tokenizer.pad_token is None:
