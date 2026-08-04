@@ -53,8 +53,6 @@ def main(cfg: DictConfig) -> None:
     model, tokenizer = load_model_and_tokenizer(
         model_name,
         storage_root=cfg.paths.storage_root,
-        torch_dtype=cfg.model.torch_dtype,
-        attn_implementation=cfg.model.attn_implementation,
     )
     loaded_peft_adapter = has_peft_adapter(model)
     if loaded_peft_adapter:
@@ -102,10 +100,10 @@ def main(cfg: DictConfig) -> None:
         lr_scheduler_kwargs={"min_lr_rate": 0.1} if cfg.training.grpo.lr_scheduler_type == "cosine_with_min_lr" else None,
         warmup_ratio=cfg.training.grpo.warmup_ratio,
         # eval
-        # eval_strategy=cfg.training.grpo.eval_strategy,
-        # eval_steps=cfg.training.grpo.eval_steps,
-        # per_device_eval_batch_size=cfg.training.grpo.per_device_eval_batch_size,
-        # num_generations_eval=cfg.training.grpo.num_generations_eval,
+        eval_strategy=cfg.training.grpo.eval_strategy,
+        eval_steps=cfg.training.grpo.eval_steps,
+        per_device_eval_batch_size=cfg.training.grpo.per_device_eval_batch_size,
+        num_generations_eval=cfg.training.grpo.num_generations_eval,
         # eval_on_start=True,
         # eval_accumulation_steps=1,
         # do_eval=True,
@@ -115,9 +113,6 @@ def main(cfg: DictConfig) -> None:
         gradient_checkpointing=cfg.training.grpo.gradient_checkpointing,
         fp16=cfg.training.grpo.fp16,
         bf16=cfg.training.grpo.bf16,
-        # use_vllm=cfg.training.grpo.use_vllm,
-        # vllm_mode=cfg.training.grpo.vllm_mode,
-        # vllm_gpu_memory_utilization=cfg.training.grpo.vllm_gpu_memory_utilization,
         num_train_epochs=cfg.training.grpo.num_train_epochs,
         max_steps=cfg.training.grpo.max_steps,
         ddp_find_unused_parameters=cfg.training.grpo.ddp_find_unused_parameters
@@ -127,10 +122,10 @@ def main(cfg: DictConfig) -> None:
         model=model,
         args=args,
         train_dataset=data_setup.train_dataset,
-        # eval_dataset=data_setup.eval_dataset,
+        eval_dataset=data_setup.eval_dataset,
         processing_class=tokenizer,
         reward_funcs=reward_funcs,
-        # rollout_func=data_setup.rollout_func,
+        rollout_func=data_setup.rollout_func,
         peft_config=peft_config,
         callbacks=get_training_callbacks(cfg.training.grpo.get("callback")),
     )

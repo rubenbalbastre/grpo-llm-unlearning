@@ -125,9 +125,12 @@ def main(args) -> None:
         max_concurrent_requests=args.judge_concurrency,
     )
     summary = aggregate_results(df, args)
-    if args.output_dir is None:
-        raise ValueError("output_dir must be provided for hold-out evaluation.")
-    output_dir = Path(args.output_dir)
+    output_dir = (
+        Path(args.paths.storage_root)
+        / "outputs"
+        / "hold_out_styles"
+        / f"{args.concept.replace(' ', '-').lower()}-{args.model_name_or_path.replace('/', '-')}"
+    )
     write_outputs(output_dir, df, summary)
     print(f"Wrote metrics and summary to {output_dir}", flush=True)
 
