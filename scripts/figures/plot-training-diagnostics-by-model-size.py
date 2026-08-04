@@ -11,6 +11,12 @@ from dotenv import dotenv_values
 
 
 MODEL_SIZES = ["0.5B", "1.5B", "3B", "7B"]
+MODEL_NAMES = {
+    "0.5B": "Qwen/Qwen2.5-0.5B-Instruct",
+    "1.5B": "Qwen/Qwen2.5-1.5B-Instruct",
+    "3B": "Qwen/Qwen2.5-3B-Instruct",
+    "7B": "Qwen/Qwen2.5-7B-Instruct",
+}
 METRICS = {
     "train/reward": ("Reward", "train/reward"),
     "active_group": ("Active group", "1 - train/frac_reward_zero_std"),
@@ -88,6 +94,12 @@ def model_size(run) -> str | None:
     return None
 
 
+def configured_model_name(run) -> str:
+    config = run.config or {}
+    hydra = config.get("hydra", {}) if isinstance(config.get("hydra"), dict) else {}
+    return str(nested(hydra, "model", "name") or nested(config, "model", "name") or "")
+
+
 def reward_type(run) -> str | None:
     config = run.config or {}
     hydra = config.get("hydra", {}) if isinstance(config.get("hydra"), dict) else {}
@@ -115,7 +127,7 @@ def is_number(value: object) -> bool:
 
 def history_keys() -> list[str]:
     return [
-        "train/num_tokens",
+        "train/global_step",
         "train/reward",
         "train/frac_reward_zero_std",
         "train/kl",
@@ -130,10 +142,13 @@ def collect_run_rows(run, notes: str, samples: int) -> list[dict]:
         return []
     if notes and experiment_notes(run) != notes:
         return []
+    run_model_name = configured_model_name(run)
+    if run_model_name != MODEL_NAMES[size]:
+        return []
 
     rows = []
     for point in run.history(keys=history_keys(), samples=samples, pandas=False):
-        x = point.get("train/num_tokens")
+        x = point.get("train/global_step")
         if not is_number(x):
             continue
 
@@ -156,9 +171,10 @@ def collect_run_rows(run, notes: str, samples: int) -> list[dict]:
                         "run_id": run.id,
                         "run_name": run.name,
                         "model_size": size,
+                        "model_name": run_model_name,
                         "reward_type": reward,
                         "metric": metric,
-                        "train_num_tokens": float(x),
+                        "train_global_step": float(x),
                         "value": float(value),
                     }
                 )
@@ -182,6 +198,7 @@ def collect_rows(
         filters["jobType"] = job_type
     if notes:
         filters["config.hydra.experiment.notes"] = notes
+    filters["config.hydra.model.name"] = {"$in": list(MODEL_NAMES.values())}
 
     runs = list(api.runs(path, filters=filters))
     rows = []
@@ -250,8 +267,8 @@ def plot_figures(grouped, output_dir: Path) -> list[Path]:
         for ax, (metric, (title, ylabel)) in zip(axes.ravel(), METRICS.items(), strict=True):
             metric_df = size_df[size_df["metric"] == metric]
             for reward, reward_df in metric_df.groupby("reward_type"):
-                reward_df = reward_df.sort_values("train_num_tokens")
-                x = reward_df["train_num_tokens"].to_numpy()
+                reward_df = reward_df.sort_values("train_global_step")
+                x = reward_df["train_global_step"].to_numpy()
                 mean = reward_df["mean"].to_numpy()
                 std = reward_df["std"].fillna(0.0).to_numpy()
                 (line,) = ax.plot(x, mean, color=colors[reward], label=reward)
@@ -259,10 +276,9 @@ def plot_figures(grouped, output_dir: Path) -> list[Path]:
                 handles.setdefault(reward, line)
 
             ax.set_title(title)
-            ax.set_xlabel("train/num_tokens")
+            ax.set_xlabel("train/global_step")
             ax.set_ylabel(ylabel)
             ax.grid(True, color="#b0b0b0")
-            ax.ticklabel_format(axis="x", style="sci", scilimits=(5, 5))
             if metric in {"train/reward", "active_group"}:
                 ax.set_ylim(-0.03, 1.03)
 
@@ -310,21 +326,33 @@ def main() -> None:
     output_dir = args.output_dir
     output_dir.mkdir(parents=True, exist_ok=True)
     points_path = output_dir / "training_diagnostic_points.csv"
+    required_columns = {"train_global_step", "model_name"}
     if points_path.exists():
         points = pd.read_csv(points_path)
-        print(f"Reusing cached W&B points from {points_path}")
+        if required_columns.issubset(points.columns):
+            print(f"Reusing cached W&B points from {points_path}")
+        else:
+            points = None
     else:
-        rows = collect_rows(str(project), entity, notes, args.job_type, args.samples, args.workers)
+        points = None
+
+    if points is None:
+        rows = collect_rows(
+            str(project), entity, notes, args.job_type, args.samples, args.workers
+        )
         if not rows:
-            raise SystemExit(f"No matching W&B rows found for experiment.notes={notes!r}")
+            raise SystemExit(
+                f"No matching W&B rows found for experiment.notes={notes!r} "
+                f"and model names {list(MODEL_NAMES.values())!r}"
+            )
         points = pd.DataFrame(rows)
         points.to_csv(points_path, index=False)
         print(f"Saved W&B points to {points_path}")
 
     grouped = (
-        points.groupby(["model_size", "reward_type", "metric", "train_num_tokens"], as_index=False)
+        points.groupby(["model_size", "reward_type", "metric", "train_global_step"], as_index=False)
         .agg(mean=("value", "mean"), std=("value", "std"), n=("run_id", "nunique"))
-        .sort_values(["model_size", "reward_type", "metric", "train_num_tokens"])
+        .sort_values(["model_size", "reward_type", "metric", "train_global_step"])
     )
 
     grouped.to_csv(output_dir / "training_diagnostic_summary.csv", index=False)
@@ -334,6 +362,7 @@ def main() -> None:
         print(f"Wrote {path}")
     print(f"Prefiltered W&B runs by jobType={args.job_type!r}")
     print(f"Filtered by experiment.notes={notes!r}")
+    print(f"Filtered by model.name in {list(MODEL_NAMES.values())!r}")
 
 
 if __name__ == "__main__":
