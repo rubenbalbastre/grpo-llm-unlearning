@@ -182,10 +182,9 @@ accelerate launch \
   train.py peft.enabled=false
 ```
 
-The training defaults target H100 GPUs: models load in BF16 with
-FlashAttention 2, Accelerate uses BF16 mixed precision, and GRPO uses colocated
-vLLM generation. The ZeRO-3 path uses BF16 through
-`config/deepspeed_zero3_bf16.json`.
+The PEFT Accelerate configs use `mixed_precision: fp16`. The ZeRO-3 path sets
+FP16 in `config/deepspeed_zero3_fp16.json`. This is intentional for V100 GPUs,
+which do not support BF16.
 
 ## Slurm
 
@@ -198,7 +197,7 @@ scripts/run-grpo.sh
 Then submit:
 
 ```bash
-sbatch scripts/run-grpo-h100.sh
+sbatch scripts/run-grpo.sh
 ```
 
 The script uses `accelerate launch` and counts the GPUs assigned by Slurm through `CUDA_VISIBLE_DEVICES`. It selects the single-GPU config for one visible GPU, the multi-GPU config for PEFT on multiple GPUs, and the ZeRO-3 config for multi-GPU full fine-tuning:

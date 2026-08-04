@@ -12,7 +12,7 @@ hostname; pwd; date
 # Run the program/command
 source "$HOME/anaconda3/etc/profile.d/conda.sh"
 echo "Activate virtual environment (must exist)"
-conda activate py312_cu118
+conda activate py312
 echo "Run program in virtual environment"
 REPO_DIR="${REPO_DIR:-/home/balalru/machine-unlearning-llm}"
 cd "${REPO_DIR}"

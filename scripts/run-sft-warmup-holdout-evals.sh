@@ -1,8 +1,7 @@
 #!/usr/bin/env bash
 set -euo pipefail
 
-SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
-REPO_DIR="${REPO_DIR:-$(dirname "${SCRIPT_DIR}")}"
+REPO_DIR="${REPO_DIR:-/home/balalru/machine-unlearning-llm}"
 cd "${REPO_DIR}"
 
 LOW_REWARD_STOP_MARKER="${LOW_REWARD_STOP_MARKER:-low_reward_stop.json}"
@@ -44,6 +43,17 @@ dependency_arg() {
   fi
 }
 
+holdout_output_dir() {
+  local concept="$1"
+  local model_name_or_path="$2"
+  local concept_part
+  local model_part
+
+  concept_part="$(echo "${concept// /-}" | tr '[:upper:]' '[:lower:]')"
+  model_part="${model_name_or_path//\//-}"
+  echo "${OUTPUT_ROOT}/hold_out_styles/${concept_part}-${model_part}"
+}
+
 submit_warmup_holdout() {
   local model="$1"
   local target="$2"
@@ -65,7 +75,7 @@ submit_warmup_holdout() {
     return
   fi
 
-  output_dir="${final_model}/hold_out_eval"
+  output_dir="$(holdout_output_dir "${target}" "${final_model}")"
   if [[ -f "${output_dir}/metrics.csv" && -f "${output_dir}/summary.csv" ]]; then
     echo "done"
     return
@@ -87,12 +97,7 @@ submit_warmup_holdout() {
     --gres=gpu:1 \
     --time="01:30:00" \
     --partition="sc-gpu" \
-    --export="ALL,SKIP_IF_MARKER=${run_dir}/${LOW_REWARD_STOP_MARKER}" \
-    scripts/run-hold-out-completions-analysis.sh \
-    "concept=${target}" \
-    "model_name_or_path=${final_model}" \
-    "output_dir=${output_dir}" \
-    "paths.storage_root=${STORAGE_ROOT}"
+    --wrap="cd ${REPO_DIR} && if [ -f '${run_dir}/${LOW_REWARD_STOP_MARKER}' ]; then echo 'Skipping hold-out because stop marker exists: ${run_dir}/${LOW_REWARD_STOP_MARKER}'; cat '${run_dir}/${LOW_REWARD_STOP_MARKER}'; exit 0; fi && source \$HOME/anaconda3/etc/profile.d/conda.sh && conda activate py312 && python eval/hold_out_styles/generate-and-analyze-completions.py concept='${target}' model_name_or_path='${final_model}' paths.storage_root='${STORAGE_ROOT}'"
 }
 
 previous_holdout_job_id=""
