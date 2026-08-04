@@ -17,14 +17,14 @@ MODEL_NAMES = {
     "3B": "Qwen/Qwen2.5-3B-Instruct",
     "7B": "Qwen/Qwen2.5-7B-Instruct",
 }
-KL_STD_SMOOTHING_WINDOW = 7
+KL_SMOOTHING_WINDOW = 7
 METRICS = {
-    "train/reward": ("Reward", "train/reward"),
-    "active_group": ("Active group", "1 - train/frac_reward_zero_std"),
-    "train/kl": ("KL", "train/kl"),
+    "train/reward": ("Reward", "Reward"),
+    "active_group": ("Active group", "Active-group fraction"),
+    "train/kl": ("KL", "KL divergence"),
     "train/completions/mean_length": (
         "Completion length",
-        "train/completions/mean_length",
+        "Mean completion length (tokens)",
     ),
 }
 SIZE_FROM_MODEL_RE = re.compile(r"Qwen2\.5-(0\.5B|1\.5B|3B|7B)-Instruct", re.I)
@@ -262,10 +262,10 @@ def plot_figures(grouped, output_dir: Path) -> list[Path]:
 
     for size in MODEL_SIZES:
         size_df = grouped[grouped["model_size"] == size]
-        fig, axes = plt.subplots(2, 2, figsize=(7.0, 5.1))
+        fig, axes = plt.subplots(2, 2, figsize=(7.0, 5.1), sharex=True)
         handles = {}
 
-        for ax, (metric, (title, ylabel)) in zip(axes.ravel(), METRICS.items(), strict=True):
+        for ax, (metric, (_, ylabel)) in zip(axes.ravel(), METRICS.items(), strict=True):
             metric_df = size_df[size_df["metric"] == metric]
             for reward, reward_df in metric_df.groupby("reward_type"):
                 reward_df = reward_df.sort_values("train_global_step")
@@ -274,40 +274,41 @@ def plot_figures(grouped, output_dir: Path) -> list[Path]:
                 std_series = reward_df["std"].fillna(0.0)
                 if metric == "train/kl":
                     mean_series = mean_series.rolling(
-                        window=KL_STD_SMOOTHING_WINDOW,
+                        window=KL_SMOOTHING_WINDOW,
                         center=True,
                         min_periods=1,
                     ).median()
                     std_series = std_series.rolling(
-                        window=KL_STD_SMOOTHING_WINDOW,
+                        window=KL_SMOOTHING_WINDOW,
                         center=True,
                         min_periods=1,
                     ).median()
                 mean = mean_series.to_numpy()
                 std = std_series.to_numpy()
                 (line,) = ax.plot(x, mean, color=colors[reward], label=reward)
-                ax.fill_between(x, mean - std, mean + std, color=colors[reward], alpha=0.16)
+                ax.fill_between(x, mean - std, mean + std, color=colors[reward], alpha=0.11)
                 handles.setdefault(reward, line)
 
-            ax.set_title(title)
-            ax.set_xlabel("train/global_step")
             ax.set_ylabel(ylabel)
             ax.grid(True, color="#b0b0b0")
             if metric in {"train/reward", "active_group"}:
                 ax.set_ylim(-0.03, 1.03)
+
+        for ax in axes[1, :]:
+            ax.set_xlabel("Optimization step")
 
         if handles:
             fig.legend(
                 list(handles.values()),
                 list(handles.keys()),
                 loc="upper center",
-                bbox_to_anchor=(0.5, 1.01),
+                bbox_to_anchor=(0.5, 0.925),
                 ncol=min(len(handles), 5),
                 handlelength=2.2,
                 columnspacing=1.1,
             )
-        fig.suptitle(f"Qwen2.5-{size}", y=1.045, fontsize=11)
-        fig.tight_layout(rect=(0, 0, 1, 0.96))
+        fig.suptitle(f"Qwen2.5-{size}", y=0.985, fontsize=11)
+        fig.tight_layout(rect=(0, 0, 1, 0.89))
 
         stem = f"training_diagnostics_qwen2_5_{size.lower().replace('.', '_')}"
         png_path = output_dir / f"{stem}.png"
