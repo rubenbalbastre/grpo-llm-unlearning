@@ -1,7 +1,6 @@
 from __future__ import annotations
 
 import re
-from pathlib import Path
 from typing import Any
 
 from src.reward.components.constants.refusal_patterns import DEFAULT_REFUSAL_PATTERNS
@@ -41,7 +40,7 @@ def compute_regex_refusal_reward(
     return (1.0 if matches else 0.0), matches
 
 
-def make_regex_refusal_reward_func(config: Any, log_path: Path):
+def make_regex_refusal_reward_func(config: Any):
     patterns = list(
         config.get(
             "patterns",
@@ -75,5 +74,5 @@ def make_regex_refusal_reward_func(config: Any, log_path: Path):
     return regex_refusal_reward_func
 
 
-def build_regex_refusal_reward(config: Any, *, log_path: Path):
-    return make_regex_refusal_reward_func(config, log_path)
+def build_regex_refusal_reward(config: Any):
+    return make_regex_refusal_reward_func(config)

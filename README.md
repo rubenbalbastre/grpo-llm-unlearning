@@ -153,7 +153,6 @@ paths.output_root: outputs
 Each training run uses the configured W&B name as its output folder:
 
 ```text
-outputs/<wandb_run_name>/events.jsonl
 outputs/<wandb_run_name>/hydra_config.yaml
 outputs/<wandb_run_name>/checkpoint-*
 outputs/<wandb_run_name>/final_model # only when training.grpo.save_final_model=true

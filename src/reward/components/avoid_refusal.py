@@ -1,7 +1,6 @@
 from __future__ import annotations
 
 import re
-from pathlib import Path
 from typing import Any
 
 from src.reward.components.constants.refusal_patterns import (
@@ -63,7 +62,6 @@ def compute_avoid_refusal_reward_regex(
 
 def make_avoid_refusal_reward_regex_func(
     config: Any,
-    log_path: Path,
 ):
     patterns = list(config.get("patterns", DEFAULT_REFUSAL_PATTERNS))
     if not patterns:
@@ -76,8 +74,6 @@ def make_avoid_refusal_reward_regex_func(
     redirection_matchers = build_rediction_matchers(REDIRECTION_MARKERS)
 
     def avoid_refusal_reward_regex_func(prompts, completions, **kwargs) -> list[float]:
-        trainer_state = kwargs.get("trainer_state")
-        step = getattr(trainer_state, "global_step", None)
         log_extra = kwargs.get("log_extra")
 
         completions_list = list(completions) if completions is not None else []
@@ -112,13 +108,8 @@ def make_avoid_refusal_reward_regex_func(
 
 def build_avoid_refusal_reward_regex(
     config: Any,
-    *,
-    log_path: Path,
 ):
-    return make_avoid_refusal_reward_regex_func(
-        config,
-        log_path,
-    )
+    return make_avoid_refusal_reward_regex_func(config)
 
 
 def _is_garak_refusal_label(label: str) -> bool:
@@ -185,7 +176,6 @@ def _refusal_classification_from_output(
 
 def make_refusal_classifier_reward_func(
     config: Any,
-    log_path: Path,
 ):
     from transformers import pipeline
 
@@ -374,32 +364,6 @@ def build_refusal_classifier(
 
 def make_refusal_reward_classifier_func(
     config: Any,
-    log_path: Path,
-):
-    config = dict(config)
-    config["mode"] = "reward_non_refusal"
-    config.setdefault("reward_name", "refusal_reward_classifier")
-    config.setdefault("log_prefix", "classifier_refusal")
-    return make_refusal_classifier_reward_func(
-        config,
-        log_path,
-    )
-
-
-def build_refusal_reward_classifier(
-    config: Any,
-    *,
-    log_path: Path,
-):
-    return make_refusal_reward_classifier_func(
-        config,
-        log_path,
-    )
-
-
-def make_refusal_reward_classifier_func(
-    config: Any,
-    log_path: Path,
 ):
     config = dict(config)
     config.setdefault("mode", "reward_refusal")
@@ -410,18 +374,10 @@ def make_refusal_reward_classifier_func(
     else:
         config.setdefault("reward_name", "refusal_reward_classifier")
         config.setdefault("log_prefix", "classifier_refusal")
-    return make_refusal_classifier_reward_func(
-        config,
-        log_path,
-    )
+    return make_refusal_classifier_reward_func(config)
 
 
 def build_refusal_reward_classifier(
     config: Any,
-    *,
-    log_path: Path,
 ):
-    return make_refusal_reward_classifier_func(
-        config,
-        log_path,
-    )
+    return make_refusal_reward_classifier_func(config)

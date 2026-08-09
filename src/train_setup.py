@@ -26,7 +26,6 @@ from src.data_preprocessing.prompt_formatting import render_dataset_prompts
 @dataclass(frozen=True)
 class RunPaths:
     output_dir: Path
-    events_log_path: Path
     final_model_dir: Path
 
 
@@ -44,7 +43,6 @@ def setup_run(cfg: DictConfig) -> tuple[bool, str, RunPaths]:
     output_dir = Path(cfg.paths.storage_root) / "outputs" / run_name
     paths = RunPaths(
         output_dir=output_dir,
-        events_log_path=output_dir / "events.jsonl",
         final_model_dir=output_dir / "final_model",
     )
 

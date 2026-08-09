@@ -120,8 +120,6 @@ def main(cfg: DictConfig) -> None:
         peft_config=peft_config,
         callbacks=get_training_callbacks(cfg.training.grpo.get("callback")),
     )
-    trainer.events_log_path = paths.events_log_path
-
     trainer.train()
     finish_training(
         cfg,
