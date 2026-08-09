@@ -3,9 +3,7 @@ from __future__ import annotations
 import math
 import re
 from collections.abc import Iterable
-from pathlib import Path
 
-from src.data_generator.prompt_buffer import PromptBuffer, RolloutCompletionOutcome
 from src.reward.components.constants.target_patterns import get_target_patterns
 
 
@@ -79,8 +77,6 @@ def exponential_forgetting_reward(
 
 
 def make_forgetting_reward_func(
-    buffer: PromptBuffer | None,
-    log_path: Path,
     forget_concept: str,
     reward_mode: str = "entity_count",
     pattern_splits: str | Iterable[str] = ("hard", "soft"),
@@ -126,8 +122,6 @@ def make_forgetting_reward_func(
 
     def forgetting_reward(prompts, completions, **kwargs) -> list[float]:
         rewards: list[float] = []
-        trainer_state = kwargs.get("trainer_state")
-        step = getattr(trainer_state, "global_step", None)
         log_extra = kwargs.get("log_extra")
 
         selected_prompts = kwargs.get("selected_prompt", prompts)
@@ -144,18 +138,9 @@ def make_forgetting_reward_func(
         matched_entities_log: list[str] = []
         matched_entity_count_log: list[int] = []
         word_count_log: list[int] = []
-        for prompt, completion in zip(prompts_list, completions_list, strict=True):
+        for completion in completions_list:
             reward, entities = compute_reward(str(completion), entity_matchers)
 
-            if buffer is not None:
-                buffer.record_rollout_outcome(
-                    str(prompt),
-                    RolloutCompletionOutcome(
-                        completion=str(completion),
-                        reward=reward,
-                        step=step,
-                    ),
-                )
             rewards.append(reward)
             matched_entities_log.append("|".join(entities))
             matched_entity_count_log.append(len(entities))
@@ -175,11 +160,8 @@ def build_simple_match_reward(
     config,
     *,
     forget_concept: str,
-    log_path: Path,
 ):
     return make_forgetting_reward_func(
-        buffer=None,
-        log_path=log_path,
         forget_concept=forget_concept,
         reward_mode=config.get("mode", "binary"),
         pattern_splits=config.get("pattern_splits", ["hard", "soft"]),

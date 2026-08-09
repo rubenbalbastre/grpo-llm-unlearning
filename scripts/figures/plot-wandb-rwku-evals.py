@@ -106,7 +106,6 @@ def collect_eval_rows(
             if training_mode is None:
                 training_mode = "unknown"
 
-            generator_mode = None if training_mode == "standard" else run.config.get("hydra").get("data_generator").get("data_proposer").get("mode")
             for metric_name, metric_value in summary.items():
                 if not metric_name.startswith(metric_prefix) or not is_number(metric_value):
                     continue
@@ -114,7 +113,7 @@ def collect_eval_rows(
                     {
                         "run_id": run.id,
                         "run_name": run.name,
-                        "training_mode": f"{training_mode}-{generator_mode}" if generator_mode else training_mode,
+                        "training_mode": training_mode,
                         "forget_concept": str(run_forget_concept),
                         "model_name": str(run_model_name),
                         "checkpoint_milestone_num_tokens": milestone,

@@ -71,7 +71,6 @@ def collect_eval_rows(
                 run_model_name = run.config.get("hydra").get("model").get("name")
                 training_mode = run.config.get("hydra").get("training").get("mode")
                 milestone = run.config.get("checkpoint").get("milestone_num_tokens")
-                objective = run.config.get("hydra").get("data_generator").get("data_proposer").get("objective")
                 if milestone is None:
                     milestone = int(NULL_MILESTONE_NUM_TOKENS)
                 else:
@@ -85,7 +84,6 @@ def collect_eval_rows(
                 if (float(run.config.get("hydra").get("training").get("learning_rate")) != 1.0e-4):
                     continue
 
-                # generator_mode = None if training_mode == "standard" else run.config.get("hydra").get("data_generator").get("data_proposer").get("mode")
                 reward_type = run.config.get("hydra").get("reward").get("type")
 
                 for metric_name, metric_value in summary.items():

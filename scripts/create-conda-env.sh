@@ -89,7 +89,6 @@ uv pip install \
     python-dotenv \
     sentence-transformers \
     openai \
-    faiss-cpu \
     ninja \
     wheel \
     setuptools \

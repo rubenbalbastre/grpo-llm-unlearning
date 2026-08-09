@@ -13,7 +13,6 @@ from src.peft import (
     make_loaded_peft_adapter_trainable,
 )
 from src.train_setup import (
-    attach_adaptive_state,
     finish_training,
     load_model_and_tokenizer,
     setup_run,
@@ -71,7 +70,7 @@ def main(cfg: DictConfig) -> None:
         print("Training mode: full fine-tuning", flush=True)
     elif peft_config is not None:
         print("Training mode: PEFT/LoRA", flush=True)
-    data_setup = setup_training_data(cfg, paths.events_log_path, training_mode="grpo", tokenizer=tokenizer)
+    data_setup = setup_training_data(cfg, training_mode="grpo", tokenizer=tokenizer)
 
     reward_funcs = build_reward_funcs(forget_concept=forget_concept, reward_config=cfg.reward)
 
@@ -122,7 +121,6 @@ def main(cfg: DictConfig) -> None:
         callbacks=get_training_callbacks(cfg.training.grpo.get("callback")),
     )
     trainer.events_log_path = paths.events_log_path
-    attach_adaptive_state(trainer, data_setup)
 
     trainer.train()
     finish_training(

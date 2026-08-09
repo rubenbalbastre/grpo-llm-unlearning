@@ -1,6 +1,5 @@
 from __future__ import annotations
 
-import os
 import re
 from dataclasses import dataclass
 from pathlib import Path
@@ -66,7 +65,11 @@ def setup_run(cfg: DictConfig) -> tuple[bool, str, RunPaths]:
     return wandb_enabled, run_name, paths
 
 
-def setup_training_data(cfg: DictConfig, events_log_path: Path, training_mode: Literal["sft", "grpo"], tokenizer) -> TrainingDataSetup:
+def setup_training_data(
+    cfg: DictConfig,
+    training_mode: Literal["sft", "grpo"],
+    tokenizer,
+) -> TrainingDataSetup:
 
     train_dataset, test_dataset = load_standard_dataset(
         cfg.experiment.forget_concept,
@@ -78,9 +81,6 @@ def setup_training_data(cfg: DictConfig, events_log_path: Path, training_mode: L
     return TrainingDataSetup(
         train_dataset=train_dataset,
         eval_dataset=test_dataset,
-        rollout_func=None,
-        prompt_buffer=None,
-        data_generator=None,
     )
 
 

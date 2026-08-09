@@ -14,7 +14,6 @@ def build_reward_funcs(reward_config: Any, forget_concept: str) -> list[Callable
     simple_match_reward = build_simple_match_reward(
         simple_match_config,
         forget_concept=forget_concept,
-        log_path=Path("events.jsonl"),
     )
 
     functions_config.refusal_reward_classifier.mode = 'reward_non_refusal'

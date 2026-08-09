@@ -1,7 +1,6 @@
 from __future__ import annotations
 
 from collections.abc import Callable
-from pathlib import Path
 from typing import Any
 
 from src.reward.components.fuzzy_match import build_fuzzy_match_reward
@@ -15,7 +14,6 @@ def build_reward_funcs(reward_config: Any, forget_concept: str) -> list[Callable
     fuzzy_length_aware_reward = build_fuzzy_match_reward(
         fuzzy_length_aware_config,
         forget_concept=forget_concept,
-        log_path=Path("events.jsonl"),
     )
 
     def reward_r3(prompts, completions, **kwargs) -> list[float]:
