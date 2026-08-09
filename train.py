@@ -13,7 +13,6 @@ from src.peft import (
     make_loaded_peft_adapter_trainable,
 )
 from src.train_setup import (
-    attach_adaptive_state,
     finish_training,
     load_model_and_tokenizer,
     setup_run,
@@ -71,7 +70,7 @@ def main(cfg: DictConfig) -> None:
         print("Training mode: full fine-tuning", flush=True)
     elif peft_config is not None:
         print("Training mode: PEFT/LoRA", flush=True)
-    data_setup = setup_training_data(cfg, paths.events_log_path, training_mode="grpo", tokenizer=tokenizer)
+    data_setup = setup_training_data(cfg, training_mode="grpo", tokenizer=tokenizer)
 
     reward_funcs = build_reward_funcs(forget_concept=forget_concept, reward_config=cfg.reward)
 
@@ -101,23 +100,12 @@ def main(cfg: DictConfig) -> None:
         lr_scheduler_type=cfg.training.grpo.lr_scheduler_type,
         lr_scheduler_kwargs={"min_lr_rate": 0.1} if cfg.training.grpo.lr_scheduler_type == "cosine_with_min_lr" else None,
         warmup_ratio=cfg.training.grpo.warmup_ratio,
-        # eval
-        # eval_strategy=cfg.training.grpo.eval_strategy,
-        # eval_steps=cfg.training.grpo.eval_steps,
-        # per_device_eval_batch_size=cfg.training.grpo.per_device_eval_batch_size,
-        # num_generations_eval=cfg.training.grpo.num_generations_eval,
-        # eval_on_start=True,
-        # eval_accumulation_steps=1,
-        # do_eval=True,
         # others
         num_iterations=cfg.training.grpo.num_iterations,
         beta=cfg.training.grpo.beta,
         gradient_checkpointing=cfg.training.grpo.gradient_checkpointing,
         fp16=cfg.training.grpo.fp16,
         bf16=cfg.training.grpo.bf16,
-        # use_vllm=cfg.training.grpo.use_vllm,
-        # vllm_mode=cfg.training.grpo.vllm_mode,
-        # vllm_gpu_memory_utilization=cfg.training.grpo.vllm_gpu_memory_utilization,
         num_train_epochs=cfg.training.grpo.num_train_epochs,
         max_steps=cfg.training.grpo.max_steps,
         ddp_find_unused_parameters=cfg.training.grpo.ddp_find_unused_parameters
@@ -127,16 +115,11 @@ def main(cfg: DictConfig) -> None:
         model=model,
         args=args,
         train_dataset=data_setup.train_dataset,
-        # eval_dataset=data_setup.eval_dataset,
         processing_class=tokenizer,
         reward_funcs=reward_funcs,
-        # rollout_func=data_setup.rollout_func,
         peft_config=peft_config,
         callbacks=get_training_callbacks(cfg.training.grpo.get("callback")),
     )
-    trainer.events_log_path = paths.events_log_path
-    attach_adaptive_state(trainer, data_setup)
-
     trainer.train()
     finish_training(
         cfg,

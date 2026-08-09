@@ -2,7 +2,7 @@
 
 Utilities for inspecting model completions logged by W&B training runs.
 
-The main script, `analyze-adaptive-completions.py`, looks for completions that
+The main script, `analyze-completions.py`, looks for completions that
 mention any refusal-pattern entity for the selected concept exactly or through
 the fuzzy forgetting reward. For `CONCEPT=Rihanna`, that includes `Rihanna`,
 `Fenty Beauty`, `Umbrella`, and the rest of `REFUSAL_PATTERNS["Rihanna"]`.
@@ -40,7 +40,7 @@ still matches the fuzzy forgetting reward logic.
 ## Example
 
 ```bash
-scripts/completitions_analysis/analyze-adaptive-completions.py \
+python eval/hold_out_styles/analyze-completions.py \
   --concept Confucius \
   --model-name Qwen/Qwen2.5-1.5B-Instruct \
   --output-csv outputs/completion_analysis/confucius-wandb-completions.csv
@@ -58,12 +58,11 @@ outputs/completion_analysis/confucius-wandb-completions.csv
 outputs/completion_analysis/confucius-wandb-completions.summary.csv
 ```
 
-The summary CSV includes one `all` row per source kind, one aggregate row per
-`hydra.training.grpo.mode`/source-kind pair, and one row per W&B run/source-kind
-pair. It reports:
+The summary CSV includes one aggregate row per reward type and one row per W&B
+run. It reports:
 
 - `total_rows`: all rows read from that source kind before filtering
-- `training_mode`: `hydra.training.grpo.mode` from the W&B run config, or `all`
+- `reward_type`: the Hydra reward type from the W&B run config
 - `matching_filter_rows`: rows analyzed after loading completion text
 - `near_target_rows`: rows where the fuzzy reward would be `0.0`
 - `near_without_exact_rows`: fuzzy reward matches without an exact match

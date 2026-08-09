@@ -105,11 +105,8 @@ def build_language_reward(config: Any) -> FastTextLanguageReward:
 
 def make_language_reward_func(
     language_reward: FastTextLanguageReward,
-    log_path: Path,
 ):
     def language_reward_func(prompts, completions, **kwargs) -> list[float]:
-        trainer_state = kwargs.get("trainer_state")
-        step = getattr(trainer_state, "global_step", None)
         log_extra = kwargs.get("log_extra")
         log_metric = kwargs.get("log_metric")
 
@@ -146,11 +143,6 @@ def make_language_reward_func(
 
 def build_language_reward_func(
     config: Any,
-    *,
-    log_path: Path,
 ):
     language_reward = build_language_reward(config)
-    return make_language_reward_func(
-        language_reward,
-        log_path,
-    )
+    return make_language_reward_func(language_reward)

@@ -1,7 +1,6 @@
 from __future__ import annotations
 
 from collections.abc import Callable
-from pathlib import Path
 from typing import Any
 
 from src.reward.components.avoid_refusal import build_refusal_reward_classifier
@@ -21,7 +20,6 @@ def build_reward_funcs(reward_config: Any, forget_concept: str) -> list[Callable
     refusal_classifier_config["mode"] = "reward_refusal"
     refusal_reward = build_refusal_reward_classifier(
         refusal_classifier_config,
-        log_path=Path("events.jsonl"),
     )
 
     def reward_r4(prompts, completions, **kwargs) -> list[float]:

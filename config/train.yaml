@@ -18,26 +18,7 @@ model:
 wandb:
   # Used by direct `python train.py` runs. `scripts/run-grpo.sh`
   # overrides this with its per-job RUN_NAME so train and eval share one folder.
-  # run_name: ${training.grpo.mode}-${data_generator.data_proposer.mode}-${oc.env:SLURM_JOB_ID,local}
   run_name: unlearning-${oc.env:SLURM_JOB_ID}
-
-data_generator:
-  safe: false
-  initial_standard_prompt_count: 64 # Adaptive mode warm-start prompts sampled from standard_data; null or 0 disables.
-  new_prompts_per_step: 0.1 # Fraction of the rollout prompt batch generated each step.
-  max_generated_prompts: 300 # Stop external prompt generation after this many accepted prompts; null disables the cap.
-  data_proposer:
-    model_name: gpt-5.4-nano
-    objective: "general" # general, unlearning
-    mode: "natural" # natural, expanded
-    execution:
-      mode: async_individual # batch or async_individual
-      max_concurrent_requests: 4 # async_individual only: maximum parallel external proposer requests.
-      prompts_per_context_item: 2 # async_individual only: new prompt variants requested per selected context prompt.
-    proposer_context:
-      context_mode: rollout_outcomes # summary or rollout_outcomes
-      context_max_prompts: 1 # Number of previous prompts selected as proposer context.
-      context_max_completions_per_prompt: 4 # rollout_outcomes only: recent completions/rewards included per context prompt.
 
 standard_data:
   name: jinzhuoran/RWKU
@@ -50,11 +31,6 @@ standard_data:
   grpo_test_size: 0.2
   sft_train_size: 0.10
   sft_test_size: 0.05
-
-buffer:
-  max_prompts: 512
-  high_reward_std_threshold: 0.2
-  high_mean_reward_threshold: 0.3
 
 reward:
   type: r2 # r0, r1, r2, r3, r4
@@ -145,7 +121,6 @@ training:
         refusal_completion_rate: 0.05
         r2_reward_threshold: 0.10
   grpo:
-    mode: standard # adaptive, standard
     # batch size
     per_device_train_batch_size: 64
     num_generations: 8
