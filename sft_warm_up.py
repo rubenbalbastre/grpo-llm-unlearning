@@ -22,8 +22,6 @@ def main(cfg: DictConfig) -> None:
     model, tokenizer = load_model_and_tokenizer(
         model_name,
         storage_root=cfg.paths.storage_root,
-        torch_dtype=cfg.model.torch_dtype,
-        attn_implementation=cfg.model.attn_implementation,
     )
     peft_config = get_peft_config(cfg, num_hidden_layers=model.config.num_hidden_layers)
     
@@ -50,7 +48,6 @@ def main(cfg: DictConfig) -> None:
         bf16=cfg.training.sft.bf16,
         fp16=cfg.training.sft.fp16,
         gradient_checkpointing=cfg.training.sft.gradient_checkpointing,
-        gradient_accumulation_steps=cfg.training.sft.gradient_accumulation_steps,
         report_to="wandb" if wandb_enabled else None,
         eval_strategy=cfg.training.sft.eval_strategy,
         eval_steps=cfg.training.sft.eval_steps,

@@ -1,19 +1,14 @@
 #!/usr/bin/env bash
 set -euo pipefail
 
-STORAGE_DIR="${STORAGE_DIR:-/storage/scratch/lv13/lv13594}"
-export HF_HOME="${HF_HOME:-${STORAGE_DIR}/huggingface}"
-export HF_TOKEN_PATH="${HF_TOKEN_PATH:-${HOME}/.cache/huggingface/token}"
-CONDA_DIR="${CONDA_DIR:-${STORAGE_DIR}/anaconda3}"
-TRAIN_ENV_PATH="${TRAIN_ENV_PATH:-${CONDA_DIR}/envs/py312_cu118}"
-REPO_DIR="${REPO_DIR:-${STORAGE_DIR}/machine-unlearning-llm}"
+REPO_DIR="${REPO_DIR:-/home/balalru/machine-unlearning-llm}"
 cd "${REPO_DIR}"
 
 LOW_REWARD_STOP_MARKER="low_reward_stop.json"
 RUN_RWKU_EVAL="${RUN_RWKU_EVAL:-true}"
-RUN_HOLDOUT_EVAL="${RUN_HOLDOUT_EVAL:-true}"
+RUN_HOLDOUT_EVAL="${RUN_HOLDOUT_EVAL:-false}"
 RUN_SFT_WARMUP="${RUN_SFT_WARMUP:-true}"
-STORAGE_ROOT="${STORAGE_ROOT:-${REPO_DIR}}"
+STORAGE_ROOT="${STORAGE_ROOT:-.}"
 DATA_ROOT="${STORAGE_ROOT}/data"
 OUTPUT_ROOT="${STORAGE_ROOT}/outputs"
 
@@ -82,25 +77,6 @@ run_sft_warmup_enabled() {
   flag_enabled "${RUN_SFT_WARMUP}"
 }
 
-submit_model_cache() {
-  local model_name="$1"
-  local cache_name="${model_name//\//--}"
-  local model_dir="${OUTPUT_ROOT}/model/${cache_name}"
-  local tokenizer_dir="${OUTPUT_ROOT}/tokenizer/${cache_name}"
-
-  if [[ -f "${model_dir}/.cache_complete" \
-    && -f "${model_dir}/config.json" \
-    && -f "${tokenizer_dir}/tokenizer_config.json" ]]; then
-    echo "done"
-    return
-  fi
-
-  sbatch --parsable \
-    scripts/cache-model-and-tokenizer.sh \
-    "${model_name}" \
-    "${STORAGE_ROOT}"
-}
-
 submit_data_splits() {
   local target="$1"
   local serial_dependency="${2:-}"
@@ -127,7 +103,7 @@ submit_data_splits() {
   fi
 
   sbatch --parsable \
-    ${sbatch_args[@]+"${sbatch_args[@]}"} \
+    "${sbatch_args[@]}" \
     scripts/generate-data-splits.sh \
     "experiment.forget_concept=${target}" \
     "paths.storage_root=${STORAGE_ROOT}"
@@ -158,13 +134,15 @@ dependency_is_unavailable() {
   [[ "${dependency}" == "partial" || "${dependency}" == "blocked" ]]
 }
 
-baseline_holdout_output_dir() {
+holdout_output_dir() {
   local concept="$1"
   local model_name_or_path="$2"
-  local baseline_label
+  local concept_part
+  local model_part
 
-  baseline_label="holdout-baseline-$(slug "${model_name_or_path}")-$(slug "${concept}")"
-  echo "${OUTPUT_ROOT}/${baseline_label}/final_model/hold_out_eval"
+  concept_part="$(echo "${concept// /-}" | tr '[:upper:]' '[:lower:]')"
+  model_part="${model_name_or_path//\//-}"
+  echo "${OUTPUT_ROOT}/hold_out_styles/${concept_part}-${model_part}"
 }
 
 submit_sft_warmup() {
@@ -182,7 +160,7 @@ submit_sft_warmup() {
     return
   fi
 
-  dependency_option="$(dependency_arg "${dependency}" "${serial_dependency}" "${MODEL_CACHE_JOB_ID:-}")"
+  dependency_option="$(dependency_arg "${dependency}" "${serial_dependency}")"
   if [[ -n "${dependency_option}" ]]; then
     sbatch_args+=("${dependency_option}")
   fi
@@ -199,7 +177,7 @@ submit_sft_warmup() {
 
   job_id="$(
     sbatch --parsable \
-      ${sbatch_args[@]+"${sbatch_args[@]}"} \
+      "${sbatch_args[@]}" \
       scripts/run-sft.sh \
       "wandb.run_name=${run_name}" \
       "model.name=${ORIGINAL_MODEL}" \
@@ -213,34 +191,6 @@ submit_sft_warmup() {
   echo "${job_id}|${output_dir}/final_model|${run_name}"
 }
 
-submit_sft_rwku() {
-  local checkpoint_root="$1"
-  local dependency="${2:-}"
-  local output_dir="${checkpoint_root}/final_model/eval_rwku"
-  local dependency_option
-  local -a sbatch_args=()
-
-  if [[ -f "${output_dir}/rwku_summary_table.csv" ]]; then
-    echo "done"
-    return
-  fi
-
-  if dependency_is_unavailable "${dependency}"; then
-    echo "blocked"
-    return
-  fi
-
-  dependency_option="$(dependency_arg "${dependency}")"
-  if [[ -n "${dependency_option}" ]]; then
-    sbatch_args+=("${dependency_option}")
-  fi
-
-  sbatch --parsable \
-    ${sbatch_args[@]+"${sbatch_args[@]}"} \
-    --export="ALL,CHECKPOINT_ROOT=${checkpoint_root},ONLY_FINAL_MODEL=true" \
-    scripts/eval-rwku.sh
-}
-
 submit_eval_gate() {
   local train_job_id="$1"
   local checkpoint_root="$2"
@@ -250,7 +200,7 @@ submit_eval_gate() {
   local holdout_dir
   local -a sbatch_args=()
 
-  holdout_dir="${checkpoint_root}/final_model/hold_out_eval"
+  holdout_dir="$(holdout_output_dir "${concept}" "${checkpoint_root}/final_model")"
 
   if [[ "${train_job_id}" == "done" ]]; then
     if [[ -f "${checkpoint_root}/${LOW_REWARD_STOP_MARKER}" ]]; then
@@ -279,7 +229,7 @@ submit_eval_gate() {
   fi
 
   sbatch --parsable \
-    ${sbatch_args[@]+"${sbatch_args[@]}"} \
+    "${sbatch_args[@]}" \
     --export="ALL,LOW_REWARD_STOP_MARKER=${LOW_REWARD_STOP_MARKER},RUN_RWKU_EVAL=${RUN_RWKU_EVAL},RUN_HOLDOUT_EVAL=${RUN_HOLDOUT_EVAL}" \
     scripts/submit-grpo-evals-if-learning.sh \
     "${checkpoint_root}" \
@@ -294,8 +244,6 @@ submit_rwku_baseline() {
   local target_slug
   local baseline_label
   local output_dir
-  local dependency_option
-  local -a sbatch_args=()
 
   model_slug="$(slug "${model_name_or_path}")"
   target_slug="$(slug "${target}")"
@@ -307,13 +255,7 @@ submit_rwku_baseline() {
     return
   fi
 
-  dependency_option="$(dependency_arg "${MODEL_CACHE_JOB_ID:-}")"
-  if [[ -n "${dependency_option}" ]]; then
-    sbatch_args+=("${dependency_option}")
-  fi
-
   sbatch --parsable \
-    ${sbatch_args[@]+"${sbatch_args[@]}"} \
     scripts/eval-rwku.sh \
     "evaluation.model_name_or_path=${model_name_or_path}" \
     "evaluation.output_dir=${output_dir}" \
@@ -334,19 +276,17 @@ submit_holdout() {
   local dependency_option
   local output_dir
   local stop_marker_path
+  local marker_guard=""
   local -a sbatch_args=()
 
-  if [[ "${label}" == "original" ]]; then
-    output_dir="$(baseline_holdout_output_dir "${target}" "${model_name_or_path}")"
-  else
-    output_dir="${model_name_or_path%/}/hold_out_eval"
-  fi
+  output_dir="$(holdout_output_dir "${target}" "${model_name_or_path}")"
   if [[ -n "${stop_marker_root}" ]]; then
     stop_marker_path="${stop_marker_root%/}/${LOW_REWARD_STOP_MARKER}"
     if [[ -f "${stop_marker_path}" ]]; then
       echo "skipped-stop-marker"
       return
     fi
+    marker_guard="if [ -f '${stop_marker_path}' ]; then echo 'Skipping hold-out because stop marker exists: ${stop_marker_path}'; cat '${stop_marker_path}'; exit 0; fi && "
   fi
 
   if [[ -f "${output_dir}/metrics.csv" && -f "${output_dir}/summary.csv" ]]; then
@@ -363,25 +303,19 @@ submit_holdout() {
     return
   fi
 
-  dependency_option="$(dependency_arg "${dependency}" "${serial_dependency}" "${MODEL_CACHE_JOB_ID:-}")"
+  dependency_option="$(dependency_arg "${dependency}" "${serial_dependency}")"
   if [[ -n "${dependency_option}" ]]; then
     sbatch_args+=("${dependency_option}")
   fi
 
   sbatch --parsable \
-    ${sbatch_args[@]+"${sbatch_args[@]}"} \
+    "${sbatch_args[@]}" \
     --job-name="holdout-${label}" \
     --output="logs/holdout-${label}-%j.log" \
     --gres=gpu:1 \
     --time="01:30:00" \
-    --partition="hopper" \
-    --qos="hopper" \
-    --export="ALL,SKIP_IF_MARKER=${stop_marker_path:-}" \
-    scripts/run-hold-out-completions-analysis.sh \
-    "concept=${target}" \
-    "model_name_or_path=${model_name_or_path}" \
-    "output_dir=${output_dir}" \
-    "paths.storage_root=${STORAGE_ROOT}"
+    --partition="sc-gpu" \
+    --wrap="cd ${REPO_DIR} && ${marker_guard}source \$HOME/anaconda3/etc/profile.d/conda.sh && conda activate py312 && python eval/hold_out_styles/generate-and-analyze-completions.py concept='${target}' model_name_or_path='${model_name_or_path}' paths.storage_root='${STORAGE_ROOT}'"
 }
 
 submit_grpo_and_evals() {
@@ -393,12 +327,7 @@ submit_grpo_and_evals() {
   local dependency="${6:-}"
   local serial_dependency="${7:-}"
 
-  local run_suffix="${reward}"
-  if [[ "${reward}" == "r2" ]]; then
-    run_suffix="r2-reasoning-low"
-  fi
-
-  local run_name="unlearning-$(slug "${base_label}")-$(slug "${model_label}")-$(slug "${target}")-${run_suffix}"
+  local run_name="unlearning-$(slug "${base_label}")-$(slug "${model_label}")-$(slug "${target}")-${reward}"
   local checkpoint_root="${OUTPUT_ROOT}/${run_name}"
   local train_job_id
   local eval_gate_job_id
@@ -416,12 +345,12 @@ submit_grpo_and_evals() {
       fi
       return
     fi
-    dependency_option="$(dependency_arg "${dependency}" "${serial_dependency}" "${MODEL_CACHE_JOB_ID:-}")"
+    dependency_option="$(dependency_arg "${dependency}" "${serial_dependency}")"
     if [[ -n "${dependency_option}" ]]; then
       sbatch_args+=("${dependency_option}")
     fi
   elif [[ -n "${serial_dependency}" ]]; then
-    dependency_option="$(dependency_arg "${serial_dependency}" "${MODEL_CACHE_JOB_ID:-}")"
+    dependency_option="$(dependency_arg "${serial_dependency}")"
     if [[ -n "${dependency_option}" ]]; then
       sbatch_args+=("${dependency_option}")
     fi
@@ -448,7 +377,7 @@ submit_grpo_and_evals() {
 
   train_job_id="$(
     sbatch --parsable \
-      ${sbatch_args[@]+"${sbatch_args[@]}"} \
+      "${sbatch_args[@]}" \
       --export="ALL,RUN_NAME=${run_name}" \
       scripts/run-grpo.sh \
       "model.name=${base_model}" \
@@ -490,13 +419,7 @@ done
 
 for original_model in "${original_models[@]}"; do
   ORIGINAL_MODEL="${original_model}"
-  MODEL_CACHE_JOB_ID="$(submit_model_cache "${ORIGINAL_MODEL}")"
   echo "Original model | ${ORIGINAL_MODEL}"
-  if [[ "${MODEL_CACHE_JOB_ID}" == "done" ]]; then
-    echo "Model cache | already exists"
-  else
-    echo "Model cache | ${MODEL_CACHE_JOB_ID}"
-  fi
   echo "Run RWKU eval | ${RUN_RWKU_EVAL}"
   echo "Run hold-out eval | ${RUN_HOLDOUT_EVAL}"
   echo "Run SFT warm-up | ${RUN_SFT_WARMUP}"
@@ -543,22 +466,6 @@ for original_model in "${original_models[@]}"; do
         previous_sft_job_id="${sft_job_id}"
       fi
       echo "  model:   ${r2_warmed_model}"
-
-      if run_rwku_eval_enabled; then
-        sft_rwku_job_id="$(
-          submit_sft_rwku \
-            "${r2_warmed_model%/final_model}" \
-            "${sft_job_id}"
-        )"
-        echo "R2 warm-up RWKU | ${target}"
-        if [[ "${sft_rwku_job_id}" == "done" ]]; then
-          echo "  rwku:    already exists (${r2_warmed_model})"
-        elif [[ "${sft_rwku_job_id}" == "blocked" ]]; then
-          echo "  rwku:    blocked by incomplete SFT warm-up (${r2_warmed_model})"
-        else
-          echo "  rwku:    ${sft_rwku_job_id} (${r2_warmed_model})"
-        fi
-      fi
 
       if run_holdout_eval_enabled; then
         sft_holdout_job_id="$(

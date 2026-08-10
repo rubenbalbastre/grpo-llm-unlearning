@@ -1,70 +1,47 @@
 #!/bin/bash -l
-#SBATCH --job-name=create-conda-env
-#SBATCH --output=/storage/scratch/lv13/lv13594/logs/create-conda-env-%j.log
-#SBATCH --qos=hopper
-#SBATCH --partition=hopper
+#SBATCH --job-name=slurm-create-conda-env
+#SBATCH --output=logs/slurm-create-conda-env-%j.log
+# Request the number of gpus usint "--gres=gpu:<number>". E.g.:
 #SBATCH --gres=gpu:1
-#SBATCH --time=01:00:00
-#SBATCH --cpus-per-task=2
-#SBATCH --mem=16G
+# Request more time using "--time=<hours:mins:secs>". E.g.:
+#SBATCH --time=00:30:00
+# Request time partition "--partition=<Partition>". E.g.:
+#SBATCH --partition=sc-gpu
 
-set -e
+# Add host, time, and directory name for later troubleshooting
+hostname; pwd; date
 
-hostname
-pwd
-date
+source "$HOME/anaconda3/etc/profile.d/conda.sh"
+ENV_PATH="$HOME/anaconda3/envs/py312"
 
-STORAGE_DIR="/storage/scratch/lv13/lv13594"
-CONDA_DIR="$STORAGE_DIR/anaconda3"
-TRAIN_ENV_PATH="${TRAIN_ENV_PATH:-$STORAGE_DIR/anaconda3/envs/py312_cu118}"
-PYTORCH_VERSION="${PYTORCH_VERSION:-2.6.0}"
-TORCHVISION_VERSION="${TORCHVISION_VERSION:-0.21.0}"
-TORCHAUDIO_VERSION="${TORCHAUDIO_VERSION:-2.6.0}"
-TORCH_BACKEND="${TORCH_BACKEND:-cu118}"
-TRL_VERSION="${TRL_VERSION:-1.5.1}"
-
-mkdir -p "$STORAGE_DIR/logs"
-mkdir -p "$STORAGE_DIR/tmp"
-
-export TMPDIR="$STORAGE_DIR/tmp"
-export UV_NO_CACHE=1
-export UV_LINK_MODE=copy
-
-echo "Installing Anaconda"
-
-if [ ! -f "$CONDA_DIR/bin/conda" ]; then
-    wget -O "$STORAGE_DIR/anaconda-installer.sh" \
-        https://repo.anaconda.com/archive/Anaconda3-2025.06-1-Linux-x86_64.sh
-
-    bash "$STORAGE_DIR/anaconda-installer.sh" \
-        -b \
-        -p "$CONDA_DIR"
+echo "Checking for environment at $ENV_PATH"
+if ! conda env list | awk '{print $1}' | grep -qx "py312"; then
+  echo "Create environment at $ENV_PATH"
+  conda create -y -p "$ENV_PATH" python=3.12.3
 else
-    echo "Anaconda already installed"
+  echo "Environment already exists at $ENV_PATH"
 fi
 
-source "$CONDA_DIR/etc/profile.d/conda.sh"
+echo "Activate environment"
+conda activate "$ENV_PATH"
 
-echo "Checking environment at $TRAIN_ENV_PATH"
+echo "Installing high-speed dependency manager"
+pip install --upgrade uv
 
-if [ ! -f "$TRAIN_ENV_PATH/bin/python" ]; then
-    echo "Creating environment"
-    conda create -y -p "$TRAIN_ENV_PATH" python=3.12.3 pip
-else
-    echo "Environment already exists"
-fi
+echo "Executing proper multi-repository installation"
 
-echo "Activating environment"
-conda activate "$TRAIN_ENV_PATH"
+# 1. Clear out any broken build artifacts from the last failure
+uv cache clean
+rm -rf ~/.cache/uv/
 
-echo "Installing uv"
-python -m pip install --upgrade uv
+# # Install GCC 11 and G++ 11 from the conda-forge channel
+# conda install -c conda-forge gcc_linux-64=11 gxx_linux-64=11 -y
 
-echo "Installing dependencies"
+# # Point your environment variables to the new compiler
+# export CC=$CONDA_PREFIX/bin/x86_64-conda-linux-gnu-gcc
+# export CXX=$CONDA_PREFIX/bin/x86_64-conda-linux-gnu-g++
 
-module load gcc/12.3_rhel8
-module load cuda/11.8_rhel8
-
+# 2. Run the unified installation explicitly locking onto pre-built cu126 binaries
 uv pip install \
     --reinstall \
     --torch-backend="${TORCH_BACKEND}" \

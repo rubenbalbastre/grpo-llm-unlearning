@@ -1,9 +1,10 @@
 #!/bin/bash -l
 #SBATCH --job-name=slurm-run-unlearning
-#SBATCH --output=logs/slurm-run-unlearning-%j.log
-#SBATCH --gres=gpu:2
-#SBATCH --time=08:00:00
-#SBATCH --partition=sc-gpu
+#SBATCH --output=logs/grpo-%j.log
+#SBATCH --gres=gpu:1
+#SBATCH --time=01:00:00
+#SBATCH --partition=hopper
+#SBATCH --qos=hopper
 set -euo pipefail
 
 hostname; pwd; date
@@ -12,7 +13,7 @@ echo "Activate virtual environment (must exist)"
 conda activate py312
 echo "Run program in virtual environment"
 
-REPO_DIR="${REPO_DIR:-/home/balalru/machine-unlearning-llm}"
+REPO_DIR="${REPO_DIR:-/home/lv13/lv13594/machine-unlearning-llm}"
 cd "${REPO_DIR}"
 TRAIN_SCRIPT="${TRAIN_SCRIPT:-${REPO_DIR}/train.py}"
 TRAIN_CONFIG="${TRAIN_CONFIG:-${REPO_DIR}/config/train.yaml}"

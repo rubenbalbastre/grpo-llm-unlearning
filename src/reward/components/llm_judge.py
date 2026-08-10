@@ -156,7 +156,7 @@ def make_llm_judge_reward_func(
 ):
     model_name = str(config.get("model_name", "gpt-5.4-nano"))
     temperature = float(config.get("temperature", 0.0))
-    reasoning_effort = str(config.get("reasoning_effort", "none")).lower()
+    reasoning_effort = str(config.get("reasoning_effort", "low")).lower()
     if reasoning_effort not in SUPPORTED_REASONING_EFFORTS:
         raise ValueError(
             "reward.functions.llm-judge.reasoning_effort must be one of "

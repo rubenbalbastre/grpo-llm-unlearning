@@ -52,8 +52,6 @@ def main(cfg: DictConfig) -> None:
     model, tokenizer = load_model_and_tokenizer(
         model_name,
         storage_root=cfg.paths.storage_root,
-        torch_dtype=cfg.model.torch_dtype,
-        attn_implementation=cfg.model.attn_implementation,
     )
     loaded_peft_adapter = has_peft_adapter(model)
     if loaded_peft_adapter:

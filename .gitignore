@@ -9,4 +9,3 @@ data/*
 *.tar.gz
 */__pycache__/*
 *.pyc
-results/
