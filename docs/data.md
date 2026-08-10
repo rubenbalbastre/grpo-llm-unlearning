@@ -68,3 +68,45 @@ sft/test
 ```
 
 Training loads those splits through `src.data_preprocessing.load_dataset`.
+
+## Hugging Face Dataset Repository
+
+Export all concept folders under `data/` into one private Hugging Face dataset
+repo:
+
+```bash
+python scripts/upload-data-to-hf.py
+```
+
+Authentication is read from `.env` using `HF_TOKEN` or
+`HUGGINGFACE_HUB_TOKEN`.
+
+Override the data root or repo id if needed:
+
+```bash
+python scripts/upload-data-to-hf.py data username/unlearning-data
+```
+
+The parquet files include a `concept` column.
+
+The repository files are:
+
+```text
+grpo_train.parquet
+sft_train.parquet
+sft_validation.parquet
+holdout.parquet
+README.md
+```
+
+Split mapping:
+
+```text
+grpo/train -> grpo_train.parquet
+sft/train -> sft_train.parquet
+sft/test -> sft_validation.parquet
+grpo/test -> holdout.parquet
+```
+
+The uploaded `README.md` declares these files under `configs.data_files` so the
+Hugging Face Dataset Viewer can discover the custom split names.
