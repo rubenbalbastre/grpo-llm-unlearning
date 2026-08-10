@@ -1,15 +1,17 @@
 from typing import List, Optional
 
 from datasets import load_dataset
+import numpy as np
 
 
 def load_rwku_split(config_name: str):
     loaded = load_dataset("jinzhuoran/RWKU", config_name)
-    if "test" in loaded:
-        return loaded["test"]
-    if "train" in loaded:
-        return loaded["train"]
-    return loaded[next(iter(loaded.keys()))]
+    split = loaded["test"]
+    # remove duplicates
+    if "query" in split.column_names:
+        _, unique_indices = np.unique(split["query"], return_index=True)
+        split = split.select(sorted(unique_indices))
+    return split
 
 
 def filter_subjects(dataset, subjects: Optional[List[str]]):
@@ -19,10 +21,23 @@ def filter_subjects(dataset, subjects: Optional[List[str]]):
     return dataset.filter(lambda x: x["subject"] in subject_set)
 
 
-def select_max_examples(dataset, max_examples: Optional[int]):
+def select_max_examples(
+    dataset,
+    max_examples: Optional[int],
+    sample_strategy: str = "first",
+    sample_seed: int = 42,
+):
     if max_examples is None:
         return dataset
-    return dataset.select(range(min(max_examples, len(dataset))))
+    max_examples = int(max_examples)
+    if max_examples <= 0:
+        raise ValueError("max_examples must be positive or null.")
+    sample_size = min(max_examples, len(dataset))
+    if sample_strategy == "first":
+        return dataset.select(range(sample_size))
+    if sample_strategy == "random":
+        return dataset.shuffle(seed=int(sample_seed)).select(range(sample_size))
+    raise ValueError("sample_strategy must be 'first' or 'random'.")
 
 
 def shard_dataset(dataset, shard) -> object:

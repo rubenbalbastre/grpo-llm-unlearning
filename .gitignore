@@ -4,6 +4,8 @@ venv
 logs/
 wandb/
 outputs/
+data/*
 
+*.tar.gz
 */__pycache__/*
 *.pyc

@@ -1,19 +1,20 @@
 import math
 import re
+import string
 from collections import Counter
 
-from rouge_score import rouge_scorer
+import nltk
+from rouge import Rouge
 
 
 def rouge_l_recall(prediction: str, reference: str) -> float:
-    scorer = rouge_scorer.RougeScorer(["rougeL"], use_stemmer=True)
-    return scorer.score(reference, prediction)["rougeL"].recall
+    return Rouge().get_scores(hyps=prediction, refs=reference)[0]["rouge-l"]["r"]
 
 
 def normalize_for_match(text: str) -> str:
     text = text.lower()
+    text = "".join(char for char in text if char not in set(string.punctuation))
     text = re.sub(r"\b(a|an|the)\b", " ", text)
-    text = re.sub(r"[^a-z0-9\s]", " ", text)
     return " ".join(text.split())
 
 
@@ -36,14 +37,19 @@ def token_f1_score(prediction: str, reference: str) -> float:
 
 
 def ngram_entropy(text: str, n: int) -> float:
-    tokens = normalize_for_match(text).split()
+    """Official RWKU fluency entropy (NLTK tokens, Shannon entropy in bits)."""
+    tokens = nltk.word_tokenize(text)
     if len(tokens) < n:
         return 0.0
-    ngrams = [tuple(tokens[i : i + n]) for i in range(len(tokens) - n + 1)]
+    ngrams = list(nltk.ngrams(tokens, n))
     counts = Counter(ngrams)
     total = sum(counts.values())
     return -sum((count / total) * math.log2(count / total) for count in counts.values())
 
 
 def weighted_ngram_entropy(text: str) -> float:
-    return (2 * ngram_entropy(text, 2) + 3 * ngram_entropy(text, 3)) / 5
+    # RWKU applies [2/3, 4/3] before taking the arithmetic mean.
+    return (
+        (2.0 / 3.0) * ngram_entropy(text, 2)
+        + (4.0 / 3.0) * ngram_entropy(text, 3)
+    ) / 2.0

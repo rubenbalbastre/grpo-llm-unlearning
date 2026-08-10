@@ -6,6 +6,20 @@ from omegaconf import DictConfig, OmegaConf
 from dotenv import dotenv_values
 
 
+def load_yaml_config(path: Path, label: str) -> dict | None:
+    if path.exists():
+        return OmegaConf.to_container(
+            OmegaConf.load(path),
+            resolve=True,
+        )
+    print(f"{label} config not found: {path}")
+    return None
+
+
+def training_run_dir_for_model(model_dir: Path) -> Path:
+    return model_dir if model_dir.parent.name == "outputs" else model_dir.parent
+
+
 def log_wandb_results(
     evaluation: DictConfig,
     env_values: dict,
@@ -33,7 +47,7 @@ def log_wandb_results(
     model_dir = Path(evaluation.model_name_or_path)
     training_run_info = None
     if evaluation.wandb.link_to_training_run:
-        run_info_path = model_dir / "wandb_run.json"
+        run_info_path = training_run_dir_for_model(model_dir) / "wandb_run.json"
         if run_info_path.exists():
             training_run_info = json.loads(run_info_path.read_text(encoding="utf-8"))
             if training_run_info["project"] != project:
@@ -45,8 +59,7 @@ def log_wandb_results(
         else:
             raise ValueError(
                 "evaluation.wandb.link_to_training_run=true requires "
-                "wandb_run.json in evaluation.model_name_or_path. Set it to false "
-                "to create a separate evaluation run."
+                f"{run_info_path}. Set it to false to create a separate evaluation run."
             )
 
     generation_by_split = {
@@ -76,31 +89,30 @@ def log_wandb_results(
     hydra_config = None
     if training_config_path:
         training_config_file = Path(training_config_path)
-        if training_config_file.exists():
-            hydra_config = OmegaConf.to_container(
-                OmegaConf.load(training_config_file),
-                resolve=True,
-            )
-        else:
-            print(f"Training Hydra config not found: {training_config_file}")
+        hydra_config = load_yaml_config(training_config_file, "Training Hydra")
 
-    artifact = wandb.Artifact(
-        name=str(evaluation.wandb.artifact_name),
-        type="model" if evaluation.wandb.log_model_artifact else "evaluation",
-        metadata={
-            "model_name_or_path": str(evaluation.model_name_or_path),
-            "subjects": str(evaluation.subjects),
-            "checkpoint": checkpoint_metadata,
-        },
-    )
-    if evaluation.wandb.log_model_artifact:
-        if not model_dir.is_dir():
-            raise ValueError(
-                "evaluation.wandb.log_model_artifact=true requires "
-                "evaluation.model_name_or_path to be a local model directory."
-            )
-        artifact.add_dir(str(model_dir), name="model")
-    artifact.add_dir(str(output_dir), name="rwku_evaluation")
+    eval_config_path = Path(__file__).resolve().parents[2] / "config" / "eval.yaml"
+    eval_config = load_yaml_config(eval_config_path, "Evaluation Hydra")
+
+    artifact = None
+    if evaluation.wandb.get("log_artifact", False):
+        artifact = wandb.Artifact(
+            name=str(evaluation.wandb.artifact_name),
+            type="model" if evaluation.wandb.log_model_artifact else "evaluation",
+            metadata={
+                "model_name_or_path": str(evaluation.model_name_or_path),
+                "subjects": str(evaluation.subjects),
+                "checkpoint": checkpoint_metadata,
+            },
+        )
+        if evaluation.wandb.log_model_artifact:
+            if not model_dir.is_dir():
+                raise ValueError(
+                    "evaluation.wandb.log_model_artifact=true requires "
+                    "evaluation.model_name_or_path to be a local model directory."
+                )
+            artifact.add_dir(str(model_dir), name="model")
+        artifact.add_dir(str(output_dir), name="rwku_evaluation")
 
     init_kwargs = {
         "project": project,
@@ -114,6 +126,8 @@ def log_wandb_results(
             "checkpoint": checkpoint_metadata,
             "training_config_path": str(training_config_path) if training_config_path else None,
             "hydra": hydra_config,
+            "eval_config_path": str(eval_config_path),
+            "eval_hydra": eval_config,
         },
     }
     if training_run_info:
@@ -131,7 +145,8 @@ def log_wandb_results(
 
     with wandb.init(**init_kwargs) as run:
         run.log({key: value for key, value in scalar_metrics.items() if value is not None})
-        run.log_artifact(artifact)
+        if artifact is not None:
+            run.log_artifact(artifact)
 
 
 def run_evaluation(cfg: DictConfig) -> None:
@@ -218,7 +233,7 @@ def run_evaluation(cfg: DictConfig) -> None:
             model=model,
             tokenizer=tokenizer,
             subjects=subjects,
-            max_examples=evaluation.limits.max_examples,
+            max_examples=None,
             shard=shard,
             max_new_tokens=evaluation.generation.max_new_tokens,
             temperature=evaluation.generation.temperature,
@@ -231,7 +246,7 @@ def run_evaluation(cfg: DictConfig) -> None:
             model=model,
             tokenizer=tokenizer,
             subjects=subjects,
-            max_examples=evaluation.limits.max_examples,
+            max_examples=None,
             shard=shard,
             max_new_tokens=evaluation.generation.max_new_tokens,
             temperature=evaluation.generation.temperature,
@@ -245,11 +260,7 @@ def run_evaluation(cfg: DictConfig) -> None:
             model=model,
             tokenizer=tokenizer,
             subjects=subjects,
-            max_examples=(
-                evaluation.limits.max_mia_examples
-                if evaluation.limits.max_mia_examples is not None
-                else evaluation.limits.max_examples
-            ),
+            max_examples=None,
             shard=shard,
             batch_size=evaluation.mia_batch_size,
             loss=evaluation.metrics.mia.loss,
@@ -263,11 +274,14 @@ def run_evaluation(cfg: DictConfig) -> None:
         all_utility_rows = evaluate_utility_set(
             model=model,
             tokenizer=tokenizer,
+            subjects=subjects,
             max_examples=(
                 evaluation.limits.max_utility_examples
                 if evaluation.limits.max_utility_examples is not None
-                else evaluation.limits.max_examples
+                else None
             ),
+            sample_strategy=evaluation.limits.utility_sample_strategy,
+            sample_seed=evaluation.limits.utility_sample_seed,
             shard=shard,
             max_new_tokens=evaluation.generation.max_new_tokens,
             temperature=evaluation.generation.temperature,

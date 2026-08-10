@@ -1,37 +1,22 @@
 defaults:
   - _self_
-
+  
 experiment:
-  seed: 42 # 1, 1234, 42
-  forget_concept: Confucius # Stephen King
-  push_to_hub: false
+  seed: 1234 # 1, 1234, 42
+  forget_concept: Serena Williams #Justin Timberlake #Confucius # Stephen King Nicolas Cage
+  push_to_hub: false # binary
+  notes: draft-paper-run
 
 paths:
-  output_root: outputs
+  storage_root: .
 
 model:
-  name: "Qwen/Qwen2.5-1.5B-Instruct" # "microsoft/Phi-3-mini-4k-instruct", Qwen/Qwen2.5-3B-Instruct, Qwen/Qwen2.5-1.5B-Instruct
+  name: ./outputs/r2warmup_qwen_qwen2_5_7b_instruct_karl_marx/final_model/ # "microsoft/Phi-3-mini-4k-instruct", Qwen/Qwen2.5-3B-Instruct, "./outputs/unlearning-sft-4928/checkpoint-13/"
 
 wandb:
-  # Used by direct `python train.py` runs. `scripts/slurm-run-unlearning.sh`
+  # Used by direct `python train.py` runs. `scripts/run-grpo.sh`
   # overrides this with its per-job RUN_NAME so train and eval share one folder.
-  run_name: ${training.mode}-${data_generator.data_proposer.mode}-${oc.env:SLURM_JOB_ID,local}
-
-data_generator:
-  safe: false
-  new_prompts_per_step: 0.05 # Fraction of the rollout prompt batch generated each step.
-  max_generated_prompts: 300 # Stop external prompt generation after this many accepted prompts; null disables the cap.
-  data_proposer:
-    model_name: gpt-5.4-nano
-    mode: "natural" # natural or expanded
-    execution:
-      mode: async_individual # batch or async_individual
-      max_concurrent_requests: 4 # async_individual only: maximum parallel external proposer requests.
-      prompts_per_context_item: 2 # async_individual only: new prompt variants requested per selected context prompt.
-    proposer_context:
-      context_mode: rollout_outcomes # summary or rollout_outcomes
-      context_max_prompts: 1 # Number of previous prompts selected as proposer context.
-      context_max_completions_per_prompt: 4 # rollout_outcomes only: recent completions/rewards included per context prompt.
+  run_name: unlearning-${oc.env:SLURM_JOB_ID}
 
 standard_data:
   name: jinzhuoran/RWKU
@@ -40,22 +25,44 @@ standard_data:
   subject_column: subject
   prompt_column: instruction
   dataset_size: 300 # Samples retained after filtering by forget_concept, e.g. 100.
-
-offline_data:
-  path: outputs/offline-synthetic/prompts_stephen_king.jsonl
-  split: train
-  prompt_column: prompt
-  dataset_size: 100 # Samples retained from the fixed offline synthetic dataset, e.g. 100.
-
-buffer:
-  max_prompts: 512
-  high_reward_std_threshold: 0.2
-  high_mean_reward_threshold: 0.3
+  shuffle_seed: 42
+  grpo_test_size: 0.2
+  sft_train_size: 0.10
+  sft_test_size: 0.05
 
 reward:
-  mode: binary # entity_count or binary
+  type: r2 # r0, r1, r2, r3, r4
+  functions:
+    simple_match:
+      mode: binary
+      pattern_splits: ["hard", "soft"]
+      length_aware_min_words: 50
+      length_aware_alpha: 20.0
+      exponential_alpha: 1.0
+    language:
+      model_path: ${oc.env:FASTTEXT_LID_PATH,null} # Path to fastText lid.176.ftz or lid.176.bin.
+      min_chars: 20 # Short completions are scored neutral because language ID is unreliable.
+      english_confidence_threshold: 0.6 # +1 when top prediction is English above this confidence.
+      uncertain_confidence_threshold: 0.6 # 0 when top prediction confidence is below this value; otherwise non-English is -1.
+    fuzzy_match:
+      mode: length_aware
+      pattern_splits: ["hard"]
+      length_aware_min_words: 50
+      length_aware_alpha: 30.0
+    llm-judge:
+      model_name: gpt-5.4-nano
+      reasoning_effort: null # low for mini
+      temperature: 0.0 # Used only when reasoning_effort is none.
+      max_concurrent_requests: 8
+    refusal_reward_classifier:
+      mode: reward_non_refusal # reward_non_refusal or reward_refusal
+      model_name: garak-llm/garak-refusal-detector
+      batch_size: 32
+      truncation: true
+      threshold: ${training.sft.monitoring.classifier.threshold}
 
 peft:
+  enabled: true # Set false for full fine-tuning.
   lora:
     r: 64
     alpha: 128
@@ -71,25 +78,90 @@ peft:
     number_layers_to_transform: -1 # Set to -1 to apply LoRA to all transformer layers.
 
 training:
-  mode: standard # adaptive, standard, or offline
-  per_device_train_batch_size: 16
-  num_generations: 8
-  gradient_accumulation_steps: 8
-  gradient_checkpointing: True
-  steps_per_generation: 8
-  num_iterations: 2
-  beta: 0.04
-  learning_rate: 1.0e-5
-  max_completion_length: 256
-  remove_unused_columns: false
-  log_completions: true
-  logging_steps: 5
-  max_steps: 100000 # too large since token budget callback will stop training when the token budget is reached. Set to -1 to disable.
-  num_epochs: 40 # Applied only when mode is standard and max_steps is -1.
-  lr_scheduler_type: "constant"
-  callback:
-    checkpoint_token_milestones: [1_500_000, 3_000_000, 4_500_000] # e.g. [1_500_000, 3_000_000, 4_500_000] to save checkpoints at token counts.
-    token_budget: 6_000_000 #3_000_000 # null if not using StopOnTokenBudgetCallback
+  sft:
+    objective: broad # refusal or broad
+    per_device_train_batch_size: 16
+    gradient_accumulation_steps: 1
+    gradient_checkpointing: true
+    fp16: true # V100 supports FP16, not BF16.
+    bf16: false
+    # logging
+    logging_steps: 1
+    save_final_model: false # Set false to keep only checkpoint-* snapshots.
+    save_strategy: "steps"
+    save_steps: 1
+    # learning rate, scheduler
+    num_train_epochs: 10
+    max_steps: 12 # too large since token budget callback will stop training when the token budget is reached. Set to -1 to disable.
+    learning_rate: 1.0e-5
+    lr_scheduler_type: "constant" #"constant"
+    warmup_steps: 3
+    # eval
+    start_eval_on_step: 5
+    eval_strategy: "steps"
+    eval_steps: 1
+    per_device_eval_batch_size: 16
+    eval_accumulation_steps: 1
+    monitoring:
+      generation:
+        num_generations: 8
+        max_prompts: 128
+        batch_size: 8
+        max_new_tokens: 128
+        temperature: 1.0
+        top_p: 1.0
+        log_completions: true
+      classifier:
+        model_name: ${reward.functions.refusal_reward_classifier.model_name}
+        batch_size: 32
+        threshold: 0.5
+      stop_conditions:
+        refusal_completion_rate: 0.05
+        r2_reward_threshold: 0.10
+  grpo:
+    # batch size
+    per_device_train_batch_size: 8
+    num_generations: 8
+    gradient_accumulation_steps: 8
+    gradient_checkpointing: true
+    fp16: true # V100 supports FP16, not BF16.
+    bf16: false
+    steps_per_generation: 8
+    # sampling
+    temperature: 1.0
+    top_p: 1.0
+    max_completion_length: 256
+    # logging
+    remove_unused_columns: false
+    log_completions: true
+    logging_steps: 1
+    save_final_model: false # Set false to keep only checkpoint-* snapshots.
+    # learning rate, scheduler
+    num_train_epochs: 40
+    max_steps: 150 # too large since token budget callback will stop training when the token budget is reached. Set to -1 to disable.
+    learning_rate: 1.0e-5 # for 1.5B model, 1.0e-4 for 3B model
+    lr_scheduler_type: "constant" #"constant"
+    warmup_ratio: 0 #0.05
+    # others
+    num_iterations: 2
+    beta: 0.04
+    ddp_find_unused_parameters: false
+    # eval
+    eval_strategy: "steps"
+    eval_steps: 300
+    per_device_eval_batch_size: 8
+    eval_accumulation_steps: 16
+    num_generations_eval: 8
+    # callbacks
+    callback:
+      checkpoint_token_milestones: [100_000, 200_000, 300_000, 400_000, 500_000, 600_000, 700_000, 800_000, 900_000, 1_000_000, 1_200_000, 1_500_000] # Save checkpoints at token counts.
+      token_budget: 1_500_000 #3_000_000 # null if not using StopOnTokenBudgetCallback
+      high_reward_stop:
+        threshold: 0.90
+        max_optimizer_steps_above_threshold: 5
+        metric_names: ["train/reward", "reward"]
+      no_learning_stop:
+        threshold: 0.05
 
 hydra:
   job:

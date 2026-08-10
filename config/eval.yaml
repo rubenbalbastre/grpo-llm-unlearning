@@ -1,7 +1,7 @@
 evaluation:
-  model_name_or_path: outputs/unlearning-3568/final_model
-  output_dir: outputs/unlearning-3568/eval_rwku
-  subjects: Confucius
+  model_name_or_path: outputs/unlearning-3568/checkpoint-175
+  output_dir: outputs/unlearning-3568/checkpoint-175/eval_rwku
+  subjects: Justin Timberlake
   training_config_path: null
   shard:
     index: 0
@@ -22,9 +22,9 @@ evaluation:
       min_k_plus_plus: false
 
   limits:
-    max_examples: null
-    max_mia_examples: null
-    max_utility_examples: 200
+    max_utility_examples: null
+    utility_sample_strategy: random # first or random; applied before sharding.
+    utility_sample_seed: 42
 
   batch_size: 32
   mia_batch_size: 32
@@ -56,5 +56,6 @@ evaluation:
     entity: null
     run_name: rwku-${evaluation.subjects}
     artifact_name: rwku-${evaluation.subjects}-model
-    log_model_artifact: true
-    link_to_training_run: true
+    log_artifact: true
+    log_model_artifact: false
+    link_to_training_run: false
