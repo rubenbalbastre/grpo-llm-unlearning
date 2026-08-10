@@ -15,7 +15,6 @@ sys.path.insert(0, str(REPO_ROOT))
 
 from eval.hold_out_styles.analysis_utils import (  # noqa: E402
     add_llm_judge_metrics,
-    add_local_reward_metrics,
     llm_judge_metrics,
 )
 
@@ -24,7 +23,6 @@ from eval.hold_out_styles.analysis_utils import (  # noqa: E402
 class DownloadedRun:
     run_name: str
     completions_tables: list[str]
-    training_mode: str
     reward_type: str
 
 
@@ -49,10 +47,7 @@ def scan_completion_files(
         # filter last optimization step
         tmp_df = tmp_df[tmp_df['step'] == 159]
         
-        tmp_df = add_local_reward_metrics(tmp_df, concept)
-                
         tmp_df['forget_concept'] = concept
-        tmp_df['training_mode'] = run.training_mode
         tmp_df['run_name'] = run.run_name
         tmp_df['reward_type'] = run.reward_type
 
@@ -67,19 +62,22 @@ def scan_completion_files(
 
 def aggregate_results(df):
 
-    metrics = ['forgetting_reward', 'forgetting_fuzzy_reward', 'language_reward'] + llm_judge_metrics
+    candidate_metrics = ['forgetting_reward', 'forgetting_fuzzy_reward', 'language_reward'] + llm_judge_metrics
+    metrics = [metric for metric in candidate_metrics if metric in df.columns]
+    if not metrics:
+        raise ValueError("No reward or judge metric columns available to aggregate.")
     by_run = (
-        df.groupby(['forget_concept', 'training_mode', 'run_name', 'reward_type'], as_index=False)
+        df.groupby(['forget_concept', 'run_name', 'reward_type'], as_index=False)
         [metrics]
         .agg(['std', 'mean'])
     )
-    by_training_mode = (
-        df.groupby(['forget_concept', 'training_mode', 'reward_type'], as_index=False)
+    by_reward_type = (
+        df.groupby(['forget_concept', 'reward_type'], as_index=False)
         [metrics]
         .agg(['std', 'mean'])
     )
-    by_training_mode['run_name'] = 'all'
-    analysis = pd.concat([by_run, by_training_mode], ignore_index=True)
+    by_reward_type['run_name'] = 'all'
+    analysis = pd.concat([by_run, by_reward_type], ignore_index=True)
     analysis.columns = [f"{col[0]}_{col[1]}" for col in analysis.columns]
 
     return analysis
@@ -114,10 +112,6 @@ def download_wandb_completion_files(
         filters["displayName"] = run_name
 
     for run in api.runs(project, filters=filters, per_page=100, lazy=True):
-        config = dict(run.config)
-        hydra_config = config.get("hydra", {})
-        training_mode = hydra_config.get("training", {}).get("mode")
-
         run_dir = download_dir / f"{run.name or run.id}-{run.id}"
         matched_runs += 1
         downloaded_completions_tables = []
@@ -135,7 +129,6 @@ def download_wandb_completion_files(
             DownloadedRun(
                 run_name=getattr(run, "name"),
                 completions_tables=downloaded_completions_tables,
-                training_mode=training_mode,
                 reward_type=reward_type
             )
         )

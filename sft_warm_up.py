@@ -26,7 +26,7 @@ def main(cfg: DictConfig) -> None:
     peft_config = get_peft_config(cfg, num_hidden_layers=model.config.num_hidden_layers)
     
     forget_concept = cfg.experiment.forget_concept
-    dataset = setup_training_data(cfg, paths.events_log_path, training_mode="sft", tokenizer=tokenizer)
+    dataset = setup_training_data(cfg, training_mode="sft", tokenizer=tokenizer)
     # NOTE: custom change
     sft_objective = str(cfg.training.sft.objective)
     if sft_objective not in {"refusal", "broad"}:

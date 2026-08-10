@@ -43,10 +43,53 @@ rm -rf ~/.cache/uv/
 
 # 2. Run the unified installation explicitly locking onto pre-built cu126 binaries
 uv pip install \
-  torch torchvision torchaudio faiss-gpu-cu12 \
-  trl peft transformers accelerate deepspeed datasets wandb hydra-core \
-  --torch-backend=cu126
-  # vllm
+    --reinstall \
+    --torch-backend="${TORCH_BACKEND}" \
+    "torch==${PYTORCH_VERSION}" \
+    "torchvision==${TORCHVISION_VERSION}" \
+    "torchaudio==${TORCHAUDIO_VERSION}"
 
-uv pip install weave python-dotenv sentence-transformers openai rouge-score
+uv pip install \
+    --torch-backend="${TORCH_BACKEND}" \
+    "torch==${PYTORCH_VERSION}" \
+    "torchvision==${TORCHVISION_VERSION}" \
+    "torchaudio==${TORCHAUDIO_VERSION}" \
+    "trl==${TRL_VERSION}" \
+    transformers \
+    peft \
+    accelerate \
+    deepspeed \
+    datasets \
+    wandb \
+    hydra-core \
+    weave \
+    python-dotenv \
+    sentence-transformers \
+    openai \
+    ninja \
+    wheel \
+    setuptools \
+    packaging \
+    psutil
+
+uv pip install rouge
+
+echo "FlashAttention-2 build settings"
+
+export CC="$(command -v gcc)"
+export CXX="$(command -v g++)"
+export MAX_JOBS=1
+export NVCC_THREADS=1
+export FLASH_ATTN_CUDA_ARCHS=90
+
+echo "MAX_JOBS=$MAX_JOBS"
+echo "NVCC_THREADS=$NVCC_THREADS"
+echo "FLASH_ATTN_CUDA_ARCHS=$FLASH_ATTN_CUDA_ARCHS"
+
+# Keep FlashAttention disabled unless the cluster CUDA module and PyTorch
+# version are known to match.
+# uv pip install flash-attn==2.8.3.post1 --no-build-isolation
+
+echo "Installation completed"
+python -c "import torch, trl; import torch.distributed.fsdp as fsdp; print(torch.__version__, torch.version.cuda); print(trl.__version__); print('FSDPModule', hasattr(fsdp, 'FSDPModule')); torch.cuda.set_device(0); print(torch.ones(1, device='cuda'))"
 date

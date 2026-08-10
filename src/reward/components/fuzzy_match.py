@@ -3,10 +3,8 @@ import re
 import unicodedata
 from dataclasses import dataclass
 from rapidfuzz import fuzz
-from pathlib import Path
 from typing import Any, Iterable
 
-from src.data_generator.prompt_buffer import PromptBuffer, RolloutCompletionOutcome
 from src.reward.components.constants.target_patterns import get_target_patterns
 from src.reward.components.simple_match import count_words
 
@@ -86,8 +84,6 @@ def has_fuzzy_match(
 
 
 def make_forgetting_fuzzy_reward_func(
-    buffer: PromptBuffer | None,
-    log_path: Path,
     forget_concept: str,
     reward_mode: str = "entity_count",
     pattern_splits: str | Iterable[str] = ("hard", "soft"),
@@ -114,8 +110,6 @@ def make_forgetting_fuzzy_reward_func(
 
     def forgetting_fuzzy_reward(prompts, completions, **kwargs) -> list[float]:
         rewards: list[float] = []
-        trainer_state = kwargs.get("trainer_state")
-        step = getattr(trainer_state, "global_step", None)
         log_extra = kwargs.get("log_extra")
 
         selected_prompts = kwargs.get("selected_prompt", prompts)
@@ -132,7 +126,7 @@ def make_forgetting_fuzzy_reward_func(
         matched_entities_log: list[str] = []
         matched_entity_count_log: list[int] = []
         word_count_log: list[int] = []
-        for prompt, completion in zip(prompts_list, completions_list, strict=True):
+        for completion in completions_list:
             completion_text = str(completion)
             if reward_mode == "length_aware":
                 reward, matched_entities = compute_length_aware_fuzzy_reward(
@@ -147,15 +141,6 @@ def make_forgetting_fuzzy_reward_func(
                     entity_matchers,
                 )
 
-            if buffer is not None:
-                buffer.record_rollout_outcome(
-                    str(prompt),
-                    RolloutCompletionOutcome(
-                        completion=str(completion),
-                        reward=reward,
-                        step=step,
-                    ),
-                )
             rewards.append(reward)
             matched_entities_log.append("|".join(matched_entities))
             matched_entity_count_log.append(len(matched_entities))
@@ -244,12 +229,9 @@ def build_fuzzy_match_reward(
     config: Any,
     *,
     forget_concept: str,
-    log_path: Path,
 ):
     config = config or {}
     return make_forgetting_fuzzy_reward_func(
-        buffer=None,
-        log_path=log_path,
         forget_concept=forget_concept,
         reward_mode=config.get("mode", "binary"),
         pattern_splits=config.get("pattern_splits", ["hard", "soft"]),
