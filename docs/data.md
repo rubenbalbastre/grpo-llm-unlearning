@@ -75,7 +75,7 @@ Export all concept folders under `data/` into one private Hugging Face dataset
 repo:
 
 ```bash
-python scripts/upload-data-to-hf.py
+python scripts/dataset/upload-data-to-hf.py
 ```
 
 Authentication is read from `.env` using `HF_TOKEN` or
@@ -84,7 +84,7 @@ Authentication is read from `.env` using `HF_TOKEN` or
 Override the data root or repo id if needed:
 
 ```bash
-python scripts/upload-data-to-hf.py data username/unlearning-data
+python scripts/dataset/upload-data-to-hf.py data username/unlearning-data
 ```
 
 The parquet files include a `concept` column.
@@ -110,3 +110,15 @@ grpo/test -> holdout.parquet
 
 The uploaded `README.md` declares these files under `configs.data_files` so the
 Hugging Face Dataset Viewer can discover the custom split names.
+
+Download the Hugging Face dataset back into the local `data/<concept>` layout:
+
+```bash
+python scripts/dataset/download-data-from-hf.py
+```
+
+Override the repo id or output directory if needed:
+
+```bash
+python scripts/dataset/download-data-from-hf.py username/unlearning-data data
+```
