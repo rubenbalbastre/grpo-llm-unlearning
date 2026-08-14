@@ -61,6 +61,19 @@ def matches_author(value: str) -> bool:
     return normalized_author(value) in AUTHOR_FILTER
 
 
+def model_size(model_name: str, run_name: str = "") -> str:
+    source = f"{model_name} {run_name}".lower()
+    if re.search(r"0[._-]?5b", source):
+        return "0.5B"
+    if re.search(r"1[._-]?5b", source):
+        return "1.5B"
+    if re.search(r"3b", source):
+        return "3B"
+    if re.search(r"7b", source):
+        return "7B"
+    return model_name
+
+
 def training_variant(run_name: str) -> str:
     lowered = run_name.lower()
     if re.search(r"(?:^|-)r\d+-warmed(?:-|$)", lowered):
@@ -304,7 +317,9 @@ def load_last_steps(
     df["forget_concept"] = downloaded_run.forget_concept
     df["reward_type"] = downloaded_run.reward_type
     df["model_name"] = downloaded_run.model_name
+    df["model_size"] = model_size(downloaded_run.model_name, downloaded_run.run_name)
     df["training_variant"] = downloaded_run.training_variant
+    df["variant"] = downloaded_run.training_variant
     return df
 
 
@@ -334,7 +349,12 @@ def inventory_rows(
                 "forget_concept": downloaded_run.forget_concept,
                 "reward_type": downloaded_run.reward_type,
                 "model_name": downloaded_run.model_name,
+                "model_size": model_size(
+                    downloaded_run.model_name,
+                    downloaded_run.run_name,
+                ),
                 "training_variant": downloaded_run.training_variant,
+                "variant": downloaded_run.training_variant,
                 "available_table_count": downloaded_run.available_table_count
                 or len(downloaded_run.completion_tables),
                 "selected_table_count": len(downloaded_run.completion_tables),
@@ -378,7 +398,12 @@ def write_inventory(
     else:
         counts = (
             inventory.groupby(
-                ["forget_concept", "reward_type", "model_name", "training_variant"],
+                [
+                    "forget_concept",
+                    "model_size",
+                    "reward_type",
+                    "variant",
+                ],
                 as_index=False,
             )
             .agg(
@@ -470,6 +495,13 @@ def score_run(
         )
         missing_scores = expanded_scores[metric_columns].isna().any(axis=1).sum()
         if missing_scores:
+            if args.reaverage_cached_only:
+                print(
+                    f"Skipping {path}: missing rubric scores for "
+                    f"{missing_scores} selected row(s).",
+                    flush=True,
+                )
+                return pd.DataFrame()
             raise ValueError(
                 f"{path} is missing rubric scores for {missing_scores} selected row(s). "
                 "Run with --overwrite-run-metrics to rescore."
@@ -520,7 +552,11 @@ def score_runs(
             continue
         selected_runs.append(downloaded_run)
 
-    frames = [score_run(downloaded_run, args=args) for downloaded_run in selected_runs]
+    frames = [
+        frame
+        for downloaded_run in selected_runs
+        if not (frame := score_run(downloaded_run, args=args)).empty
+    ]
     if not frames:
         raise ValueError("No scored completion rows found.")
     return pd.concat(frames, ignore_index=True)
@@ -560,7 +596,9 @@ def aggregate(scored_df: pd.DataFrame) -> tuple[pd.DataFrame, pd.DataFrame, pd.D
         "forget_concept",
         "reward_type",
         "model_name",
+        "model_size",
         "training_variant",
+        "variant",
         "step",
         "last_step_index",
         "step_from_end",
@@ -568,16 +606,15 @@ def aggregate(scored_df: pd.DataFrame) -> tuple[pd.DataFrame, pd.DataFrame, pd.D
     prompt_columns = [*run_columns, "prompt_index", "prompt"]
     experiment_columns = [
         "forget_concept",
+        "model_size",
         "reward_type",
-        "model_name",
-        "training_variant",
+        "variant",
         "step_from_end",
     ]
     final_columns = [
+        "model_size",
         "reward_type",
-        "model_name",
-        "training_variant",
-        "step_from_end",
+        "variant",
     ]
 
     prompt_summary = mean_table(
@@ -598,13 +635,13 @@ def aggregate(scored_df: pd.DataFrame) -> tuple[pd.DataFrame, pd.DataFrame, pd.D
     final_summary = mean_table(
         author_summary,
         final_columns,
-        count_column="author_count",
+        count_column="author_step_count",
     )
     return prompt_summary, run_summary, author_summary, final_summary
 
 
 def median_iqr_summary(author_summary: pd.DataFrame) -> pd.DataFrame:
-    group_columns = ["reward_type", "model_name", "training_variant"]
+    group_columns = ["model_size", "reward_type", "variant"]
     rows = []
     for group_values, group_df in author_summary.groupby(group_columns, sort=True):
         row = dict(zip(group_columns, group_values, strict=True))
