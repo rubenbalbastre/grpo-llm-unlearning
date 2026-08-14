@@ -25,6 +25,7 @@ from eval.hold_out_styles.analysis_utils import (  # noqa: E402
 
 DEFAULT_NOTES = "lluis-vives-runs-1-1M"
 RUN_NAME_PATTERN = re.compile(r"(?:^|-)original(?:-|$)|(?:^|-)r\d+-warmed(?:-|$)")
+AUTHOR_FILTER = {"jennifer lopez", "karl marx"}
 
 
 @dataclass(frozen=True)
@@ -50,6 +51,14 @@ def nested_get(mapping: dict, path: list[str], default: str = "") -> str:
 
 def safe_name(value: str) -> str:
     return re.sub(r"[^A-Za-z0-9_.-]+", "-", value).strip("-")
+
+
+def normalized_author(value: str) -> str:
+    return re.sub(r"[^a-z0-9]+", " ", value.lower()).strip()
+
+
+def matches_author(value: str) -> bool:
+    return normalized_author(value) in AUTHOR_FILTER
 
 
 def training_variant(run_name: str) -> str:
@@ -106,7 +115,11 @@ def load_table(path: Path) -> pd.DataFrame:
 
 
 def load_tables(table_paths: list[Path]) -> pd.DataFrame:
-    frames = [load_table(table_path) for table_path in table_paths]
+    frames = []
+    for table_order, table_path in enumerate(table_paths):
+        df = load_table(table_path)
+        df["_table_order"] = table_order
+        frames.append(df)
     return pd.concat(frames, ignore_index=True) if frames else pd.DataFrame()
 
 
@@ -183,6 +196,11 @@ def download_completion_tables(
         run_name = selected_run_name(run)
         run_config = dict(run.config or {})
         hydra_config = run_config.get("hydra", {})
+        forget_concept = nested_get(hydra_config, ["experiment", "forget_concept"])
+        if not matches_author(forget_concept):
+            print(f"Skipping {run_name}: author is {forget_concept}.", flush=True)
+            continue
+
         run_dir = download_dir / f"{safe_name(run_name)}-{run.id}"
         table_file_refs = list(
             run.files(pattern="%completions%.table.json", per_page=100)
@@ -219,9 +237,7 @@ def download_completion_tables(
             DownloadedRun(
                 run_id=run.id,
                 run_name=run_name,
-                forget_concept=nested_get(
-                    hydra_config, ["experiment", "forget_concept"]
-                ),
+                forget_concept=forget_concept,
                 reward_type=nested_get(hydra_config, ["reward", "type"]),
                 model_name=nested_get(hydra_config, ["model", "name"]),
                 training_variant=training_variant(run_name),
@@ -250,7 +266,12 @@ def inventory_path(output_dir: Path) -> Path:
     return output_dir / "download_inventory.csv"
 
 
-def load_last_steps(downloaded_run: DownloadedRun, last_steps: int) -> pd.DataFrame:
+def load_last_steps(
+    downloaded_run: DownloadedRun,
+    last_steps: int,
+    *,
+    deduplicate: bool,
+) -> pd.DataFrame:
     df = load_tables(downloaded_run.completion_tables)
     required_columns = {"step", "prompt", "completion"}
     missing_columns = required_columns - set(df.columns)
@@ -262,14 +283,18 @@ def load_last_steps(downloaded_run: DownloadedRun, last_steps: int) -> pd.DataFr
 
     steps = sorted(df["step"].dropna().unique())[-last_steps:]
     df = df[df["step"].isin(steps)].copy()
-    row_count_before_dedup = len(df)
-    df = df.drop_duplicates(subset=["prompt", "completion"]).copy()
-    if len(df) < row_count_before_dedup:
-        print(
-            f"Removed {row_count_before_dedup - len(df)} duplicate prompt+completion row(s) "
-            f"from {downloaded_run.run_name}.",
-            flush=True,
-        )
+    if "_table_order" in df.columns:
+        latest_table_by_step = df.groupby("step")["_table_order"].transform("max")
+        df = df[df["_table_order"] == latest_table_by_step].copy()
+    if deduplicate:
+        row_count_before_dedup = len(df)
+        df = df.drop_duplicates(subset=["prompt", "completion"]).copy()
+        if len(df) < row_count_before_dedup:
+            print(
+                f"Removed {row_count_before_dedup - len(df)} duplicate prompt+completion row(s) "
+                f"from {downloaded_run.run_name}.",
+                flush=True,
+            )
     step_order = {step: index + 1 for index, step in enumerate(steps)}
 
     df["last_step_index"] = df["step"].map(step_order)
@@ -291,7 +316,11 @@ def inventory_rows(
 ) -> list[dict[str, object]]:
     rows = []
     for downloaded_run in downloaded_runs:
-        completion_rows = load_last_steps(downloaded_run, last_steps)
+        completion_rows = load_last_steps(
+            downloaded_run,
+            last_steps,
+            deduplicate=False,
+        )
         prompts_by_step = (
             completion_rows.groupby("step")["prompt"]
             .nunique()
@@ -380,6 +409,9 @@ def read_inventory(
     inventory = pd.read_csv(path).fillna("")
     downloaded_runs = []
     for _, row in inventory.iterrows():
+        if not matches_author(str(row["forget_concept"])):
+            continue
+
         table_paths = [
             Path(table_path) for table_path in json.loads(row["completion_tables"])
         ]
@@ -420,9 +452,43 @@ def score_run(
     path = run_score_path(args.output_dir, downloaded_run)
     if path.exists() and not args.overwrite_run_metrics:
         print(f"Reusing {path}", flush=True)
-        return pd.read_csv(path)
+        cached_scores = pd.read_csv(path)
+        selected_rows = load_last_steps(
+            downloaded_run,
+            args.last_steps,
+            deduplicate=False,
+        )
+        metric_columns = [
+            metric for metric in llm_judge_metrics if metric in cached_scores.columns
+        ]
+        expanded_scores = selected_rows.merge(
+            cached_scores[["prompt", "completion", *metric_columns]].drop_duplicates(
+                subset=["prompt", "completion"]
+            ),
+            on=["prompt", "completion"],
+            how="left",
+        )
+        missing_scores = expanded_scores[metric_columns].isna().any(axis=1).sum()
+        if missing_scores:
+            raise ValueError(
+                f"{path} is missing rubric scores for {missing_scores} selected row(s). "
+                "Run with --overwrite-run-metrics to rescore."
+            )
+        print(
+            f"Expanded {len(cached_scores)} cached score row(s) to "
+            f"{len(expanded_scores)} selected row(s) for aggregation.",
+            flush=True,
+        )
+        return expanded_scores
 
-    completion_rows = load_last_steps(downloaded_run, args.last_steps)
+    selected_rows = load_last_steps(
+        downloaded_run,
+        args.last_steps,
+        deduplicate=False,
+    )
+    completion_rows = selected_rows.drop_duplicates(
+        subset=["prompt", "completion"]
+    ).copy()
     print(
         f"Scoring {len(completion_rows)} prompt+completion pair(s) "
         f"from {downloaded_run.run_name}.",
@@ -431,14 +497,30 @@ def score_run(
     scored_df = add_rubrics(completion_rows, args)
     path.parent.mkdir(parents=True, exist_ok=True)
     scored_df.to_csv(path, index=False)
-    return scored_df
+    metric_columns = [
+        metric for metric in llm_judge_metrics if metric in scored_df.columns
+    ]
+    return selected_rows.merge(
+        scored_df[["prompt", "completion", *metric_columns]],
+        on=["prompt", "completion"],
+        how="left",
+    )
 
 
 def score_runs(
     downloaded_runs: list[DownloadedRun],
     args: argparse.Namespace,
 ) -> pd.DataFrame:
-    frames = [score_run(downloaded_run, args=args) for downloaded_run in downloaded_runs]
+    selected_runs = []
+    for downloaded_run in downloaded_runs:
+        if args.reaverage_cached_only and not run_score_path(
+            args.output_dir,
+            downloaded_run,
+        ).exists():
+            continue
+        selected_runs.append(downloaded_run)
+
+    frames = [score_run(downloaded_run, args=args) for downloaded_run in selected_runs]
     if not frames:
         raise ValueError("No scored completion rows found.")
     return pd.concat(frames, ignore_index=True)
@@ -521,6 +603,21 @@ def aggregate(scored_df: pd.DataFrame) -> tuple[pd.DataFrame, pd.DataFrame, pd.D
     return prompt_summary, run_summary, author_summary, final_summary
 
 
+def median_iqr_summary(author_summary: pd.DataFrame) -> pd.DataFrame:
+    group_columns = ["reward_type", "model_name", "training_variant"]
+    rows = []
+    for group_values, group_df in author_summary.groupby(group_columns, sort=True):
+        row = dict(zip(group_columns, group_values, strict=True))
+        row["row_count"] = len(group_df)
+        for metric in llm_judge_metrics:
+            values = group_df[metric].dropna()
+            row[f"{metric}_q1"] = values.quantile(0.25) if len(values) else None
+            row[f"{metric}_median"] = values.quantile(0.50) if len(values) else None
+            row[f"{metric}_q3"] = values.quantile(0.75) if len(values) else None
+        rows.append(row)
+    return pd.DataFrame(rows)
+
+
 def write_outputs(
     output_dir: Path,
     scored_df: pd.DataFrame,
@@ -535,6 +632,10 @@ def write_outputs(
     run_summary.to_csv(output_dir / "run_summary.csv", index=False)
     author_summary.to_csv(output_dir / "author_summary.csv", index=False)
     final_summary.to_csv(output_dir / "summary.csv", index=False)
+    median_iqr_summary(author_summary).to_csv(
+        output_dir / "summary_median_iqr.csv",
+        index=False,
+    )
 
 
 def parse_args() -> argparse.Namespace:
@@ -575,6 +676,11 @@ def parse_args() -> argparse.Namespace:
     parser.add_argument(
         "--use-local",
         action="store_true",
+        help="Alias for --skip-download.",
+    )
+    parser.add_argument(
+        "--skip-download",
+        action="store_true",
         help="Read the existing download inventory instead of contacting W&B.",
     )
     parser.add_argument(
@@ -582,16 +688,22 @@ def parse_args() -> argparse.Namespace:
         action="store_true",
         help="Recompute per-run rubric CSVs even if they already exist.",
     )
+    parser.add_argument(
+        "--reaverage-cached-only",
+        action="store_true",
+        help="Aggregate only runs with existing per-run rubric CSVs; do not score missing runs.",
+    )
     return parser.parse_args()
 
 
 def main() -> None:
     load_dotenv(dotenv_path=REPO_ROOT / ".env", override=False)
     args = parse_args()
-    if not args.project and not args.use_local:
+    skip_download = args.skip_download or args.use_local
+    if not args.project and not skip_download:
         raise ValueError("Set WANDB_PROJECT or pass --project.")
 
-    if args.use_local:
+    if skip_download:
         downloaded_runs = read_inventory(
             args.output_dir,
             args.max_tables_per_run,
