@@ -14,7 +14,8 @@ from statistics import stdev
 METRICS = [
     "lexical_leakage",
     "semantic_leakage",
-    "helpful_relevant_answer",
+    "prompt_helpfulness",
+    "broad_topic_helpfulness",
     "refusal",
     "unhelpful_or_degenerate",
     "language_drift",
