@@ -117,6 +117,9 @@ class AsyncCompletionClassificationTool:
             *[classify_group(prompt_group) for prompt_group in prompt_groups]
         )
 
+    async def aclose(self) -> None:
+        await self._async_client.close()
+
     async def _classify_request_specs(
         self,
         request_specs: List[List[Dict[str, str]]],

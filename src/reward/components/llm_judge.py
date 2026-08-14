@@ -174,8 +174,6 @@ def make_llm_judge_reward_func(
 
     import openai
 
-    client = openai.AsyncOpenAI()
-
     def build_input(prompt: str, completion: str) -> list[dict[str, str]]:
         payload = {
             "target_entity": forget_concept,
@@ -188,6 +186,7 @@ def make_llm_judge_reward_func(
         ]
 
     async def judge_completion(
+        client,
         prompt: str,
         completion: str,
         semaphore: asyncio.Semaphore,
@@ -219,12 +218,20 @@ def make_llm_judge_reward_func(
         completions_list: list[str],
     ) -> list[SoftTermsLeakageJudgment]:
         semaphore = asyncio.Semaphore(max_concurrent_requests)
-        return await asyncio.gather(
-            *[
-                judge_completion(prompt, completion, semaphore)
-                for prompt, completion in zip(prompts_list, completions_list, strict=True)
-            ]
-        )
+        client = openai.AsyncOpenAI()
+        try:
+            return await asyncio.gather(
+                *[
+                    judge_completion(client, prompt, completion, semaphore)
+                    for prompt, completion in zip(
+                        prompts_list,
+                        completions_list,
+                        strict=True,
+                    )
+                ]
+            )
+        finally:
+            await client.close()
 
     def run_judge_batch(
         prompts_list: list[str],
