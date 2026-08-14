@@ -156,6 +156,8 @@ def make_llm_judge_reward_func(
 ):
     model_name = str(config.get("model_name", "gpt-5.4-nano"))
     temperature = float(config.get("temperature", 0.0))
+    prompt_cache_key = str(config.get("prompt_cache_key", "training-llm-judge"))
+    prompt_cache_retention = str(config.get("prompt_cache_retention", "24h"))
     reasoning_effort = str(config.get("reasoning_effort", "low")).lower()
     if reasoning_effort not in SUPPORTED_REASONING_EFFORTS:
         raise ValueError(
@@ -202,6 +204,8 @@ def make_llm_judge_reward_func(
                     "input": build_input(prompt, completion),
                     "text_format": SoftTermsLeakageJudgment,
                     "reasoning": {"effort": reasoning_effort},
+                    "prompt_cache_key": prompt_cache_key,
+                    "prompt_cache_retention": prompt_cache_retention,
                 }
                 if reasoning_effort == "none":
                     request_kwargs["temperature"] = temperature
