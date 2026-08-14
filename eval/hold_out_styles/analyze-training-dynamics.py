@@ -667,7 +667,7 @@ def parse_args() -> argparse.Namespace:
     )
     parser.add_argument("--judge-model", default="gpt-5.4-nano")
     parser.add_argument("--judge-reasoning-effort", default="low")
-    parser.add_argument("--judge-concurrency", type=int, default=4)
+    parser.add_argument("--judge-concurrency", type=int, default=8)
     parser.add_argument(
         "--download-only",
         action="store_true",
