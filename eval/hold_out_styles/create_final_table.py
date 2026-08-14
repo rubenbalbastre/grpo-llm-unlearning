@@ -49,11 +49,11 @@ MODEL_SIZES = {
     "3b": "3B",
     "7b": "7B",
 }
-GOOD_HIGH_METRICS = {"refusal"}
+GOOD_HIGH_METRICS = {"broad_topic_helpfulness", "refusal"}
 BAD_HIGH_METRICS = {
     "lexical_leakage",
     "semantic_leakage",
-    "helpful_relevant_answer",
+    "prompt_helpfulness",
     "language_drift",
 }
 
