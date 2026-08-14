@@ -152,6 +152,7 @@ def download_completion_tables(
     notes: str,
     download_dir: Path,
     max_tables_per_run: int,
+    min_available_tables: int,
 ) -> list[DownloadedRun]:
     import wandb
 
@@ -173,6 +174,14 @@ def download_completion_tables(
         table_file_refs = list(
             run.files(pattern="%completions%.table.json", per_page=100)
         )
+        if len(table_file_refs) < min_available_tables:
+            print(
+                f"Skipping {run_name}: only {len(table_file_refs)} completion table(s) "
+                f"available; need at least {min_available_tables}.",
+                flush=True,
+            )
+            continue
+
         selected_files = select_recent_completion_tables(
             table_file_refs,
             max_tables_per_run,
@@ -330,7 +339,11 @@ def write_inventory(
     counts.to_csv(output_dir / "download_inventory_by_author_reward.csv", index=False)
 
 
-def read_inventory(output_dir: Path, max_tables_per_run: int) -> list[DownloadedRun]:
+def read_inventory(
+    output_dir: Path,
+    max_tables_per_run: int,
+    min_available_tables: int,
+) -> list[DownloadedRun]:
     path = inventory_path(output_dir)
     if not path.exists():
         raise FileNotFoundError(
@@ -348,6 +361,14 @@ def read_inventory(output_dir: Path, max_tables_per_run: int) -> list[Downloaded
             max_tables_per_run,
         )
         available_table_count = row.get("available_table_count", "")
+        available_table_count = (
+            int(available_table_count)
+            if str(available_table_count).isdigit()
+            else len(table_paths)
+        )
+        if available_table_count < min_available_tables:
+            continue
+
         downloaded_runs.append(
             DownloadedRun(
                 run_id=str(row["run_id"]),
@@ -357,9 +378,7 @@ def read_inventory(output_dir: Path, max_tables_per_run: int) -> list[Downloaded
                 model_name=str(row["model_name"]),
                 training_variant=str(row["training_variant"]),
                 completion_tables=selected_paths,
-                available_table_count=int(available_table_count)
-                if str(available_table_count).isdigit()
-                else len(table_paths),
+                available_table_count=available_table_count,
             )
         )
     return downloaded_runs
@@ -506,6 +525,12 @@ def parse_args() -> argparse.Namespace:
         help="Download or reuse only the last N completion table files per run. Use 0 for all.",
     )
     parser.add_argument(
+        "--min-available-tables",
+        type=int,
+        default=101,
+        help="Skip runs with fewer than this many completion table files available.",
+    )
+    parser.add_argument(
         "--output-dir",
         type=Path,
         default=Path("outputs/training_dynamics_hold_out_rubrics"),
@@ -538,7 +563,11 @@ def main() -> None:
         raise ValueError("Set WANDB_PROJECT or pass --project.")
 
     if args.use_local:
-        downloaded_runs = read_inventory(args.output_dir, args.max_tables_per_run)
+        downloaded_runs = read_inventory(
+            args.output_dir,
+            args.max_tables_per_run,
+            args.min_available_tables,
+        )
     else:
         download_dir = args.output_dir / "wandb-downloads"
         downloaded_runs = download_completion_tables(
@@ -546,6 +575,7 @@ def main() -> None:
             notes=args.notes,
             download_dir=download_dir,
             max_tables_per_run=args.max_tables_per_run,
+            min_available_tables=args.min_available_tables,
         )
         write_inventory(
             downloaded_runs,
