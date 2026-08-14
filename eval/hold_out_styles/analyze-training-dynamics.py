@@ -5,6 +5,7 @@ import argparse
 import json
 import os
 import re
+import shutil
 import sys
 from dataclasses import dataclass
 from pathlib import Path
@@ -146,6 +147,18 @@ def download_or_reuse_file(run_dir: Path, wandb_file) -> Path:
     )
 
 
+def delete_local_run(output_dir: Path, run_name: str, run_id: str) -> None:
+    run_dir = output_dir / "wandb-downloads" / f"{safe_name(run_name)}-{run_id}"
+    if run_dir.exists():
+        shutil.rmtree(run_dir)
+        print(f"Deleted ineligible local download: {run_dir}", flush=True)
+
+    score_path = output_dir / "run_metrics" / f"{safe_name(run_name)}-{run_id}.csv"
+    if score_path.exists():
+        score_path.unlink()
+        print(f"Deleted ineligible local score file: {score_path}", flush=True)
+
+
 def download_completion_tables(
     *,
     project: str,
@@ -175,6 +188,7 @@ def download_completion_tables(
             run.files(pattern="%completions%.table.json", per_page=100)
         )
         if len(table_file_refs) < min_available_tables:
+            delete_local_run(download_dir.parent, run_name, run.id)
             print(
                 f"Skipping {run_name}: only {len(table_file_refs)} completion table(s) "
                 f"available; need at least {min_available_tables}.",
@@ -248,6 +262,14 @@ def load_last_steps(downloaded_run: DownloadedRun, last_steps: int) -> pd.DataFr
 
     steps = sorted(df["step"].dropna().unique())[-last_steps:]
     df = df[df["step"].isin(steps)].copy()
+    row_count_before_dedup = len(df)
+    df = df.drop_duplicates(subset=["prompt", "completion"]).copy()
+    if len(df) < row_count_before_dedup:
+        print(
+            f"Removed {row_count_before_dedup - len(df)} duplicate prompt+completion row(s) "
+            f"from {downloaded_run.run_name}.",
+            flush=True,
+        )
     step_order = {step: index + 1 for index, step in enumerate(steps)}
 
     df["last_step_index"] = df["step"].map(step_order)
@@ -293,6 +315,7 @@ def inventory_rows(
                 ),
                 "selected_unique_prompts_by_step": json.dumps(prompts_by_step),
                 "selected_unique_prompt_count": completion_rows["prompt"].nunique(),
+                "selected_unique_prompt_completion_count": len(completion_rows),
                 "selected_completion_count": len(completion_rows),
                 "selected_prompt_count": completion_rows[
                     ["step", "prompt_index"]
@@ -334,6 +357,10 @@ def write_inventory(
                 selected_completion_count=("selected_completion_count", "sum"),
                 selected_prompt_count=("selected_prompt_count", "sum"),
                 selected_unique_prompt_count=("selected_unique_prompt_count", "sum"),
+                selected_unique_prompt_completion_count=(
+                    "selected_unique_prompt_completion_count",
+                    "sum",
+                ),
             )
         )
     counts.to_csv(output_dir / "download_inventory_by_author_reward.csv", index=False)
@@ -367,6 +394,7 @@ def read_inventory(
             else len(table_paths)
         )
         if available_table_count < min_available_tables:
+            delete_local_run(output_dir, str(row["run_name"]), str(row["run_id"]))
             continue
 
         downloaded_runs.append(
@@ -396,7 +424,8 @@ def score_run(
 
     completion_rows = load_last_steps(downloaded_run, args.last_steps)
     print(
-        f"Scoring {len(completion_rows)} completion(s) from {downloaded_run.run_name}.",
+        f"Scoring {len(completion_rows)} prompt+completion pair(s) "
+        f"from {downloaded_run.run_name}.",
         flush=True,
     )
     scored_df = add_rubrics(completion_rows, args)
