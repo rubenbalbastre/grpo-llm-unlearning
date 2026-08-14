@@ -25,7 +25,18 @@ from eval.hold_out_styles.analysis_utils import (  # noqa: E402
 
 DEFAULT_NOTES = "lluis-vives-runs-1-1M"
 RUN_NAME_PATTERN = re.compile(r"(?:^|-)original(?:-|$)|(?:^|-)r\d+-warmed(?:-|$)")
-AUTHOR_FILTER = {"jennifer lopez", "karl marx"}
+AUTHOR_FILTER = {
+    "bruce lee",
+    "confucius",
+    "jennifer lopez",
+    "john d rockefeller",
+    "karl marx",
+    "marlon brando",
+    # "serena williams",
+    # "tom clancy",
+    # "tony blair",
+    # "vincent van gogh",
+}
 
 
 @dataclass(frozen=True)
