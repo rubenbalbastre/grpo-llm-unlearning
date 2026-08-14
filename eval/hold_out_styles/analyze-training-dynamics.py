@@ -23,7 +23,7 @@ from eval.hold_out_styles.analysis_utils import (  # noqa: E402
 
 
 DEFAULT_NOTES = "lluis-vives-runs-1-1M"
-RUN_NAME_MARKERS = ("original", "warmed")
+RUN_NAME_PATTERN = re.compile(r"(?:^|-)original(?:-|$)|(?:^|-)r\d+-warmed(?:-|$)")
 
 
 @dataclass(frozen=True)
@@ -53,16 +53,35 @@ def safe_name(value: str) -> str:
 
 def training_variant(run_name: str) -> str:
     lowered = run_name.lower()
-    if "warmed" in lowered:
+    if re.search(r"(?:^|-)r\d+-warmed(?:-|$)", lowered):
         return "warmed"
-    if "original" in lowered:
+    if re.search(r"(?:^|-)original(?:-|$)", lowered):
         return "original"
     return ""
 
 
-def matches_run_name(run_name: str) -> bool:
-    lowered = run_name.lower()
-    return any(marker in lowered for marker in RUN_NAME_MARKERS)
+def run_name_candidates(run) -> list[str]:
+    candidates = [
+        getattr(run, "name", ""),
+        getattr(run, "display_name", ""),
+        getattr(run, "id", ""),
+    ]
+    return [str(candidate) for candidate in candidates if candidate]
+
+
+def selected_run_name(run) -> str:
+    candidates = run_name_candidates(run)
+    for candidate in candidates:
+        if RUN_NAME_PATTERN.search(candidate.lower()):
+            return candidate
+    return candidates[0] if candidates else str(run.id)
+
+
+def matches_run_name(run) -> bool:
+    return any(
+        RUN_NAME_PATTERN.search(candidate.lower())
+        for candidate in run_name_candidates(run)
+    )
 
 
 def completion_table_sort_key(file_or_path) -> tuple[int, str]:
@@ -76,6 +95,55 @@ def select_recent_completion_tables(files_or_paths, max_tables: int):
     if max_tables <= 0:
         return sorted_files
     return sorted_files[-max_tables:]
+
+
+def load_table(path: Path) -> pd.DataFrame:
+    raw = json.loads(path.read_text(encoding="utf-8"))
+    if isinstance(raw, dict) and {"columns", "data"} <= set(raw):
+        return pd.DataFrame(raw["data"], columns=raw["columns"])
+    return pd.read_json(path, orient="split")
+
+
+def load_tables(table_paths: list[Path]) -> pd.DataFrame:
+    frames = [load_table(table_path) for table_path in table_paths]
+    return pd.concat(frames, ignore_index=True) if frames else pd.DataFrame()
+
+
+def add_missing_generation_indices(df: pd.DataFrame) -> pd.DataFrame:
+    df = df.copy()
+    if "prompt_index" not in df.columns:
+        df["prompt_index"] = df.groupby("step", sort=False)["prompt"].transform(
+            lambda prompts: pd.factorize(prompts, sort=False)[0]
+        )
+    if "completion_index" not in df.columns:
+        df["completion_index"] = df.groupby(
+            ["step", "prompt_index"],
+            sort=False,
+        ).cumcount()
+    return df
+
+
+def count_unique_prompts(table_paths: list[Path]) -> int:
+    df = load_tables(table_paths)
+    return df["prompt"].nunique() if "prompt" in df.columns else 0
+
+
+def local_wandb_file_path(run_dir: Path, wandb_file) -> Path:
+    return run_dir / getattr(wandb_file, "name", "")
+
+
+def download_or_reuse_file(run_dir: Path, wandb_file) -> Path:
+    local_path = local_wandb_file_path(run_dir, wandb_file)
+    if local_path.exists():
+        print(f"Reusing {local_path}", flush=True)
+        return local_path
+    return Path(
+        wandb_file.download(
+            root=str(run_dir),
+            replace=False,
+            exist_ok=True,
+        ).name
+    )
 
 
 def download_completion_tables(
@@ -95,10 +163,10 @@ def download_completion_tables(
     downloaded_runs: list[DownloadedRun] = []
 
     for run in api.runs(project, filters=filters, per_page=100, lazy=True):
-        run_name = run.name or run.id
-        if not matches_run_name(run_name):
+        if not matches_run_name(run):
             continue
 
+        run_name = selected_run_name(run)
         run_config = dict(run.config or {})
         hydra_config = run_config.get("hydra", {})
         run_dir = download_dir / f"{safe_name(run_name)}-{run.id}"
@@ -116,19 +184,14 @@ def download_completion_tables(
             flush=True,
         )
         table_paths = [
-            Path(
-                wandb_file.download(
-                    root=str(run_dir),
-                    replace=False,
-                    exist_ok=True,
-                ).name
-            )
+            download_or_reuse_file(run_dir, wandb_file)
             for wandb_file in selected_files
         ]
         if not table_paths:
             print(f"Skipping {run_name}: no completion tables found.", flush=True)
             continue
 
+        unique_prompt_count = count_unique_prompts(table_paths)
         downloaded_runs.append(
             DownloadedRun(
                 run_id=run.id,
@@ -144,7 +207,8 @@ def download_completion_tables(
             )
         )
         print(
-            f"Downloaded {len(table_paths)} of {len(table_file_refs)} table(s) from {run_name}.",
+            f"Downloaded {len(table_paths)} of {len(table_file_refs)} table(s) "
+            f"from {run_name}; unique prompts: {unique_prompt_count}.",
             flush=True,
         )
 
@@ -164,17 +228,14 @@ def inventory_path(output_dir: Path) -> Path:
 
 
 def load_last_steps(downloaded_run: DownloadedRun, last_steps: int) -> pd.DataFrame:
-    frames = [
-        pd.read_json(table_path, orient="split")
-        for table_path in downloaded_run.completion_tables
-    ]
-    df = pd.concat(frames, ignore_index=True)
-    required_columns = {"step", "prompt_index", "completion_index", "prompt", "completion"}
+    df = load_tables(downloaded_run.completion_tables)
+    required_columns = {"step", "prompt", "completion"}
     missing_columns = required_columns - set(df.columns)
     if missing_columns:
         raise ValueError(
             f"{downloaded_run.run_name} is missing columns: {sorted(missing_columns)}"
         )
+    df = add_missing_generation_indices(df)
 
     steps = sorted(df["step"].dropna().unique())[-last_steps:]
     df = df[df["step"].isin(steps)].copy()
@@ -200,6 +261,12 @@ def inventory_rows(
     rows = []
     for downloaded_run in downloaded_runs:
         completion_rows = load_last_steps(downloaded_run, last_steps)
+        prompts_by_step = (
+            completion_rows.groupby("step")["prompt"]
+            .nunique()
+            .sort_index()
+            .to_dict()
+        )
         rows.append(
             {
                 "run_id": downloaded_run.run_id,
@@ -212,6 +279,11 @@ def inventory_rows(
                 or len(downloaded_run.completion_tables),
                 "selected_table_count": len(downloaded_run.completion_tables),
                 "selected_step_count": completion_rows["step"].nunique(),
+                "selected_steps": json.dumps(
+                    sorted(completion_rows["step"].dropna().unique().tolist())
+                ),
+                "selected_unique_prompts_by_step": json.dumps(prompts_by_step),
+                "selected_unique_prompt_count": completion_rows["prompt"].nunique(),
                 "selected_completion_count": len(completion_rows),
                 "selected_prompt_count": completion_rows[
                     ["step", "prompt_index"]
@@ -252,6 +324,7 @@ def write_inventory(
                 run_count=("run_id", "nunique"),
                 selected_completion_count=("selected_completion_count", "sum"),
                 selected_prompt_count=("selected_prompt_count", "sum"),
+                selected_unique_prompt_count=("selected_unique_prompt_count", "sum"),
             )
         )
     counts.to_csv(output_dir / "download_inventory_by_author_reward.csv", index=False)
@@ -425,11 +498,11 @@ def parse_args() -> argparse.Namespace:
     )
     parser.add_argument("--project", default=os.environ.get("WANDB_PROJECT"))
     parser.add_argument("--notes", default=DEFAULT_NOTES)
-    parser.add_argument("--last-steps", type=int, default=5)
+    parser.add_argument("--last-steps", type=int, default=10)
     parser.add_argument(
         "--max-tables-per-run",
         type=int,
-        default=5,
+        default=10,
         help="Download or reuse only the last N completion table files per run. Use 0 for all.",
     )
     parser.add_argument(
