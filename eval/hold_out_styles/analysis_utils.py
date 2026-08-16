@@ -33,7 +33,13 @@ def add_llm_judge_metrics(
         .agg({"completion": list, index_column: list})
         .to_dict(orient="records")
     )
-    llm_metrics = asyncio.run(tool.classify_prompt_groups_completitions(prompt_groups))
+    async def classify_and_close() -> list[dict]:
+        try:
+            return await tool.classify_prompt_groups_completitions(prompt_groups)
+        finally:
+            await tool.aclose()
+
+    llm_metrics = asyncio.run(classify_and_close())
 
     expanded_metrics = []
     for group in llm_metrics:

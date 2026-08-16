@@ -156,6 +156,8 @@ def make_llm_judge_reward_func(
 ):
     model_name = str(config.get("model_name", "gpt-5.4-nano"))
     temperature = float(config.get("temperature", 0.0))
+    prompt_cache_key = str(config.get("prompt_cache_key", "training-llm-judge"))
+    prompt_cache_retention = str(config.get("prompt_cache_retention", "24h"))
     reasoning_effort = str(config.get("reasoning_effort", "low")).lower()
     if reasoning_effort not in SUPPORTED_REASONING_EFFORTS:
         raise ValueError(
@@ -172,8 +174,6 @@ def make_llm_judge_reward_func(
 
     import openai
 
-    client = openai.AsyncOpenAI()
-
     def build_input(prompt: str, completion: str) -> list[dict[str, str]]:
         payload = {
             "target_entity": forget_concept,
@@ -186,6 +186,7 @@ def make_llm_judge_reward_func(
         ]
 
     async def judge_completion(
+        client,
         prompt: str,
         completion: str,
         semaphore: asyncio.Semaphore,
@@ -202,6 +203,8 @@ def make_llm_judge_reward_func(
                     "input": build_input(prompt, completion),
                     "text_format": SoftTermsLeakageJudgment,
                     "reasoning": {"effort": reasoning_effort},
+                    "prompt_cache_key": prompt_cache_key,
+                    "prompt_cache_retention": prompt_cache_retention,
                 }
                 if reasoning_effort == "none":
                     request_kwargs["temperature"] = temperature
@@ -215,12 +218,20 @@ def make_llm_judge_reward_func(
         completions_list: list[str],
     ) -> list[SoftTermsLeakageJudgment]:
         semaphore = asyncio.Semaphore(max_concurrent_requests)
-        return await asyncio.gather(
-            *[
-                judge_completion(prompt, completion, semaphore)
-                for prompt, completion in zip(prompts_list, completions_list, strict=True)
-            ]
-        )
+        client = openai.AsyncOpenAI()
+        try:
+            return await asyncio.gather(
+                *[
+                    judge_completion(client, prompt, completion, semaphore)
+                    for prompt, completion in zip(
+                        prompts_list,
+                        completions_list,
+                        strict=True,
+                    )
+                ]
+            )
+        finally:
+            await client.close()
 
     def run_judge_batch(
         prompts_list: list[str],

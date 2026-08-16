@@ -56,11 +56,15 @@ class AsyncCompletionClassificationTool:
         model_name: str = "gpt-5.4-nano",
         reasoning_effort: str = "low",
         max_concurrent_request: int = 4,
+        prompt_cache_key: str = "hold-out-rubrics",
+        prompt_cache_retention: str = "24h",
     ):
         self._target_concept = target_concept
         self._forbidden_descriptors = forbidden_descriptors
         self._max_concurrent_request = max_concurrent_request
         self._model_name = model_name
+        self._prompt_cache_key = prompt_cache_key
+        self._prompt_cache_retention = prompt_cache_retention
         self._reasoning_effort = str(reasoning_effort).lower()
         if self._reasoning_effort not in SUPPORTED_REASONING_EFFORTS:
             raise ValueError(
@@ -113,6 +117,9 @@ class AsyncCompletionClassificationTool:
             *[classify_group(prompt_group) for prompt_group in prompt_groups]
         )
 
+    async def aclose(self) -> None:
+        await self._async_client.close()
+
     async def _classify_request_specs(
         self,
         request_specs: List[List[Dict[str, str]]],
@@ -131,6 +138,8 @@ class AsyncCompletionClassificationTool:
                         "input": request_spec,
                         "text_format": self.structured_response_format,
                         "reasoning": {"effort": self._reasoning_effort},
+                        "prompt_cache_key": self._prompt_cache_key,
+                        "prompt_cache_retention": self._prompt_cache_retention,
                     }
                     if self._reasoning_effort == "none":
                         request_kwargs["temperature"] = 0
