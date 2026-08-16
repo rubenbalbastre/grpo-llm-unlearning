@@ -25,6 +25,21 @@ standard_data:
 normalizes each instruction to the question portion, removes empty prompts, and
 renames `instruction` to `prompt` and `output` to `completion`.
 
+## Data Licenses
+
+The repository code is Apache-2.0 licensed. Dataset contents and derived data
+artifacts keep the license terms of their source data.
+
+The Hugging Face dataset exported by `scripts/dataset/upload-data-to-hf.py` is
+declared as CC BY 4.0 and attributed to RWKU (`jinzhuoran/RWKU`). It is a
+processed/modified version of RWKU: rows are filtered by forget concept,
+prompts are normalized, columns are renamed, splits are reorganized for this
+project, and a `concept` column is added during export.
+
+PURGE material is third-party data from the PURGE project and is MIT-licensed by
+its original authors. It is attributed separately from the Apache-2.0 code in
+this repository.
+
 ## Broad Completions
 
 The SFT subset also gets a `broad_completion` column generated with an OpenAI
@@ -109,7 +124,9 @@ grpo/test -> holdout.parquet
 ```
 
 The uploaded `README.md` declares these files under `configs.data_files` so the
-Hugging Face Dataset Viewer can discover the custom split names.
+Hugging Face Dataset Viewer can discover the custom split names. It also
+includes the RWKU attribution, CC BY 4.0 dataset license, processing notice, and
+PURGE MIT third-party data attribution.
 
 Download the Hugging Face dataset back into the local `data/<concept>` layout:
 

@@ -34,6 +34,7 @@ def write_readme(
     readme = f"""---
 task_categories:
 - text-generation
+license: cc-by-4.0
 configs:
 - config_name: default
   data_files:
@@ -50,6 +51,22 @@ configs:
 # {repo_id}
 
 Dataset splits for targeted machine unlearning experiments.
+
+## License and Attribution
+
+This dataset is released as CC BY 4.0.
+
+The data is derived from RWKU (`jinzhuoran/RWKU`) and should be attributed to
+the RWKU authors. These files are a processed/modified version of RWKU: rows
+were filtered by forget concept, prompts were normalized, columns were renamed,
+splits were reorganized for this project, and a `concept` column was added
+during export.
+
+If PURGE material is present in the source data, it is third-party material
+attributed to the PURGE project and is MIT-licensed by its original authors.
+
+The source code used to create these files is licensed separately under
+Apache-2.0 in the `machine-unlearning-llm` repository.
 
 Source dataset directory: `{data_dir}`
 

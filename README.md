@@ -43,6 +43,28 @@ Run RWKU evaluation:
 python -m eval.rwku.rwku evaluation.model_name_or_path=outputs/<run>/checkpoint-175
 ```
 
+Run hold-out evaluation for one trained checkpoint:
+
+```bash
+python eval/hold_out_styles/generate-and-analyze-completions.py \
+  concept="Stephen King" \
+  model_name_or_path=outputs/<run>/checkpoint-175
+```
+
+This writes `metrics.csv` and `summary.csv` under
+`outputs/hold_out_styles/<concept>-<model>/`.
+
+Run training-dynamics hold-out analysis from W&B completion tables:
+
+```bash
+python eval/hold_out_styles/analyze-training-dynamics.py --download-only --last-steps 5
+python eval/hold_out_styles/analyze-training-dynamics.py --skip-download --last-steps 5
+```
+
+The first command downloads or reuses the selected W&B tables and writes the run
+inventory. The second command scores completions with the hold-out rubrics and
+writes aggregated CSVs under `outputs/training_dynamics_hold_out_rubrics/`.
+
 ## Documentation
 
 - [Data](docs/data.md): RWKU filtering, split generation, and expected on-disk layout.
@@ -65,3 +87,12 @@ train.py                      # GRPO entrypoint
 sft_warm_up.py                # SFT warmup entrypoint
 generate_sft_grpo_splits.py   # RWKU split generation
 ```
+
+## License
+
+Original source code and documentation in this repository are licensed under
+Apache-2.0. See [LICENSE](LICENSE) and [NOTICE](NOTICE).
+
+Third-party data is not covered by the repository code license. PURGE material
+is explicitly attributed as MIT-licensed third-party data from the PURGE
+project.
