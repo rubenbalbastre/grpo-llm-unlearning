@@ -32,10 +32,10 @@ AUTHOR_FILTER = {
     "john d rockefeller",
     "karl marx",
     "marlon brando",
-    # "serena williams",
-    # "tom clancy",
-    # "tony blair",
-    # "vincent van gogh",
+    "serena williams",
+    "tom clancy",
+    "tony blair",
+    "vincent van gogh",
 }
 
 
@@ -513,9 +513,39 @@ def score_run(
                     flush=True,
                 )
                 return pd.DataFrame()
-            raise ValueError(
-                f"{path} is missing rubric scores for {missing_scores} selected row(s). "
-                "Run with --overwrite-run-metrics to rescore."
+            missing_pairs = (
+                expanded_scores.loc[
+                    expanded_scores[metric_columns].isna().any(axis=1),
+                    ["prompt", "completion"],
+                ]
+                .drop_duplicates()
+                .reset_index(drop=True)
+            )
+            print(
+                f"{path} is missing rubric scores for {missing_scores} selected row(s); "
+                f"scoring {len(missing_pairs)} missing unique prompt+completion pair(s).",
+                flush=True,
+            )
+            missing_pairs["forget_concept"] = downloaded_run.forget_concept
+            missing_pairs["reward_type"] = downloaded_run.reward_type
+            missing_pairs["model_name"] = downloaded_run.model_name
+            missing_pairs["model_size"] = model_size(
+                downloaded_run.model_name,
+                downloaded_run.run_name,
+            )
+            missing_pairs["training_variant"] = downloaded_run.training_variant
+            missing_pairs["variant"] = downloaded_run.training_variant
+            new_scores = add_rubrics(missing_pairs, args)
+            cached_scores = pd.concat([cached_scores, new_scores], ignore_index=True)
+            cached_scores = cached_scores.drop_duplicates(
+                subset=["prompt", "completion"],
+                keep="last",
+            )
+            cached_scores.to_csv(path, index=False)
+            expanded_scores = selected_rows.merge(
+                cached_scores[["prompt", "completion", *llm_judge_metrics]],
+                on=["prompt", "completion"],
+                how="left",
             )
         print(
             f"Expanded {len(cached_scores)} cached score row(s) to "
