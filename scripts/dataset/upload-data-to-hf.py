@@ -17,6 +17,7 @@ SPLITS = {
     "sft/test": "sft_validation.parquet",
     "grpo/test": "holdout.parquet",
 }
+GRPO_SPLITS = {"grpo/train", "grpo/test"}
 
 
 def write_readme(
@@ -59,7 +60,8 @@ This dataset is released as CC BY 4.0.
 The data is derived from RWKU (`jinzhuoran/RWKU`) and should be attributed to
 the RWKU authors. These files are a processed/modified version of RWKU: rows
 were filtered by forget concept, prompts were normalized, columns were renamed,
-splits were reorganized for this project, and a `concept` column was added
+splits were reorganized for this project, the reference `completion` column was
+removed from GRPO train and holdout splits, and a `concept` column was added
 during export.
 
 If PURGE material is present in the source data, it is third-party material
@@ -89,12 +91,16 @@ def parse_args() -> argparse.Namespace:
 
 
 def add_concept_column(dataset: DatasetDict, concept: str) -> DatasetDict:
-    return DatasetDict(
-        {
-            split: dataset[split].add_column("concept", [concept] * len(dataset[split]))
-            for split in SPLITS
-        }
-    )
+    splits = {}
+    for split in SPLITS:
+        split_dataset = dataset[split]
+        if split in GRPO_SPLITS and "completion" in split_dataset.column_names:
+            split_dataset = split_dataset.remove_columns("completion")
+        splits[split] = split_dataset.add_column(
+            "concept",
+            [concept] * len(split_dataset),
+        )
+    return DatasetDict(splits)
 
 
 def load_concept_dataset(data_dir: Path) -> DatasetDict:

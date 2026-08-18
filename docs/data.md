@@ -34,7 +34,8 @@ The Hugging Face dataset exported by `scripts/dataset/upload-data-to-hf.py` is
 declared as CC BY 4.0 and attributed to RWKU (`jinzhuoran/RWKU`). It is a
 processed/modified version of RWKU: rows are filtered by forget concept,
 prompts are normalized, columns are renamed, splits are reorganized for this
-project, and a `concept` column is added during export.
+project, the reference `completion` column is removed from GRPO train and
+holdout exports, and a `concept` column is added during export.
 
 PURGE material is third-party data from the PURGE project and is MIT-licensed by
 its original authors. It is attributed separately from the Apache-2.0 code in
@@ -103,6 +104,9 @@ python scripts/dataset/upload-data-to-hf.py data username/unlearning-data
 ```
 
 The parquet files include a `concept` column.
+`grpo_train.parquet` and `holdout.parquet` are prompt-only for the model-facing
+task and do not include the RWKU reference `completion` column. SFT parquet
+files keep `completion`.
 
 The repository files are:
 

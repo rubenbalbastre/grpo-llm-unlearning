@@ -10,7 +10,8 @@ Apache-2.0 license for this repository unless explicitly stated.
 RWKU-derived Hugging Face dataset exports are released as CC BY 4.0 and are
 attributed to RWKU (`jinzhuoran/RWKU`). They are processed/modified data:
 filtered by forget concept, normalized, renamed, reorganized into project
-splits, and exported with an added concept column.
+splits, exported without reference completions in GRPO train and holdout splits,
+and exported with an added concept column.
 
 PURGE material is third-party data and is attributed to the PURGE project. It is
 MIT-licensed by its original authors and remains subject to the PURGE license
