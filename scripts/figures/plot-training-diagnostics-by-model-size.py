@@ -307,7 +307,7 @@ def plot_figures(grouped, output_dir: Path) -> list[Path]:
                 handlelength=2.2,
                 columnspacing=1.1,
             )
-        fig.suptitle(f"Qwen2.5-{size}", y=0.985, fontsize=11)
+        fig.suptitle(f"Qwen2.5-{size}-Instruct", y=0.985, fontsize=11)
         fig.tight_layout(rect=(0, 0, 1, 0.89))
 
         stem = f"training_diagnostics_qwen2_5_{size.lower().replace('.', '_')}"
