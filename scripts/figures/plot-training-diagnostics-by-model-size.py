@@ -27,10 +27,34 @@ METRICS = {
         "Mean completion length (tokens)",
     ),
 }
+FIXED_Y_LIMITS = {
+    "train/reward": (0.0, 1.0),
+    "active_group": (0.0, 1.0),
+    "train/completions/mean_length": (0.0, 256.0),
+}
 SIZE_FROM_MODEL_RE = re.compile(r"Qwen2\.5-(0\.5B|1\.5B|3B|7B)-Instruct", re.I)
-SIZE_FROM_RUN_RE = re.compile(r"qwen-qwen2-5-(0-5b|1-5b|3b|7b)-instruct", re.I)
+SIZE_FROM_RUN_RE = re.compile(r"qwen-qwen2-5-(0-5b?|1-5b?|3b?|7b?)(?:-|_|$)", re.I)
 REWARD_FROM_RUN_RE = re.compile(r"-(r\d+)$", re.I)
-RUN_SIZE_NAMES = {"0-5b": "0.5B", "1-5b": "1.5B", "3b": "3B", "7b": "7B"}
+RUN_SIZE_NAMES = {
+    "0-5": "0.5B",
+    "0-5b": "0.5B",
+    "1-5": "1.5B",
+    "1-5b": "1.5B",
+    "3": "3B",
+    "3b": "3B",
+    "7": "7B",
+    "7b": "7B",
+}
+INITIALIZATION_LABELS = {
+    "original": "cold-start",
+    "original initialization": "cold-start",
+    "r2 warmed": "warm-start",
+    "r2 warmup": "warm-start",
+    "warmup sft initialization": "warm-start",
+    "warm up sft initialization": "warm-start",
+    "sft warmup initialization": "warm-start",
+    "sft warm up initialization": "warm-start",
+}
 
 
 def parse_args() -> argparse.Namespace:
@@ -40,7 +64,7 @@ def parse_args() -> argparse.Namespace:
     parser.add_argument("--output-dir", type=Path, default=Path("results/figures/wandb-training-diagnostics"))
     parser.add_argument(
         "--experiment-notes",
-        default=None,
+        default="lluis-vives-runs-1-1M",
         help="Defaults to experiment.notes from config/train.yaml. Use '' to disable.",
     )
     parser.add_argument("--job-type", default="training")
@@ -89,7 +113,11 @@ def model_size(run) -> str | None:
     if match:
         return match.group(1).replace("b", "B")
 
-    match = SIZE_FROM_RUN_RE.search(run.name or "")
+    return model_size_from_run_name(run.name or "")
+
+
+def model_size_from_run_name(run_name: object) -> str | None:
+    match = SIZE_FROM_RUN_RE.search(str(run_name))
     if match:
         return RUN_SIZE_NAMES[match.group(1).lower()]
     return None
@@ -110,6 +138,40 @@ def reward_type(run) -> str | None:
 
     match = REWARD_FROM_RUN_RE.search(run.name or "")
     return match.group(1).lower() if match else None
+
+
+def initialization_variant(run) -> str:
+    config = run.config or {}
+    hydra = config.get("hydra", {}) if isinstance(config.get("hydra"), dict) else {}
+    variant = (
+        nested(hydra, "experiment", "initialization")
+        or nested(hydra, "experiment", "initialization_variant")
+        or nested(config, "experiment", "initialization")
+        or nested(config, "experiment", "initialization_variant")
+    )
+    if variant:
+        return display_initialization_label(str(variant))
+
+    return initialization_from_run_name(run.name or "")
+
+
+def initialization_from_run_name(run_name: object) -> str:
+    run_name = str(run_name).lower()
+    if re.search(r"(?:^|-)original(?:-|$)", run_name):
+        return "cold-start"
+    if (
+        re.search(r"(?:^|-)r\d+-warmed(?:-|$)", run_name)
+        or re.search(r"(?:^|-)warmed(?:-|$)", run_name)
+        or "warmup" in run_name
+    ):
+        return "warm-start"
+    return ""
+
+
+def display_initialization_label(value: object) -> str:
+    label = str(value).strip()
+    normalized = re.sub(r"[\s_]+", " ", label.lower().replace("-", " "))
+    return INITIALIZATION_LABELS.get(normalized, label)
 
 
 def experiment_notes(run) -> str:
@@ -144,7 +206,8 @@ def collect_run_rows(run, notes: str, samples: int) -> list[dict]:
     if notes and experiment_notes(run) != notes:
         return []
     run_model_name = configured_model_name(run)
-    if run_model_name != MODEL_NAMES[size]:
+    model_name_match = SIZE_FROM_MODEL_RE.search(run_model_name)
+    if model_name_match and run_model_name != MODEL_NAMES[size]:
         return []
 
     rows = []
@@ -173,6 +236,7 @@ def collect_run_rows(run, notes: str, samples: int) -> list[dict]:
                         "run_name": run.name,
                         "model_size": size,
                         "model_name": run_model_name,
+                        "initialization": initialization_variant(run),
                         "reward_type": reward,
                         "metric": metric,
                         "train_global_step": float(x),
@@ -199,7 +263,6 @@ def collect_rows(
         filters["jobType"] = job_type
     if notes:
         filters["config.hydra.experiment.notes"] = notes
-    filters["config.hydra.model.name"] = {"$in": list(MODEL_NAMES.values())}
 
     runs = list(api.runs(path, filters=filters))
     rows = []
@@ -247,6 +310,62 @@ def set_paper_style() -> None:
     )
 
 
+def metric_y_limits(size_df, metric: str) -> tuple[float, float] | None:
+    if metric in FIXED_Y_LIMITS:
+        return FIXED_Y_LIMITS[metric]
+
+    metric_df = size_df[size_df["metric"] == metric]
+    if metric_df.empty:
+        return None
+
+    if metric == "train/kl":
+        group_columns = [
+            column
+            for column in ("initialization", "reward_type")
+            if column in metric_df.columns
+        ]
+        grouped_metric = (
+            metric_df.groupby(group_columns)
+            if group_columns
+            else [(None, metric_df)]
+        )
+        lower_values = []
+        upper_values = []
+        for _, reward_df in grouped_metric:
+            reward_df = reward_df.sort_values("train_global_step")
+            mean_series = reward_df["mean"].rolling(
+                window=KL_SMOOTHING_WINDOW,
+                center=True,
+                min_periods=1,
+            ).median()
+            std_series = reward_df["std"].fillna(0.0).rolling(
+                window=KL_SMOOTHING_WINDOW,
+                center=True,
+                min_periods=1,
+            ).median()
+            lower_values.append((mean_series - std_series).min())
+            upper_values.append((mean_series + std_series).max())
+        lower = min(lower_values)
+        upper = max(upper_values)
+    else:
+        mean = metric_df["mean"]
+        std = metric_df["std"].fillna(0.0)
+        lower = (mean - std).min()
+        upper = (mean + std).max()
+
+    if not is_number(float(lower)) or not is_number(float(upper)):
+        return None
+
+    lower = max(0.0, float(lower))
+    upper = float(upper)
+    if upper <= lower:
+        padding = 0.05 if upper == 0.0 else abs(upper) * 0.05
+        return max(0.0, lower - padding), upper + padding
+
+    padding = (upper - lower) * 0.05
+    return max(0.0, lower - padding), upper + padding
+
+
 def plot_figures(grouped, output_dir: Path) -> list[Path]:
     import matplotlib.pyplot as plt
 
@@ -259,42 +378,98 @@ def plot_figures(grouped, output_dir: Path) -> list[Path]:
         )
     }
     paths = []
+    metric_items = list(METRICS.items())
+    metric_grid_rows = 2
+    metric_grid_cols = 2
 
     for size in MODEL_SIZES:
         size_df = grouped[grouped["model_size"] == size]
-        fig, axes = plt.subplots(2, 2, figsize=(7.0, 5.1), sharex=True)
+        y_limits = {
+            metric: metric_y_limits(size_df, metric)
+            for metric in METRICS
+        }
+        present_initializations = {
+            value
+            for value in size_df["initialization"].dropna().unique()
+            if value
+        }
+        initialization_blocks = [
+            initialization
+            for initialization in ["cold-start", "warm-start"]
+            if initialization in present_initializations
+        ]
+        initialization_blocks.extend(
+            sorted(present_initializations - set(initialization_blocks))
+        )
+        if not initialization_blocks:
+            initialization_blocks = [""]
+
+        nrows = metric_grid_rows * len(initialization_blocks)
+        fig_height = 2.55 * nrows
+        fig, axes = plt.subplots(
+            nrows,
+            metric_grid_cols,
+            figsize=(7.0, fig_height),
+            sharex=True,
+            squeeze=False,
+        )
         handles = {}
 
-        for ax, (metric, (_, ylabel)) in zip(axes.ravel(), METRICS.items(), strict=True):
-            metric_df = size_df[size_df["metric"] == metric]
-            for reward, reward_df in metric_df.groupby("reward_type"):
-                reward_df = reward_df.sort_values("train_global_step")
-                x = reward_df["train_global_step"].to_numpy()
-                mean_series = reward_df["mean"]
-                std_series = reward_df["std"].fillna(0.0)
-                if metric == "train/kl":
-                    mean_series = mean_series.rolling(
-                        window=KL_SMOOTHING_WINDOW,
-                        center=True,
-                        min_periods=1,
-                    ).median()
-                    std_series = std_series.rolling(
-                        window=KL_SMOOTHING_WINDOW,
-                        center=True,
-                        min_periods=1,
-                    ).median()
-                mean = mean_series.to_numpy()
-                std = std_series.to_numpy()
-                (line,) = ax.plot(x, mean, color=colors[reward], label=reward)
-                ax.fill_between(x, mean - std, mean + std, color=colors[reward], alpha=0.11)
-                handles.setdefault(reward, line)
+        for block_index, initialization in enumerate(initialization_blocks):
+            plot_df = (
+                size_df[size_df["initialization"] == initialization]
+                if initialization
+                else size_df
+            )
+            row_offset = block_index * metric_grid_rows
 
-            ax.set_ylabel(ylabel)
-            ax.grid(True, color="#b0b0b0")
-            if metric in {"train/reward", "active_group"}:
-                ax.set_ylim(-0.03, 1.03)
+            for metric_index, (metric, (_, ylabel)) in enumerate(metric_items):
+                row = row_offset + metric_index // metric_grid_cols
+                col = metric_index % metric_grid_cols
+                ax = axes[row, col]
+                metric_df = plot_df[plot_df["metric"] == metric]
+                for reward, reward_df in metric_df.groupby("reward_type"):
+                    reward_df = reward_df.sort_values("train_global_step")
+                    x = reward_df["train_global_step"].to_numpy()
+                    mean_series = reward_df["mean"]
+                    std_series = reward_df["std"].fillna(0.0)
+                    if metric == "train/kl":
+                        mean_series = mean_series.rolling(
+                            window=KL_SMOOTHING_WINDOW,
+                            center=True,
+                            min_periods=1,
+                        ).median()
+                        std_series = std_series.rolling(
+                            window=KL_SMOOTHING_WINDOW,
+                            center=True,
+                            min_periods=1,
+                        ).median()
+                    mean = mean_series.to_numpy()
+                    std = std_series.to_numpy()
+                    (line,) = ax.plot(x, mean, color=colors[reward], label=reward)
+                    ax.fill_between(
+                        x,
+                        mean - std,
+                        mean + std,
+                        color=colors[reward],
+                        alpha=0.11,
+                    )
+                    handles.setdefault(reward, line)
 
-        for ax in axes[1, :]:
+                ax.set_ylabel(ylabel)
+                ax.grid(True, color="#b0b0b0")
+                if y_limits[metric] is not None:
+                    ax.set_ylim(*y_limits[metric])
+
+            if initialization:
+                axes[row_offset, 0].set_title(
+                    initialization,
+                    loc="left",
+                    fontweight="bold",
+                    pad=14,
+                )
+
+        for ax in axes[-1, :]:
             ax.set_xlabel("Optimization step")
 
         if handles:
@@ -302,13 +477,13 @@ def plot_figures(grouped, output_dir: Path) -> list[Path]:
                 list(handles.values()),
                 list(handles.keys()),
                 loc="upper center",
-                bbox_to_anchor=(0.5, 0.925),
+                bbox_to_anchor=(0.5, 0.955),
                 ncol=min(len(handles), 5),
                 handlelength=2.2,
                 columnspacing=1.1,
             )
-        fig.suptitle(f"Qwen2.5-{size}", y=0.985, fontsize=11)
-        fig.tight_layout(rect=(0, 0, 1, 0.89))
+        fig.suptitle(f"Qwen2.5-{size}-Instruct", y=0.995, fontsize=11)
+        fig.tight_layout(rect=(0, 0, 1, 0.94))
 
         stem = f"training_diagnostics_qwen2_5_{size.lower().replace('.', '_')}"
         png_path = output_dir / f"{stem}.png"
@@ -363,11 +538,24 @@ def main() -> None:
         points = pd.DataFrame(rows)
         points.to_csv(points_path, index=False)
         print(f"Saved W&B points to {points_path}")
+    if "initialization" not in points.columns:
+        points["initialization"] = points["run_name"].map(initialization_from_run_name)
+    else:
+        inferred_initialization = points["run_name"].map(initialization_from_run_name)
+        points["initialization"] = points["initialization"].fillna("")
+        points.loc[points["initialization"] == "", "initialization"] = inferred_initialization
+    points["initialization"] = points["initialization"].fillna("").map(display_initialization_label)
+    if "model_size" in points.columns and "run_name" in points.columns:
+        inferred_model_size = points["run_name"].map(model_size_from_run_name)
+        points["model_size"] = points["model_size"].fillna(inferred_model_size)
 
     grouped = (
-        points.groupby(["model_size", "reward_type", "metric", "train_global_step"], as_index=False)
+        points.groupby(
+            ["model_size", "initialization", "reward_type", "metric", "train_global_step"],
+            as_index=False,
+        )
         .agg(mean=("value", "mean"), std=("value", "std"), n=("run_id", "nunique"))
-        .sort_values(["model_size", "reward_type", "metric", "train_global_step"])
+        .sort_values(["model_size", "initialization", "reward_type", "metric", "train_global_step"])
     )
 
     grouped.to_csv(output_dir / "training_diagnostic_summary.csv", index=False)
