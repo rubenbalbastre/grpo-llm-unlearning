@@ -743,9 +743,9 @@ def parse_args() -> argparse.Namespace:
         type=Path,
         default=Path("outputs/training_dynamics_hold_out_rubrics"),
     )
-    parser.add_argument("--judge-model", default="gpt-5.4-nano")
+    parser.add_argument("--judge-model", default="gpt-5.6-luna")
     parser.add_argument("--judge-reasoning-effort", default="low")
-    parser.add_argument("--judge-concurrency", type=int, default=8)
+    parser.add_argument("--judge-concurrency", type=int, default=16)
     parser.add_argument(
         "--download-only",
         action="store_true",
