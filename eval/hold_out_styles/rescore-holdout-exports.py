@@ -34,9 +34,23 @@ RUN_RE = re.compile(
     r"(?:-reasoning-[a-z0-9-]+)?_metrics\.csv$",
     re.IGNORECASE,
 )
+BASELINE_RE = re.compile(
+    r"^holdout-baseline-qwen-qwen2-5-"
+    r"(?P<model_size>0-5b|1-5b|3b|7b)-instruct-"
+    r"(?P<author>.+)_metrics\.csv$",
+    re.IGNORECASE,
+)
+WARMUP_RE = re.compile(
+    r"^r2warmup_qwen_qwen2_5_"
+    r"(?P<model_size>0_5b|1_5b|3b|7b)_instruct_"
+    r"(?P<author>.+)_metrics\.csv$",
+    re.IGNORECASE,
+)
 MODEL_SIZES = {
     "0-5b": "0.5B",
+    "0_5b": "0.5B",
     "1-5b": "1.5B",
+    "1_5b": "1.5B",
     "3b": "3B",
     "7b": "7B",
 }
@@ -44,33 +58,44 @@ MODEL_SIZES = {
 
 def run_metadata(path: Path) -> dict[str, str]:
     match = RUN_RE.fullmatch(path.name)
-    if match is None:
+    if match is not None:
+        reward_function = match.group("reward_function").lower()
+        training_variant = match.group("training_variant").lower()
+    elif match := BASELINE_RE.fullmatch(path.name):
+        reward_function = "baseline"
+        training_variant = "baseline"
+    elif match := WARMUP_RE.fullmatch(path.name):
+        reward_function = "r2-warmup"
+        training_variant = "r2-warmup"
+    else:
         raise ValueError(f"Cannot extract run metadata from {path.name}")
+
     model_size = MODEL_SIZES[match.group("model_size").lower()]
+    author = re.sub(r"[-_]+", " ", match.group("author")).title()
     return {
         "run_name": path.stem.removesuffix("_metrics"),
-        "author": match.group("author").replace("-", " ").title(),
+        "author": author,
         "model_name": f"Qwen/Qwen2.5-{model_size}-Instruct",
         "model_size": model_size,
-        "reward_function": match.group("reward_function").lower(),
-        "training_variant": match.group("training_variant").lower(),
+        "reward_function": reward_function,
+        "training_variant": training_variant,
     }
 
 
 def read_source(path: Path, max_items: int | None = None) -> pd.DataFrame:
-    df = pd.read_csv(path)
+    df = pd.read_csv(path, keep_default_na=False)
     missing = set(SOURCE_COLUMNS) - set(df.columns)
     if missing:
         raise ValueError(f"{path} is missing columns: {sorted(missing)}")
-    if df[KEY_COLUMNS].isna().any().any():
-        raise ValueError(f"{path} has missing subject, prompt, or completion values")
+    if df[["subject", "prompt"]].eq("").any().any():
+        raise ValueError(f"{path} has missing subject or prompt values")
     return df[SOURCE_COLUMNS].head(max_items).copy()
 
 
 def load_score_cache(output_dir: Path) -> pd.DataFrame:
     frames = []
     for path in sorted(output_dir.glob("*_metrics.csv")):
-        df = pd.read_csv(path)
+        df = pd.read_csv(path, keep_default_na=False)
         if set([*KEY_COLUMNS, *llm_judge_metrics]).issubset(df.columns):
             complete = df.dropna(subset=llm_judge_metrics)
             frames.append(complete[[*KEY_COLUMNS, *llm_judge_metrics]])
@@ -87,7 +112,7 @@ def score_file(
 ) -> pd.DataFrame:
     source = read_source(source_path, args.max_items_per_run)
     if output_path.exists() and not args.overwrite:
-        existing = pd.read_csv(output_path)
+        existing = pd.read_csv(output_path, keep_default_na=False)
         if (
             set(llm_judge_metrics).issubset(existing.columns)
             and len(existing) == len(source)
@@ -125,7 +150,7 @@ def score_file(
 def aggregate(output_dir: Path) -> None:
     run_rows = []
     for path in sorted(output_dir.glob("*_metrics.csv")):
-        df = pd.read_csv(path)
+        df = pd.read_csv(path, keep_default_na=False)
         if not set(llm_judge_metrics).issubset(df.columns):
             continue
         run_rows.append(
