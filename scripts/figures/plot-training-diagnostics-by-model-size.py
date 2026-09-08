@@ -369,6 +369,9 @@ def metric_y_limits(size_df, metric: str) -> tuple[float, float] | None:
 def plot_figures(grouped, output_dir: Path) -> list[Path]:
     import matplotlib.pyplot as plt
 
+    plt.rcParams["pdf.fonttype"] = 42
+    plt.rcParams["ps.fonttype"] = 42
+
     colors = {
         reward: color
         for reward, color in zip(
@@ -506,11 +509,6 @@ def main() -> None:
     if not project:
         raise SystemExit("WANDB_PROJECT is required in .env or --project.")
 
-    if api_key:
-        import wandb
-
-        wandb.login(key=api_key, relogin=True)
-
     import pandas as pd
 
     output_dir = args.output_dir
@@ -527,6 +525,10 @@ def main() -> None:
         points = None
 
     if points is None:
+        if api_key:
+            import wandb
+
+            wandb.login(key=api_key, relogin=True)
         rows = collect_rows(
             str(project), entity, notes, args.job_type, args.samples, args.workers
         )
