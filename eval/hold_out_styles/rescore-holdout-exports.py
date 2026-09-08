@@ -57,14 +57,14 @@ def run_metadata(path: Path) -> dict[str, str]:
     }
 
 
-def read_source(path: Path) -> pd.DataFrame:
+def read_source(path: Path, max_items: int | None = None) -> pd.DataFrame:
     df = pd.read_csv(path)
     missing = set(SOURCE_COLUMNS) - set(df.columns)
     if missing:
         raise ValueError(f"{path} is missing columns: {sorted(missing)}")
     if df[KEY_COLUMNS].isna().any().any():
         raise ValueError(f"{path} has missing subject, prompt, or completion values")
-    return df[SOURCE_COLUMNS].copy()
+    return df[SOURCE_COLUMNS].head(max_items).copy()
 
 
 def load_score_cache(output_dir: Path) -> pd.DataFrame:
@@ -85,7 +85,7 @@ def score_file(
     cache: pd.DataFrame,
     args: argparse.Namespace,
 ) -> pd.DataFrame:
-    source = read_source(source_path)
+    source = read_source(source_path, args.max_items_per_run)
     if output_path.exists() and not args.overwrite:
         existing = pd.read_csv(output_path)
         if (
@@ -109,7 +109,6 @@ def score_file(
                 judge_model=args.judge_model,
                 judge_reasoning_effort=args.judge_reasoning_effort,
                 max_concurrent_requests=args.judge_concurrency,
-                index_column="_score_index",
             )[[*KEY_COLUMNS, *llm_judge_metrics]]
         )
     if scored_parts:
@@ -172,6 +171,8 @@ def parse_args() -> argparse.Namespace:
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("--input-dir", type=Path, default=DEFAULT_INPUT_DIR)
     parser.add_argument("--output-dir", type=Path, default=DEFAULT_OUTPUT_DIR)
+    parser.add_argument("--max-runs", type=int, default=None)
+    parser.add_argument("--max-items-per-run", type=int, default=None)
     parser.add_argument("--judge-model", default=str(eval_config.judge_model))
     parser.add_argument(
         "--judge-reasoning-effort",
@@ -197,7 +198,7 @@ def main() -> None:
     args.output_dir.mkdir(parents=True, exist_ok=True)
 
     if not args.aggregate_only:
-        source_paths = sorted(args.input_dir.glob("*_metrics.csv"))
+        source_paths = sorted(args.input_dir.glob("*_metrics.csv"))[: args.max_runs]
         if not source_paths:
             raise ValueError(f"No run CSVs found under {args.input_dir}")
         for path in source_paths:
