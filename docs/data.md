@@ -97,6 +97,16 @@ python scripts/dataset/upload-data-to-hf.py
 Authentication is read from `.env` using `HF_TOKEN` or
 `HUGGINGFACE_HUB_TOKEN`.
 
+To create and upload the private rescored hold-out evaluation dataset:
+
+```bash
+python scripts/dataset/upload-hold-out-evals-to-hf.py
+```
+
+By default, this reads `outputs/hold_out_evals/holdout_metrics_rescored/` and
+uploads one `evaluation` split to `machine-unlearning-holdout-evals`. Pass a
+namespaced repository ID as the second positional argument to override it.
+
 Override the data root or repo id if needed:
 
 ```bash
