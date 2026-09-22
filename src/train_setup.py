@@ -16,7 +16,6 @@ from src.data_preprocessing.load_dataset import (
 from src.logging import (
     init_wandb_run,
     save_wandb_run_info,
-    setup_huggingface_hub,
     setup_wandb,
 )
 from src.utils import is_main_process
@@ -37,7 +36,6 @@ class TrainingDataSetup:
 
 def setup_run(cfg: DictConfig) -> tuple[bool, str, RunPaths]:
     load_dotenv()
-    setup_huggingface_hub()
     wandb_enabled = setup_wandb()
     run_name = str(cfg.wandb.run_name)
     output_dir = Path(cfg.paths.storage_root) / "outputs" / run_name

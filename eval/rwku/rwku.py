@@ -1,9 +1,10 @@
 import json
+import os
 from pathlib import Path
 
 import hydra
 from omegaconf import DictConfig, OmegaConf
-from dotenv import dotenv_values
+from dotenv import load_dotenv
 
 
 def load_yaml_config(path: Path, label: str) -> dict | None:
@@ -197,8 +198,8 @@ def run_evaluation(cfg: DictConfig) -> None:
         if any(s.lower() in {"all", "none"} for s in subjects):
             subjects = None
 
-    env_values = dotenv_values(Path(__file__).resolve().parents[2] / ".env")
-    hf_token = (env_values.get("HUGGINGFACE_HUB_TOKEN") or "").strip()
+    load_dotenv(Path(__file__).resolve().parents[2] / ".env")
+    hf_token = os.getenv("HF_TOKEN", "").strip()
     from_pretrained_kwargs = {
         "token": hf_token or False,
         "trust_remote_code": evaluation.model.trust_remote_code,
