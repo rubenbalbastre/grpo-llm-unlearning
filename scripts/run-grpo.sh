@@ -7,12 +7,12 @@
 set -euo pipefail
 
 hostname; pwd; date
-source "$HOME/anaconda3_bis/etc/profile.d/conda.sh"
+REPO_DIR="${REPO_DIR:-/storage/scratch/lv13/lv13594/fresh-repo/grpo-llm-unlearning}"
+source "$REPO_DIR/anaconda3_bis/etc/profile.d/conda.sh"
 echo "Activate virtual environment (must exist)"
 conda activate py312_cu118_bis
 echo "Run program in virtual environment"
 
-REPO_DIR="${REPO_DIR:-/storage/scratch/lv13/lv13594/fresh-repo/grpo-llm-unlearning}"
 cd "${REPO_DIR}"
 TRAIN_SCRIPT="${TRAIN_SCRIPT:-${REPO_DIR}/train.py}"
 TRAIN_CONFIG="${TRAIN_CONFIG:-${REPO_DIR}/config/train.yaml}"

@@ -10,9 +10,9 @@
 
 # Add host, time, and directory name for later troubleshooting
 hostname; pwd; date
-
-source "$HOME/anaconda3_bis/etc/profile.d/conda.sh"
-ENV_PATH="$HOME/anaconda3_bis/envs/py312_cu118_bis"
+REPO_DIR="${REPO_DIR:-/storage/scratch/lv13/lv13594/fresh-repo/grpo-llm-unlearning}"
+source "$REPO_DIR/anaconda3_bis/etc/profile.d/conda.sh"
+ENV_PATH="$REPO_DIR/anaconda3_bis/envs/py312_cu118_bis"
 
 echo "Checking for environment at $ENV_PATH"
 if ! conda env list | awk '{print $1}' | grep -qx "py312_cu118_bis"; then

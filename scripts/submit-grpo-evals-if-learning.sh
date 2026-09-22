@@ -70,7 +70,7 @@ else
       --gres=gpu:1 \
       --time="01:30:00" \
       --partition="hopper" \
-      --wrap="cd ${REPO_DIR} && source \$HOME/anaconda3_bis/etc/profile.d/conda.sh && conda activate py312_cu118_bis && python eval/hold_out_styles/generate-and-analyze-completions.py concept='${CONCEPT}' model_name_or_path='${CHECKPOINT_ROOT}/final_model' paths.storage_root='${STORAGE_ROOT}'"
+      --wrap="cd ${REPO_DIR} && source \$REPO_DIR/anaconda3_bis/etc/profile.d/conda.sh && conda activate py312_cu118_bis && python eval/hold_out_styles/generate-and-analyze-completions.py concept='${CONCEPT}' model_name_or_path='${CHECKPOINT_ROOT}/final_model' paths.storage_root='${STORAGE_ROOT}'"
   )"
 fi
 

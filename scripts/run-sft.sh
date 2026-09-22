@@ -7,8 +7,8 @@
 set -euo pipefail
 
 date
-
-source "$HOME/anaconda3_bis/etc/profile.d/conda.sh"
+REPO_DIR="${REPO_DIR:-/storage/scratch/lv13/lv13594/fresh-repo/grpo-llm-unlearning}"
+source "$REPO_DIR/anaconda3_bis/etc/profile.d/conda.sh"
 conda activate py312_cu118_bis
 
 python sft_warm_up.py "$@"

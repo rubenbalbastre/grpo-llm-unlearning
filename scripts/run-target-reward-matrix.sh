@@ -315,7 +315,7 @@ submit_holdout() {
     --gres=gpu:1 \
     --time="01:30:00" \
     --partition="hopper" \
-    --wrap="cd ${REPO_DIR} && ${marker_guard}source \$HOME/anaconda3_bis/etc/profile.d/conda.sh && conda activate py312_cu118_bis && python eval/hold_out_styles/generate-and-analyze-completions.py concept='${target}' model_name_or_path='${model_name_or_path}' paths.storage_root='${STORAGE_ROOT}'"
+    --wrap="cd ${REPO_DIR} && ${marker_guard}source \$REPO_DIR/anaconda3_bis/etc/profile.d/conda.sh && conda activate py312_cu118_bis && python eval/hold_out_styles/generate-and-analyze-completions.py concept='${target}' model_name_or_path='${model_name_or_path}' paths.storage_root='${STORAGE_ROOT}'"
 }
 
 submit_grpo_and_evals() {
