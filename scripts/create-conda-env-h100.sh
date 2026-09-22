@@ -3,6 +3,7 @@
 #SBATCH --output=/storage/scratch/lv13/lv13594/logs/create-conda-env-%j.log
 #SBATCH --qos=hopper
 #SBATCH --partition=hopper
+#SBATCH --qos=hopper
 #SBATCH --gres=gpu:1
 #SBATCH --time=01:00:00
 
