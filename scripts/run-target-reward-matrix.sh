@@ -5,7 +5,7 @@ REPO_DIR="${REPO_DIR:-/storage/scratch/lv13/lv13594/fresh-repo/grpo-llm-unlearni
 cd "${REPO_DIR}"
 
 LOW_REWARD_STOP_MARKER="low_reward_stop.json"
-RUN_RWKU_EVAL="${RUN_RWKU_EVAL:-true}"
+RUN_RWKU_EVAL="${RUN_RWKU_EVAL:-false}"
 RUN_HOLDOUT_EVAL="${RUN_HOLDOUT_EVAL:-false}"
 RUN_SFT_WARMUP="${RUN_SFT_WARMUP:-true}"
 STORAGE_ROOT="${STORAGE_ROOT:-.}"
