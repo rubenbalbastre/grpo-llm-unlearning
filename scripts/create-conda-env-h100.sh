@@ -13,8 +13,8 @@ pwd
 date
 
 STORAGE_DIR="/storage/scratch/lv13/lv13594"
-CONDA_DIR="$STORAGE_DIR/anaconda3"
-ENV_PATH="$STORAGE_DIR/conda-envs/py312"
+CONDA_DIR="$STORAGE_DIR/anaconda3_bis"
+ENV_PATH="$STORAGE_DIR/conda-envs/py312_cu118_bis"
 
 mkdir -p "$STORAGE_DIR/logs"
 mkdir -p "$STORAGE_DIR/conda-envs"
@@ -28,7 +28,7 @@ echo "Installing Anaconda"
 
 if [ ! -f "$CONDA_DIR/bin/conda" ]; then
     wget -O "$STORAGE_DIR/anaconda-installer.sh" \
-        https://repo.anaconda.com/archive/Anaconda3-2025.06-1-Linux-x86_64.sh
+        https://repo.anaconda.com/archive/anaconda3_bis-2025.06-1-Linux-x86_64.sh
 
     bash "$STORAGE_DIR/anaconda-installer.sh" \
         -b \

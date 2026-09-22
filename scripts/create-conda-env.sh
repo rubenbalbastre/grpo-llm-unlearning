@@ -11,11 +11,11 @@
 # Add host, time, and directory name for later troubleshooting
 hostname; pwd; date
 
-source "$HOME/anaconda3/etc/profile.d/conda.sh"
-ENV_PATH="$HOME/anaconda3/envs/py312"
+source "$HOME/anaconda3_bis/etc/profile.d/conda.sh"
+ENV_PATH="$HOME/anaconda3_bis/envs/py312_cu118_bis"
 
 echo "Checking for environment at $ENV_PATH"
-if ! conda env list | awk '{print $1}' | grep -qx "py312"; then
+if ! conda env list | awk '{print $1}' | grep -qx "py312_cu118_bis"; then
   echo "Create environment at $ENV_PATH"
   conda create -y -p "$ENV_PATH" python=3.12.3
 else

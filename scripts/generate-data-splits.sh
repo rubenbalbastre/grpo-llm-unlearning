@@ -6,8 +6,8 @@ set -euo pipefail
 
 date
 
-source "$HOME/anaconda3/etc/profile.d/conda.sh"
-conda activate py312
+source "$HOME/anaconda3_bis/etc/profile.d/conda.sh"
+conda activate py312_cu118_bis
 
 python generate_sft_grpo_splits.py "$@"
 

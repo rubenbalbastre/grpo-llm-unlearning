@@ -8,9 +8,9 @@
 set -euo pipefail
 
 hostname; pwd; date
-source "$HOME/anaconda3/etc/profile.d/conda.sh"
+source "$HOME/anaconda3_bis/etc/profile.d/conda.sh"
 echo "Activate virtual environment (must exist)"
-conda activate py312
+conda activate py312_cu118_bis
 echo "Run program in virtual environment"
 
 REPO_DIR="${REPO_DIR:-/home/lv13/lv13594/machine-unlearning-llm}"
