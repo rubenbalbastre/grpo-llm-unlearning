@@ -1,7 +1,7 @@
 #!/usr/bin/env bash
 set -euo pipefail
 
-REPO_DIR="${REPO_DIR:-/home/balalru/machine-unlearning-llm}"
+REPO_DIR="${REPO_DIR:-/storage/scratch/lv13/lv13594/fresh-repo/grpo-llm-unlearning}"
 cd "${REPO_DIR}"
 
 LOW_REWARD_STOP_MARKER="low_reward_stop.json"
@@ -18,24 +18,24 @@ elif [[ -n "${ORIGINAL_MODEL:-}" ]]; then
   original_models=("${ORIGINAL_MODEL}")
 else
   original_models=(
-    "Qwen/Qwen2.5-0.5B-Instruct"
-    "Qwen/Qwen2.5-1.5B-Instruct"
-    "Qwen/Qwen2.5-3B-Instruct"
+    # "Qwen/Qwen2.5-0.5B-Instruct"
+    # "Qwen/Qwen2.5-1.5B-Instruct"
+    # "Qwen/Qwen2.5-3B-Instruct"
     "Qwen/Qwen2.5-7B-Instruct"
   )
 fi
 
 targets=(
-  "Jennifer Lopez"
-  "Tony Blair"
-  "Marlon Brando"
-  "Bruce Lee"
-  "Serena Williams"
+  # "Jennifer Lopez"
+  # "Tony Blair"
+  # "Marlon Brando"
+  # "Bruce Lee"
+  # "Serena Williams"
   "John D. Rockefeller"
   "Tom Clancy"
-  "Vincent van Gogh"
-  "Karl Marx"
-  "Confucius"
+  # "Vincent van Gogh"
+  # "Karl Marx"
+  # "Confucius"
 )
 
 rewards=(
@@ -314,8 +314,8 @@ submit_holdout() {
     --output="logs/holdout-${label}-%j.log" \
     --gres=gpu:1 \
     --time="01:30:00" \
-    --partition="sc-gpu" \
-    --wrap="cd ${REPO_DIR} && ${marker_guard}source \$HOME/anaconda3/etc/profile.d/conda.sh && conda activate py312 && python eval/hold_out_styles/generate-and-analyze-completions.py concept='${target}' model_name_or_path='${model_name_or_path}' paths.storage_root='${STORAGE_ROOT}'"
+    --partition="hopper" \
+    --wrap="cd ${REPO_DIR} && ${marker_guard}source \$REPO_DIR/anaconda3_bis/etc/profile.d/conda.sh && conda activate py312_cu118_bis && python eval/hold_out_styles/generate-and-analyze-completions.py concept='${target}' model_name_or_path='${model_name_or_path}' paths.storage_root='${STORAGE_ROOT}'"
 }
 
 submit_grpo_and_evals() {

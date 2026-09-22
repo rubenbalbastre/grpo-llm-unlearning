@@ -14,10 +14,10 @@ from src.peft import (
 )
 from src.train_setup import (
     finish_training,
-    load_model_and_tokenizer,
     setup_run,
     setup_training_data
 )
+from src.model_loading import load_model_and_tokenizer
 from src.callbacks.grpo_callbacks import get_training_callbacks
 
 
@@ -96,8 +96,8 @@ def main(cfg: DictConfig) -> None:
         # learning rate, scheduler
         learning_rate=cfg.training.grpo.learning_rate,
         lr_scheduler_type=cfg.training.grpo.lr_scheduler_type,
-        lr_scheduler_kwargs={"min_lr_rate": 0.1} if cfg.training.grpo.lr_scheduler_type == "cosine_with_min_lr" else None,
-        warmup_ratio=cfg.training.grpo.warmup_ratio,
+        # lr_scheduler_kwargs={"min_lr_rate": 0.1} if cfg.training.grpo.lr_scheduler_type == "cosine_with_min_lr" else None,
+        # warmup_ratio=cfg.training.grpo.warmup_ratio,
         # others
         num_iterations=cfg.training.grpo.num_iterations,
         beta=cfg.training.grpo.beta,

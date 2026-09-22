@@ -1,18 +1,20 @@
 #!/bin/bash -l
-#SBATCH --job-name=slurm-run-unlearning
-#SBATCH --output=logs/slurm-run-unlearning-%j.log
-#SBATCH --gres=gpu:2
-#SBATCH --time=08:00:00
-#SBATCH --partition=sc-gpu
+#SBATCH --job-name=slurm-run-grpo
+#SBATCH --output=logs/grpo-%j.log
+#SBATCH --gres=gpu:1
+#SBATCH --time=02:00:00
+#SBATCH --partition=hopper
+#SBATCH --qos=hopper
 set -euo pipefail
 
 hostname; pwd; date
-source "$HOME/anaconda3/etc/profile.d/conda.sh"
+ENV_DIR="${ENV_DIR:-/storage/scratch/lv13/lv13594/}"
+REPO_DIR="${REPO_DIR:-/storage/scratch/lv13/lv13594/fresh-repo/grpo-llm-unlearning}"
+source "$ENV_DIR/anaconda3_bis/etc/profile.d/conda.sh"
 echo "Activate virtual environment (must exist)"
-conda activate py312
+conda activate py312_cu118_bis
 echo "Run program in virtual environment"
 
-REPO_DIR="${REPO_DIR:-/home/balalru/machine-unlearning-llm}"
 cd "${REPO_DIR}"
 TRAIN_SCRIPT="${TRAIN_SCRIPT:-${REPO_DIR}/train.py}"
 TRAIN_CONFIG="${TRAIN_CONFIG:-${REPO_DIR}/config/train.yaml}"

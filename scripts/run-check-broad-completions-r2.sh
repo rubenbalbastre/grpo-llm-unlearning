@@ -5,10 +5,11 @@
 set -euo pipefail
 hostname; pwd; date
 
-source "$HOME/anaconda3/etc/profile.d/conda.sh"
-conda activate py312
+ENV_DIR="${ENV_DIR:-/storage/scratch/lv13/lv13594/}"
+REPO_DIR="${REPO_DIR:-/storage/scratch/lv13/lv13594/fresh-repo/grpo-llm-unlearning}"
+source "$ENV_DIR/anaconda3_bis/etc/profile.d/conda.sh"
+conda activate py312_cu118_bis
 
-REPO_DIR="${REPO_DIR:-/home/balalru/machine-unlearning-llm}"
 cd "${REPO_DIR}"
 
 python3 scripts/check-broad-completions-r2.py

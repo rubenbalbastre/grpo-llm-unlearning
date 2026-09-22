@@ -15,7 +15,7 @@ Useful environment variables:
 
 ```bash
 REPO_DIR=/storage/scratch/<group>/<user>/machine-unlearning-llm
-TRAIN_ENV_PATH=/storage/scratch/<group>/<user>/anaconda3/envs/py312_cu118
+TRAIN_ENV_PATH=/storage/scratch/<group>/<user>/anaconda3_bis/envs/py312_cu118_bis_cu118
 WANDB_PROJECT=machine-unlearning-llm
 OPENAI_API_KEY=...
 HUGGINGFACE_HUB_TOKEN=...

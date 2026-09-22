@@ -3,16 +3,18 @@
 #SBATCH --output=logs/eval-rwku-%j.log
 #SBATCH --gres=gpu:2
 #SBATCH --time=05:30:00
-#SBATCH --partition=sc-gpu
+#SBATCH --partition=hopper
+#SBATCH --qos=hopper
 set -euo pipefail
 
 hostname; pwd; date
-source "$HOME/anaconda3/etc/profile.d/conda.sh"
+ENV_DIR="${ENV_DIR:-/storage/scratch/lv13/lv13594/}"
+REPO_DIR="${REPO_DIR:-/storage/scratch/lv13/lv13594/fresh-repo/grpo-llm-unlearning}"
+source "$ENV_DIR/anaconda3_bis/etc/profile.d/conda.sh"
 echo "Activate virtual environment (must exist)"
-conda activate py312
+conda activate py312_cu118_bis
 echo "Run program in virtual environment"
 
-REPO_DIR="${REPO_DIR:-/home/balalru/machine-unlearning-llm}"
 cd "${REPO_DIR}"
 if [[ -n "${SKIP_IF_MARKER:-}" && -f "${SKIP_IF_MARKER}" ]]; then
   echo "Skipping RWKU evaluation because marker exists: ${SKIP_IF_MARKER}"

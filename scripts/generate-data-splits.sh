@@ -6,8 +6,9 @@ set -euo pipefail
 
 date
 
-source "$HOME/anaconda3/etc/profile.d/conda.sh"
-conda activate py312
+ENV_DIR="${ENV_DIR:-/storage/scratch/lv13/lv13594/}"
+source "$ENV_DIR/anaconda3_bis/etc/profile.d/conda.sh"
+conda activate py312_cu118_bis
 
 python generate_sft_grpo_splits.py "$@"
 
