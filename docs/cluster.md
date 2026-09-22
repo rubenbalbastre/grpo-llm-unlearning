@@ -18,9 +18,12 @@ REPO_DIR=/storage/scratch/<group>/<user>/machine-unlearning-llm
 TRAIN_ENV_PATH=/storage/scratch/<group>/<user>/anaconda3_bis/envs/py312_cu118_bis_cu118
 WANDB_PROJECT=machine-unlearning-llm
 OPENAI_API_KEY=...
-HUGGINGFACE_HUB_TOKEN=...
+HF_TOKEN=...
 FASTTEXT_LID_PATH=/path/to/lid.176.ftz
 ```
+
+Hugging Face clients read the token directly from the process environment. The
+training jobs do not write it to the shared Hugging Face credential cache.
 
 Download fastText language ID data with:
 

@@ -94,8 +94,7 @@ repo:
 python scripts/dataset/upload-data-to-hf.py
 ```
 
-Authentication is read from `.env` using `HF_TOKEN` or
-`HUGGINGFACE_HUB_TOKEN`.
+Authentication is read from `.env` using `HF_TOKEN`.
 
 Override the data root or repo id if needed:
 

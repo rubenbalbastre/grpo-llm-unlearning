@@ -4,7 +4,6 @@ import openai
 from pathlib import Path
 from typing import Any, List
 import wandb
-from huggingface_hub import login
 
 
 def setup_wandb() -> bool:
@@ -34,11 +33,6 @@ def init_wandb_run(
         wandb.init(name=run_name, job_type="training", config={"hydra": config})
     if config_yaml_path is not None:
         wandb.save(str(config_yaml_path), policy="now")
-
-
-def setup_huggingface_hub() -> None:
-    if int(os.getenv("RANK", "0")) == 0:
-        login(token=os.getenv("HUGGINGFACE_HUB_TOKEN"))
 
 
 def save_wandb_run_info(model_dir: Path) -> None:

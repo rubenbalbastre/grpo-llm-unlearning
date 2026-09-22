@@ -26,9 +26,9 @@ def parse_args() -> argparse.Namespace:
 
 
 def get_token() -> str:
-    token = os.environ.get("HF_TOKEN") or os.environ.get("HUGGINGFACE_HUB_TOKEN")
+    token = os.environ.get("HF_TOKEN")
     if not token:
-        raise ValueError("Set HF_TOKEN or HUGGINGFACE_HUB_TOKEN in .env before downloading.")
+        raise ValueError("Set HF_TOKEN in .env before downloading.")
     return token
 
 
