@@ -1,7 +1,7 @@
 #!/usr/bin/env bash
 set -euo pipefail
 
-REPO_DIR="${REPO_DIR:-/home/balalru/machine-unlearning-llm}"
+REPO_DIR="${REPO_DIR:-/storage/scratch/lv13/lv13594/fresh-repo/grpo-llm-unlearning}"
 cd "${REPO_DIR}"
 
 LOW_REWARD_STOP_MARKER="${LOW_REWARD_STOP_MARKER:-low_reward_stop.json}"
@@ -96,7 +96,7 @@ submit_warmup_holdout() {
     --output="logs/holdout-sft-warmup-%j.log" \
     --gres=gpu:1 \
     --time="01:30:00" \
-    --partition="sc-gpu" \
+    --partition="hopper" \
     --wrap="cd ${REPO_DIR} && if [ -f '${run_dir}/${LOW_REWARD_STOP_MARKER}' ]; then echo 'Skipping hold-out because stop marker exists: ${run_dir}/${LOW_REWARD_STOP_MARKER}'; cat '${run_dir}/${LOW_REWARD_STOP_MARKER}'; exit 0; fi && source \$HOME/anaconda3/etc/profile.d/conda.sh && conda activate py312 && python eval/hold_out_styles/generate-and-analyze-completions.py concept='${target}' model_name_or_path='${final_model}' paths.storage_root='${STORAGE_ROOT}'"
 }
 

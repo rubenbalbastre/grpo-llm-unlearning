@@ -2,10 +2,10 @@
 #SBATCH --job-name=evals
 #SBATCH --output=logs/evals-%j.log
 #SBATCH --time=00:30:00
-#SBATCH --partition=sc-gpu
+#SBATCH --partition=hopper
 set -euo pipefail
 
-REPO_DIR="${REPO_DIR:-/home/balalru/machine-unlearning-llm}"
+REPO_DIR="${REPO_DIR:-/storage/scratch/lv13/lv13594/fresh-repo/grpo-llm-unlearning}"
 cd "${REPO_DIR}"
 
 EVAL_SCRIPT="${EVAL_SLURM_SCRIPT:-${REPO_DIR}/scripts/eval-rwku.sh}"

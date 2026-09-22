@@ -1,7 +1,7 @@
 #!/bin/bash -l
 set -euo pipefail
 
-REPO_DIR="${REPO_DIR:-/home/balalru/machine-unlearning-llm}"
+REPO_DIR="${REPO_DIR:-/storage/scratch/lv13/lv13594/fresh-repo/grpo-llm-unlearning}"
 cd "${REPO_DIR}"
 
 SFT_SCRIPT="${SFT_SLURM_SCRIPT:-${REPO_DIR}/scripts/submit-sft-warm-up.sh}"

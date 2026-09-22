@@ -314,7 +314,7 @@ submit_holdout() {
     --output="logs/holdout-${label}-%j.log" \
     --gres=gpu:1 \
     --time="01:30:00" \
-    --partition="sc-gpu" \
+    --partition="hopper" \
     --wrap="cd ${REPO_DIR} && ${marker_guard}source \$HOME/anaconda3/etc/profile.d/conda.sh && conda activate py312 && python eval/hold_out_styles/generate-and-analyze-completions.py concept='${target}' model_name_or_path='${model_name_or_path}' paths.storage_root='${STORAGE_ROOT}'"
 }
 

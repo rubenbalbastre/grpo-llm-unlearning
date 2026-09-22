@@ -2,14 +2,14 @@
 #SBATCH --job-name=analyze-completions
 #SBATCH --output=logs/analyze-completions-%j.log
 #SBATCH --time=01:30:00
-#SBATCH --partition=sc-gpu
+#SBATCH --partition=hopper
 set -euo pipefail
 hostname; pwd; date
 
 source "$HOME/anaconda3/etc/profile.d/conda.sh"
 conda activate py312
 
-REPO_DIR="${REPO_DIR:-/home/balalru/machine-unlearning-llm}"
+REPO_DIR="${REPO_DIR:-/storage/scratch/lv13/lv13594/fresh-repo/grpo-llm-unlearning}"
 cd "${REPO_DIR}"
 
 # python eval/hold_out_styles/generate-and-analyze-completions.py \

@@ -6,7 +6,7 @@
 # Request more time using "--time=<hours:mins:secs>". E.g.:
 #SBATCH --time=00:30:00
 # Request time partition "--partition=<Partition>". E.g.:
-#SBATCH --partition=sc-gpu
+#SBATCH --partition=hopper
 
 # Add host, time, and directory name for later troubleshooting
 hostname; pwd; date

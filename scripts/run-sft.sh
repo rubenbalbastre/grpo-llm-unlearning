@@ -3,7 +3,7 @@
 #SBATCH --output=logs/sft-%j.log
 #SBATCH --gres=gpu:1
 #SBATCH --time=01:00:00
-#SBATCH --partition=sc-gpu
+#SBATCH --partition=hopper
 set -euo pipefail
 
 date

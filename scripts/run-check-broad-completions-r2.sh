@@ -8,7 +8,7 @@ hostname; pwd; date
 source "$HOME/anaconda3/etc/profile.d/conda.sh"
 conda activate py312
 
-REPO_DIR="${REPO_DIR:-/home/balalru/machine-unlearning-llm}"
+REPO_DIR="${REPO_DIR:-/storage/scratch/lv13/lv13594/fresh-repo/grpo-llm-unlearning}"
 cd "${REPO_DIR}"
 
 python3 scripts/check-broad-completions-r2.py
