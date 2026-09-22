@@ -1,6 +1,6 @@
 #!/bin/bash -l
-#SBATCH --job-name=slurm-run-unlearning
-#SBATCH --output=logs/slurm-run-unlearning-%j.log
+#SBATCH --job-name=slurm-run-grpo
+#SBATCH --output=logs/grpo-%j.log
 #SBATCH --gres=gpu:1
 #SBATCH --time=02:00:00
 #SBATCH --partition=hopper
