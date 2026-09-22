@@ -36,11 +36,11 @@ SUMMARY_COLUMNS = [
 
 TRAINED_MODEL_RE = re.compile(
     r"(?:^|/)unlearning-(?P<variant>original|r2-warmed)-"
-    r"qwen-qwen2-5-(?P<size>0-5b|1-5b|3b)-instruct-.*-"
-    r"(?P<reward>r\d+)(?:/final_model)?$",
+    r"qwen-qwen2-5-(?P<size>0-5b|1-5b|3b|7b)-instruct-.*-"
+    r"(?P<reward>r\d+)(?:-reasoning-[a-z0-9-]+)?(?:/final_model)?$",
     re.IGNORECASE,
 )
-SIZE_NAMES = {"0-5b": "0.5B", "1-5b": "1.5B", "3b": "3B"}
+SIZE_NAMES = {"0-5b": "0.5B", "1-5b": "1.5B", "3b": "3B", "7b": "7B"}
 
 
 def model_and_reward(model_name_or_path: str) -> tuple[str, str]:

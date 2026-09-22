@@ -25,7 +25,8 @@ BASELINE_FOLDER_RE = re.compile(
 UNLEARNING_FOLDER_RE = re.compile(
     r"^(?P<concept>.+)-\.-outputs-unlearning-"
     r"(?P<training_variant>original|r2-warmed)-qwen-qwen2-5-"
-    r"(?P<size>0-5b|1-5b|3b|7b)-instruct-.+-(?P<reward_type>r\d+)-final_model$",
+    r"(?P<size>0-5b|1-5b|3b|7b)-instruct-.+-(?P<reward_type>r\d+)"
+    r"(?:-reasoning-[a-z0-9-]+)?-final_model$",
     re.IGNORECASE,
 )
 WARMUP_FOLDER_RE = re.compile(
@@ -36,7 +37,7 @@ WARMUP_FOLDER_RE = re.compile(
 STOPPED_RUN_RE = re.compile(
     r"^unlearning-(?P<training_variant>original|r2-warmed)-qwen-qwen2-5-"
     r"(?P<size>0-5b|1-5b|3b|7b)-instruct-(?P<concept>.+)-"
-    r"(?P<reward_type>r\d+)$",
+    r"(?P<reward_type>r\d+)(?:-reasoning-[a-z0-9-]+)?$",
     re.IGNORECASE,
 )
 MODEL_SIZES = {

@@ -328,6 +328,12 @@ submit_grpo_and_evals() {
   local serial_dependency="${7:-}"
 
   local run_name="unlearning-$(slug "${base_label}")-$(slug "${model_label}")-$(slug "${target}")-${reward}"
+  if [[ "${reward}" == "r2" ]]; then
+    run_name="${run_name}-reasoning-$(
+      awk '$1 == "llm-judge:" { section = 1; next }
+           section && $1 == "reasoning_effort:" { print $2; exit }' config/train.yaml
+    )"
+  fi
   local checkpoint_root="${OUTPUT_ROOT}/${run_name}"
   local train_job_id
   local eval_gate_job_id
