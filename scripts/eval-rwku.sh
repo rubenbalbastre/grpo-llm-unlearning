@@ -4,6 +4,7 @@
 #SBATCH --gres=gpu:2
 #SBATCH --time=05:30:00
 #SBATCH --partition=hopper
+#SBATCH --qos=hopper
 set -euo pipefail
 
 hostname; pwd; date

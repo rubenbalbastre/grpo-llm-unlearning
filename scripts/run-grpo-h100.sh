@@ -5,6 +5,7 @@
 #SBATCH --time=01:00:00
 #SBATCH --partition=hopper
 #SBATCH --qos=hopper
+#SBATCH --qos=hopper
 set -euo pipefail
 
 hostname; pwd; date

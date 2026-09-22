@@ -3,6 +3,7 @@
 #SBATCH --output=logs/evals-%j.log
 #SBATCH --time=00:30:00
 #SBATCH --partition=hopper
+#SBATCH --qos=hopper
 set -euo pipefail
 
 REPO_DIR="${REPO_DIR:-/storage/scratch/lv13/lv13594/fresh-repo/grpo-llm-unlearning}"

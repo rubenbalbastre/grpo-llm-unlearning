@@ -6,7 +6,8 @@
 # Request more time using "--time=<hours:mins:secs>". E.g.:
 #SBATCH --time=00:30:00
 # Request time partition "--partition=<Partition>". E.g.:
-#SBATCH --partition=hopper# Add host, time, and directory name for later troubleshooting
+#SBATCH --partition=hopper
+#SBATCH --qos=hopper# Add host, time, and directory name for later troubleshooting
 hostname; pwd; date
 # Run the program/command
 ENV_DIR="${ENV_DIR:-/storage/scratch/lv13/lv13594/}"

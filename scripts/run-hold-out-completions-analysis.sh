@@ -3,6 +3,7 @@
 #SBATCH --output=logs/analyze-completions-%j.log
 #SBATCH --time=01:30:00
 #SBATCH --partition=hopper
+#SBATCH --qos=hopper
 set -euo pipefail
 hostname; pwd; date
 
