@@ -88,6 +88,7 @@ uv pip install \
     hydra-core \
     weave \
     python-dotenv \
+    nltk \
     sentence-transformers \
     openai \
     ninja \
