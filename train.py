@@ -14,10 +14,10 @@ from src.peft import (
 )
 from src.train_setup import (
     finish_training,
-    load_model_and_tokenizer,
     setup_run,
     setup_training_data
 )
+from src.model_loading import load_model_and_tokenizer
 from src.callbacks.grpo_callbacks import get_training_callbacks
 
 

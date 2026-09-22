@@ -7,8 +7,8 @@ from src.callbacks.sft_callbacks import SFTCallback
 from src.peft import get_peft_config
 from src.reward.components.avoid_refusal import DEFAULT_GARAK_REFUSAL_MODEL
 from src.reward.reward_r2 import build_reward_funcs as build_r2_reward_funcs
-from src.train_setup import load_model_and_tokenizer, setup_run, setup_training_data, finish_training
-
+from src.train_setup import setup_run, setup_training_data, finish_training
+from src.model_loading import load_model_and_tokenizer
 
 @hydra.main(version_base=None, config_path="config", config_name="train")
 def main(cfg: DictConfig) -> None:
