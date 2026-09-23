@@ -121,7 +121,7 @@ def submit_sft(model: str, target: str, previous_job: str | None) -> TrainingRun
         f"paths.storage_root={STORAGE_ROOT}",
         "training.sft.objective=broad",
         "reward.type=r2",
-        "training.grpo.save_final_model=true",
+        "training.sft.save_final_model=true",
         dependencies=(previous_job,),
     )
     print(f"SFT {target}: {run.job_id} ({run_name})")
@@ -212,7 +212,6 @@ def submit_rwku(
             f"evaluation.output_dir={output_dir}",
             f"evaluation.subjects={target}",
             "evaluation.model.label=baseline",
-            "evaluation.checkpoint.label=baseline",
             f"evaluation.wandb.run_name={baseline_label}",
             f"evaluation.wandb.artifact_name={baseline_label}",
         )
