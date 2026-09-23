@@ -356,6 +356,7 @@ def aggregate_rows(rows: list[dict[str, str]]) -> list[dict[str, str]]:
             "reward_function": reward_function,
             "model_size": model_size,
             "training_initialization": training_initialization,
+            "author_count": len({row.get("author", "") for row in group_rows}),
         }
         for metric in metrics:
             values = [
@@ -444,6 +445,7 @@ def main() -> None:
             "reward_function",
             "model_size",
             "training_initialization",
+            "author_count",
         ],
     )
     print(f"read {len(summary_paths)} summary CSV file(s)")

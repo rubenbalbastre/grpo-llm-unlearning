@@ -83,6 +83,7 @@ FINAL_COLUMNS = [
     "reward_function",
     "model_size",
     "training_initialization",
+    "author_count",
 ]
 AGGREGATE_METRICS = [
     *[f"{metric}_delta" for metric in SPLIT_AGGREGATES],
@@ -209,6 +210,7 @@ def aggregate_author_rows(rows: list[dict[str, object]]) -> list[dict[str, objec
             "reward_function": reward,
             "model_size": size,
             "training_initialization": mode,
+            "author_count": len({str(row["author"]) for row in group}),
         }
         for metric in AGGREGATE_METRICS:
             values = [
