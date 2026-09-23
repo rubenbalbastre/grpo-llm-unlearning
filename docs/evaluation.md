@@ -86,6 +86,16 @@ outputs/<run>/final_model/hold_out_eval/
 `metrics.csv` contains one row per prompt/completion. `summary.csv` contains
 the average rubric scores for that checkpoint and concept.
 
+## Final Tables
+
+Create the RWKU and behavioural article tables from completed evaluations:
+
+```bash
+scripts/tables/final-table.sh
+```
+
+CSV and Markdown tables are written under `outputs/tables/`.
+
 ## Training-Dynamics Hold-Out Analysis
 
 This script evaluates completions logged during training. It downloads only the
