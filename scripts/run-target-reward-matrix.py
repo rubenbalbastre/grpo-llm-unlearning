@@ -36,6 +36,8 @@ TARGETS = [
     "Confucius",
 ]
 REWARDS = ["r0", "r1", "r2", "r4"]
+RUN_RWKU_EVAL = False
+RUN_HOLD_OUT_EVAL = False
 
 
 @dataclass
@@ -187,6 +189,9 @@ def submit_rwku(
     checkpoint_root: Path | None = None,
     baseline_label: str | None = None,
 ) -> None:
+    if not RUN_RWKU_EVAL:
+        return
+
     if checkpoint_root is not None:
         output_dir = Path(model_path) / "eval_rwku"
         marker = checkpoint_root / STOP_MARKER
@@ -229,6 +234,9 @@ def submit_holdout(
     dependency: str | None = None,
     checkpoint_root: Path | None = None,
 ) -> None:
+    if not RUN_HOLD_OUT_EVAL:
+        return
+
     output_dir = holdout_output_dir(target, model_path, checkpoint_root)
     if (output_dir / "metrics.csv").is_file() and (output_dir / "summary.csv").is_file():
         print(f"Hold-out {target}: already exists")
