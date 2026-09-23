@@ -30,10 +30,10 @@ evaluation:
   mia_batch_size: 32
   utility_batch_size:
     utility_general: 32
-    utility_reason: 32
-    utility_truthfulness: 32
-    utility_factuality: 32
-    utility_fluency: 32
+    utility_reason: 16
+    utility_truthfulness: 16
+    utility_factuality: 16
+    utility_fluency: 16
   choice_likelihood_batch_size: 16
   generation:
     max_new_tokens: 256
