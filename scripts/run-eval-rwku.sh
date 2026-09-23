@@ -2,7 +2,8 @@
 #SBATCH --job-name=eval-rwku
 #SBATCH --output=logs/eval-rwku-%j.log
 #SBATCH --gres=gpu:2
-#SBATCH --time=05:30:00
+#SBATCH --mem=16G
+#SBATCH --time=00:20:00
 #SBATCH --partition=hopper
 #SBATCH --qos=hopper
 set -euo pipefail
