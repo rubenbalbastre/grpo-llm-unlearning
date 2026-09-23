@@ -10,6 +10,6 @@ cd "${REPO_DIR}"
 
 python eval/rwku/create_final_table.py \
   --output-csv outputs/tables/rwku.csv \
-  --author-output-csv outputs/tables/rwku_author_deltas.csv
+  --author-output-csv outputs/tables/rwku_authors.csv
 
 python eval/behaviour/create_final_table.py

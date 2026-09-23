@@ -94,7 +94,8 @@ Create the RWKU and behavioural article tables from completed evaluations:
 scripts/tables/final-table.sh
 ```
 
-CSV and Markdown tables are written under `outputs/tables/`.
+Four CSV files are written under `outputs/tables/`: author-level and aggregate
+tables for RWKU and behavioural evaluation.
 
 ## Training-Dynamics Hold-Out Analysis
 
