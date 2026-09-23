@@ -8,10 +8,8 @@ from pathlib import Path
 import hydra
 import pandas as pd
 from dotenv import load_dotenv
-from datasets import load_from_disk
 from tqdm import tqdm
 from transformers import AutoModelForCausalLM, AutoTokenizer
-import torch
 
 
 REPO_ROOT = Path(__file__).resolve().parents[2]
@@ -49,9 +47,12 @@ def load_model_and_tokenizer(args: argparse.Namespace):
         tokenizer.pad_token = tokenizer.eos_token
     tokenizer.padding_side = "left"
 
-    model = AutoModelForCausalLM.from_pretrained(args.model_name_or_path)
+    model = AutoModelForCausalLM.from_pretrained(
+        args.model_name_or_path,
+        torch_dtype="auto",
+        device_map="auto",
+    )
     model.eval()
-    model.to("cuda" if torch.cuda.is_available() else "cpu")
     return model, tokenizer
 
 
