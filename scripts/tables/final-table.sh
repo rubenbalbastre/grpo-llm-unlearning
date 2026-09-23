@@ -8,8 +8,15 @@ conda activate py312_cu118_bis
 
 cd "${REPO_DIR}"
 
-python eval/rwku/create_final_table.py \
+python3 eval/rwku/create_final_table.py \
   --output-csv outputs/tables/rwku.csv \
   --author-output-csv outputs/tables/rwku_authors.csv
 
-python eval/behaviour/create_final_table.py
+python3 eval/behaviour/create_final_table.py
+
+tar -czf outputs/tables/final-tables.tar.gz \
+  -C outputs/tables \
+  rwku.csv \
+  rwku_authors.csv \
+  behaviour.csv \
+  behaviour_authors.csv

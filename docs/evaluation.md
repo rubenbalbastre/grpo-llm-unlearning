@@ -95,7 +95,8 @@ scripts/tables/final-table.sh
 ```
 
 Four CSV files are written under `outputs/tables/`: author-level and aggregate
-tables for RWKU and behavioural evaluation.
+tables for RWKU and behavioural evaluation. They are also packaged as
+`outputs/tables/final-tables.tar.gz`.
 
 ## Training-Dynamics Hold-Out Analysis
 
