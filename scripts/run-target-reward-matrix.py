@@ -169,10 +169,14 @@ def submit_grpo(
     return run
 
 
-def holdout_output_dir(target: str, model_path: str) -> Path:
-    target_part = target.replace(" ", "-").lower()
-    model_part = model_path.replace("/", "-")
-    return OUTPUT_ROOT / "behaviour" / f"{target_part}-{model_part}"
+def holdout_output_dir(
+    target: str,
+    model_path: str,
+    checkpoint_root: Path | None,
+) -> Path:
+    if checkpoint_root is not None:
+        return Path(model_path) / "hold_out_eval"
+    return OUTPUT_ROOT / f"hold-out-baseline-{slug(model_path)}-{slug(target)}" / "hold_out_eval"
 
 
 def submit_rwku(
@@ -225,7 +229,7 @@ def submit_holdout(
     dependency: str | None = None,
     checkpoint_root: Path | None = None,
 ) -> None:
-    output_dir = holdout_output_dir(target, model_path)
+    output_dir = holdout_output_dir(target, model_path, checkpoint_root)
     if (output_dir / "metrics.csv").is_file() and (output_dir / "summary.csv").is_file():
         print(f"Hold-out {target}: already exists")
         return
@@ -245,6 +249,7 @@ def submit_holdout(
         "run-eval-behaviour.sh",
         f"concept={target}",
         f"model_name_or_path={model_path}",
+        f"output_dir={output_dir}",
         f"paths.storage_root={STORAGE_ROOT}",
         dependencies=(dependency,),
         exports=exports,

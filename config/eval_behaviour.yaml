@@ -2,6 +2,7 @@ paths:
   storage_root: .
 
 model_name_or_path: "./outputs/unlearning-4550/final_model"
+output_dir: null
 concept: Rihanna
 max_examples: null
 shuffle: true

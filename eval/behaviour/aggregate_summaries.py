@@ -56,8 +56,12 @@ def model_and_reward(model_name_or_path: str) -> tuple[str, str]:
 
 def read_rows(input_dir: Path) -> list[dict[str, str]]:
     rows: list[dict[str, str]] = []
-    # Deliberately scan immediate run directories only; ``old/`` is archival.
-    for path in sorted(input_dir.glob("*/summary.csv")):
+    paths = {
+        *input_dir.glob("*/summary.csv"),
+        *input_dir.glob("*/hold_out_eval/summary.csv"),
+        *input_dir.glob("*/*/hold_out_eval/summary.csv"),
+    }
+    for path in sorted(paths):
         with path.open(newline="", encoding="utf-8") as handle:
             reader = csv.DictReader(handle)
             missing = set(["forget_concept", "model_name_or_path", "stat", *METRICS]) - set(
@@ -121,7 +125,7 @@ def write_csv(path: Path, columns: list[str], rows: list[dict[str, object]]) -> 
 
 def parse_args() -> argparse.Namespace:
     parser = argparse.ArgumentParser(description=__doc__)
-    parser.add_argument("--input-dir", type=Path, default=Path("outputs/behaviour"))
+    parser.add_argument("--input-dir", type=Path, default=Path("outputs"))
     parser.add_argument("--all-output", type=Path, default=None)
     parser.add_argument("--summary-output", type=Path, default=None)
     return parser.parse_args()
@@ -133,7 +137,7 @@ def main() -> None:
     summary_output = args.summary_output or args.input_dir / "authors_mean_summary.csv"
     rows = read_rows(args.input_dir)
     if not rows:
-        raise ValueError(f"No immediate */summary.csv files found under {args.input_dir}")
+        raise ValueError(f"No hold-out summary files found under {args.input_dir}")
     write_csv(all_output, DETAIL_COLUMNS, rows)
     summary = author_mean_summary(rows)
     write_csv(summary_output, SUMMARY_COLUMNS, summary)

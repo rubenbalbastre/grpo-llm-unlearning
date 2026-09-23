@@ -60,7 +60,8 @@ Typical command:
 ```bash
 python eval/behaviour/generate-and-analyze-completions.py \
   model_name_or_path=outputs/<run>/final_model \
-  concept="Stephen King"
+  concept="Stephen King" \
+  output_dir=outputs/<run>/final_model/hold_out_eval
 ```
 
 Useful overrides:
@@ -77,7 +78,7 @@ The script reads `.env`, so `OPENAI_API_KEY` is required for the judge. Outputs
 are written to:
 
 ```text
-outputs/behaviour/<concept>-<model>/
+outputs/<run>/final_model/hold_out_eval/
   metrics.csv
   summary.csv
 ```

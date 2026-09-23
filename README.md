@@ -52,7 +52,7 @@ python eval/behaviour/generate-and-analyze-completions.py \
 ```
 
 This writes `metrics.csv` and `summary.csv` under
-`outputs/behaviour/<concept>-<model>/`.
+`outputs/<run>/checkpoint-175/hold_out_eval/`.
 
 Run training-dynamics hold-out analysis from W&B completion tables:
 

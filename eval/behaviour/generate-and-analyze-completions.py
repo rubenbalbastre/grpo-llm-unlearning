@@ -126,12 +126,7 @@ def main(args) -> None:
         max_concurrent_requests=args.judge_concurrency,
     )
     summary = aggregate_results(df, args)
-    output_dir = (
-        Path(args.paths.storage_root)
-        / "outputs"
-        / "behaviour"
-        / f"{args.concept.replace(' ', '-').lower()}-{args.model_name_or_path.replace('/', '-')}"
-    )
+    output_dir = Path(args.output_dir or Path(args.model_name_or_path) / "hold_out_eval")
     write_outputs(output_dir, df, summary)
     print(f"Wrote metrics and summary to {output_dir}", flush=True)
 
