@@ -127,6 +127,7 @@ def main(cfg: DictConfig) -> None:
         forget_concept=forget_concept,
         paths=paths,
         wandb_enabled=wandb_enabled,
+        save_final_model=bool(cfg.training.grpo.save_final_model),
     )
 
 
