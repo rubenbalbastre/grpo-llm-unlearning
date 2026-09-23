@@ -80,35 +80,18 @@ AUTHOR_COLUMNS = [
     *UTILITY_METRICS,
 ]
 FINAL_COLUMNS = [
-    "model_name_or_path",
-    "model_size",
     "reward_function",
+    "model_size",
     "training_initialization",
-    "author_count",
 ]
-for _metric in SPLIT_AGGREGATES:
+AGGREGATE_METRICS = [
+    *[f"{metric}_delta" for metric in SPLIT_AGGREGATES],
+    *[f"{metric}_delta" for metric in DELTA_METRICS],
+    *UTILITY_METRICS,
+]
+for _metric in AGGREGATE_METRICS:
     FINAL_COLUMNS.extend(
-        [
-            f"{_metric}_delta_mean",
-            f"{_metric}_delta_std_across_authors",
-            f"{_metric}_author_count",
-        ]
-    )
-for _metric in DELTA_METRICS:
-    FINAL_COLUMNS.extend(
-        [
-            f"{_metric}_delta_mean",
-            f"{_metric}_delta_std_across_authors",
-            f"{_metric}_author_count",
-        ]
-    )
-for _metric in UTILITY_METRICS:
-    FINAL_COLUMNS.extend(
-        [
-            f"{_metric}_mean",
-            f"{_metric}_std_across_authors",
-            f"{_metric}_author_count",
-        ]
+        [f"{_metric}_median", f"{_metric}_q1", f"{_metric}_q3"]
     )
 
 
@@ -200,59 +183,40 @@ def build_author_rows(
     return rows, unmatched
 
 
-def mean(values: list[float]) -> float | None:
-    return statistics.mean(values) if values else None
-
-
-def sample_std(values: list[float]) -> float | None:
-    return statistics.stdev(values) if len(values) > 1 else None
+def quantile(values: list[float], probability: float) -> float | None:
+    if not values:
+        return None
+    ordered = sorted(values)
+    position = (len(ordered) - 1) * probability
+    lower = int(position)
+    upper = min(lower + 1, len(ordered) - 1)
+    return ordered[lower] + (ordered[upper] - ordered[lower]) * (position - lower)
 
 
 def aggregate_author_rows(rows: list[dict[str, object]]) -> list[dict[str, object]]:
-    groups: dict[tuple[str, str, str, str], list[dict[str, object]]] = defaultdict(list)
+    groups: dict[tuple[str, str, str], list[dict[str, object]]] = defaultdict(list)
     for row in rows:
         key = (
-            str(row["model_name_or_path"]),
-            str(row["model_size"]),
             str(row["reward_function"]),
+            str(row["model_size"]),
             str(row["training_initialization"]),
         )
         groups[key].append(row)
 
     output_rows = []
-    for (model, size, reward, mode), group in sorted(groups.items()):
+    for (reward, size, mode), group in sorted(groups.items()):
         output: dict[str, object] = {
-            "model_name_or_path": model,
-            "model_size": size,
             "reward_function": reward,
+            "model_size": size,
             "training_initialization": mode,
-            "author_count": len({str(row["author"]) for row in group}),
         }
-        for metric in SPLIT_AGGREGATES:
-            values = [
-                float(row[f"{metric}_delta"])
-                for row in group
-                if row.get(f"{metric}_delta") is not None
-            ]
-            output[f"{metric}_delta_mean"] = mean(values)
-            output[f"{metric}_delta_std_across_authors"] = sample_std(values)
-            output[f"{metric}_author_count"] = len(values)
-        for metric in DELTA_METRICS:
-            values = [
-                float(row[f"{metric}_delta"])
-                for row in group
-                if row.get(f"{metric}_delta") is not None
-            ]
-            output[f"{metric}_delta_mean"] = mean(values)
-            output[f"{metric}_delta_std_across_authors"] = sample_std(values)
-            output[f"{metric}_author_count"] = len(values)
-        for metric in UTILITY_METRICS:
+        for metric in AGGREGATE_METRICS:
             values = [
                 float(row[metric]) for row in group if row.get(metric) is not None
             ]
-            output[f"{metric}_mean"] = mean(values)
-            output[f"{metric}_std_across_authors"] = sample_std(values)
-            output[f"{metric}_author_count"] = len(values)
+            output[f"{metric}_median"] = quantile(values, 0.5)
+            output[f"{metric}_q1"] = quantile(values, 0.25)
+            output[f"{metric}_q3"] = quantile(values, 0.75)
         output_rows.append(output)
     return output_rows
 

@@ -4,7 +4,6 @@ import argparse
 import csv
 import json
 import re
-import statistics
 from collections import defaultdict
 from pathlib import Path
 
@@ -264,24 +263,25 @@ def format_number(value: float | None) -> str:
     return f"{value:.8f}"
 
 
-def numeric_columns(rows: list[dict[str, str]]) -> list[str]:
+def metric_columns(rows: list[dict[str, str]]) -> list[str]:
     columns: list[str] = []
     for row in rows:
-        for column, value in row.items():
-            if column in {
-                "author",
-                "model_name_or_path",
-                "model_size",
-                "reward_function",
-                "training_variant",
-                "training_initialization",
-                "run_name",
-                "experiment_seed",
-            }:
-                continue
-            if numeric_value(value) is not None and column not in columns:
-                columns.append(column)
+        for column in row:
+            if column.endswith("_mean"):
+                metric = column.removesuffix("_mean")
+                if metric not in columns:
+                    columns.append(metric)
     return columns
+
+
+def quantile(values: list[float], probability: float) -> float | None:
+    if not values:
+        return None
+    ordered = sorted(values)
+    position = (len(ordered) - 1) * probability
+    lower = int(position)
+    upper = min(lower + 1, len(ordered) - 1)
+    return ordered[lower] + (ordered[upper] - ordered[lower]) * (position - lower)
 
 
 def aggregate_rows(rows: list[dict[str, str]]) -> list[dict[str, str]]:
@@ -294,41 +294,25 @@ def aggregate_rows(rows: list[dict[str, str]]) -> list[dict[str, str]]:
         )
         groups[key].append(row)
 
-    metric_columns = numeric_columns(rows)
+    metrics = metric_columns(rows)
     aggregate_rows = []
     for (reward_function, model_size, training_initialization), group_rows in sorted(groups.items()):
         output = {
             "reward_function": reward_function,
             "model_size": model_size,
-            "model_name_or_path": group_rows[0].get("model_name_or_path", ""),
             "training_initialization": training_initialization,
-            "training_variants": "|".join(
-                sorted({row.get("training_variant", "") for row in group_rows})
-            ),
-            "run_count": str(len(group_rows)),
-            "observed_run_count": str(
-                sum(row.get("result_source", "observed") == "observed" for row in group_rows)
-            ),
-            "no_learning_count": str(
-                sum(row.get("run_status") == "no-learning" for row in group_rows)
-            ),
-            "baseline_imputed_count": str(
-                sum(row.get("result_source") == "baseline-imputed" for row in group_rows)
-            ),
-            "authors": "|".join(sorted({row.get("author", "") for row in group_rows})),
-            "run_names": "|".join(sorted({row.get("run_name", "") for row in group_rows})),
-            "experiment_seeds": "|".join(sorted({row.get("experiment_seed", "") for row in group_rows})),
         }
-        for column in metric_columns:
+        for metric in metrics:
             values = [
                 value
-                for value in (numeric_value(row.get(column, "")) for row in group_rows)
+                for value in (
+                    numeric_value(row.get(f"{metric}_mean", "")) for row in group_rows
+                )
                 if value is not None
             ]
-            output[column] = format_number(statistics.mean(values) if values else None)
-            output[f"{column}_across_runs_std"] = format_number(
-                statistics.stdev(values) if len(values) > 1 else None
-            )
+            output[f"{metric}_median"] = format_number(quantile(values, 0.5))
+            output[f"{metric}_q1"] = format_number(quantile(values, 0.25))
+            output[f"{metric}_q3"] = format_number(quantile(values, 0.75))
         aggregate_rows.append(output)
     return aggregate_rows
 
@@ -403,13 +387,7 @@ def main() -> None:
         preferred_columns=[
             "reward_function",
             "model_size",
-            "model_name_or_path",
             "training_initialization",
-            "training_variants",
-            "run_count",
-            "authors",
-            "run_names",
-            "experiment_seeds",
         ],
     )
     print(f"read {len(summary_paths)} summary CSV file(s)")
