@@ -1,6 +1,6 @@
 evaluation:
-  model_name_or_path: outputs/unlearning-3568/checkpoint-175
-  output_dir: outputs/unlearning-3568/checkpoint-175/eval_rwku
+  model_name_or_path: outputs/unlearning-3568/final_model
+  output_dir: outputs/unlearning-3568/final_model/eval_rwku
   subjects: Justin Timberlake
   training_config_path: null
   shard:
@@ -30,10 +30,10 @@ evaluation:
   mia_batch_size: 32
   utility_batch_size:
     utility_general: 32
-    utility_reason: 32
-    utility_truthfulness: 32
-    utility_factuality: 32
-    utility_fluency: 32
+    utility_reason: 16
+    utility_truthfulness: 16
+    utility_factuality: 16
+    utility_fluency: 16
   choice_likelihood_batch_size: 16
   generation:
     max_new_tokens: 256
@@ -43,14 +43,6 @@ evaluation:
     torch_dtype: auto
     trust_remote_code: false
     attn_implementation: null
-  checkpoint:
-    path: null
-    label: null
-    milestone_index: null
-    milestone_num_tokens: null
-    global_step: null
-    num_input_tokens_seen: null
-
   wandb:
     enabled: true
     entity: null

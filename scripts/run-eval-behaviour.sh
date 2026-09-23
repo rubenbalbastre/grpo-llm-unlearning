@@ -1,6 +1,8 @@
 #!/bin/bash -l
-#SBATCH --job-name=analyze-completions
-#SBATCH --output=logs/analyze-completions-%j.log
+#SBATCH --job-name=hold-out-eval
+#SBATCH --output=logs/hold-out-eval-%j.log
+#SBATCH --gres=gpu:1
+#SBATCH --mem=32G
 #SBATCH --time=01:30:00
 #SBATCH --partition=hopper
 #SBATCH --qos=hopper
@@ -20,5 +22,4 @@ if [[ -n "${SKIP_IF_MARKER:-}" && -f "${SKIP_IF_MARKER}" ]]; then
   exit 0
 fi
 
-python eval/hold_out_styles/generate-and-analyze-completions.py "$@"
-python eval/hold_out_styles/create_final_table.py
+python eval/behaviour/generate-and-analyze-completions.py "$@"

@@ -1,4 +1,3 @@
-from __future__ import annotations
 
 import re
 from dataclasses import dataclass
@@ -6,7 +5,6 @@ from pathlib import Path
 
 from datasets import Dataset
 from omegaconf import DictConfig, OmegaConf
-from trl import GRPOTrainer
 from typing import Literal
 from dotenv import load_dotenv
 
@@ -83,14 +81,15 @@ def setup_training_data(
 def finish_training(
     cfg: DictConfig,
     *,
-    trainer: GRPOTrainer,
+    trainer,
     tokenizer,
     model_name: str,
     forget_concept: str,
     paths: RunPaths,
     wandb_enabled: bool,
+    save_final_model: bool,
 ) -> None:
-    if bool(cfg.training.grpo.get("save_final_model", True)):
+    if save_final_model:
         trainer.save_model(str(paths.final_model_dir))
         tokenizer.save_pretrained(paths.final_model_dir)
 

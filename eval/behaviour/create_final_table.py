@@ -1,5 +1,4 @@
 #!/usr/bin/env python3
-from __future__ import annotations
 
 import argparse
 import csv
@@ -11,11 +10,12 @@ from pathlib import Path
 
 
 REPO_ROOT = Path(__file__).resolve().parents[2]
-DEFAULT_INPUT_ROOT = REPO_ROOT / "outputs" / "hold_out_styles"
-DEFAULT_OUTPUT_CSV = DEFAULT_INPUT_ROOT / "final_table.csv"
-DEFAULT_SFT_WARMUP_CSV = DEFAULT_INPUT_ROOT / "final_table_sft_warmup.csv"
-DEFAULT_CONDITIONAL_CSV = DEFAULT_INPUT_ROOT / "final_table_conditional.csv"
-DEFAULT_FULL_CSV = DEFAULT_INPUT_ROOT / "final_table_full.csv"
+DEFAULT_INPUT_ROOT = REPO_ROOT / "outputs"
+DEFAULT_OUTPUT_ROOT = DEFAULT_INPUT_ROOT / "tables"
+DEFAULT_OUTPUT_CSV = DEFAULT_OUTPUT_ROOT / "behaviour.csv"
+DEFAULT_SFT_WARMUP_CSV = DEFAULT_OUTPUT_ROOT / "behaviour_sft_warmup.csv"
+DEFAULT_CONDITIONAL_CSV = DEFAULT_OUTPUT_ROOT / "behaviour_conditional.csv"
+DEFAULT_FULL_CSV = DEFAULT_OUTPUT_ROOT / "behaviour_full.csv"
 SUMMARY_METADATA_COLUMNS = {"forget_concept", "model_name_or_path", "stat"}
 RUN_RE = re.compile(r"(unlearning-\d+)")
 BASELINE_FOLDER_RE = re.compile(
@@ -32,6 +32,14 @@ UNLEARNING_FOLDER_RE = re.compile(
 WARMUP_FOLDER_RE = re.compile(
     r"^(?P<concept>.+)-\.-outputs-r2warmup_qwen_qwen2_5_"
     r"(?P<size>0_5b|1_5b|3b|7b)_instruct_.+-final_model$",
+    re.IGNORECASE,
+)
+WARMUP_RUN_RE = re.compile(
+    r"^r2warmup_qwen_qwen2_5_(?P<size>0_5b|1_5b|3b|7b)_instruct_.+$",
+    re.IGNORECASE,
+)
+MODEL_PATH_RE = re.compile(
+    r"Qwen2\.5-(?P<size>0\.5B|1\.5B|3B|7B)-Instruct$",
     re.IGNORECASE,
 )
 STOPPED_RUN_RE = re.compile(
@@ -93,9 +101,48 @@ def read_summary(path: Path) -> list[dict[str, str]]:
 
 
 def folder_metadata(summary_path: Path, rows: list[dict[str, str]]) -> dict[str, str]:
-    """Extract run metadata from a hold_out_styles run directory name."""
+    """Extract run metadata from a behaviour run directory name."""
     folder_name = summary_path.parent.name
     first_row = rows[0] if rows else {}
+
+    if folder_name == "hold_out_eval":
+        model_dir = summary_path.parents[1]
+        run_dir = model_dir.parent if model_dir.name == "final_model" else model_dir
+        run_name = run_dir.name
+        model_match = MODEL_PATH_RE.search(first_row.get("model_name_or_path", ""))
+        run_match = STOPPED_RUN_RE.fullmatch(run_name)
+        warmup_match = WARMUP_RUN_RE.fullmatch(run_name)
+
+        if run_match:
+            size = MODEL_SIZES[run_match.group("size").lower()]
+            training_variant = run_match.group("training_variant").lower()
+            reward_type = run_match.group("reward_type").lower()
+        elif warmup_match:
+            size = MODEL_SIZES[warmup_match.group("size").lower()]
+            training_variant = "r2-warmup"
+            reward_type = "r2-warmup"
+        elif run_name.startswith("holdout-baseline-") and model_match:
+            size = MODEL_SIZES[model_match.group("size").lower()]
+            training_variant = "baseline"
+            reward_type = "baseline"
+        else:
+            raise ValueError(f"Cannot extract metadata from hold-out run: {run_dir}")
+
+        return {
+            "forget_concept": first_row.get("forget_concept", "").strip(),
+            "model_name_or_path": f"Qwen/Qwen2.5-{size}-Instruct",
+            "model_size": size,
+            "reward_type": reward_type,
+            "training_variant": training_variant,
+            "rlvr_mode": {
+                "original": "cold",
+                "r2-warmed": "warm",
+                "r2-warmup": "warm",
+                "baseline": "baseline",
+            }[training_variant],
+            "run_name": run_name,
+            "experiment_seed": "",
+        }
 
     match = BASELINE_FOLDER_RE.fullmatch(folder_name)
     if match:
@@ -128,9 +175,9 @@ def folder_metadata(summary_path: Path, rows: list[dict[str, str]]) -> dict[str,
         "reward_type": reward_type,
         "training_variant": training_variant,
         "rlvr_mode": {
-            "original": "zero-RLVR",
-            "r2-warmed": "warm-up",
-            "r2-warmup": "warm-up",
+            "original": "cold",
+            "r2-warmed": "warm",
+            "r2-warmup": "warm",
             "baseline": "baseline",
         }[training_variant],
         "run_name": folder_name,
@@ -249,7 +296,7 @@ def add_confirmed_no_learning_baselines(
                 **baseline,
                 "reward_type": reward_type,
                 "training_variant": training_variant,
-                "rlvr_mode": "zero-RLVR" if training_variant == "original" else "warm-up",
+                "rlvr_mode": "cold" if training_variant == "original" else "warm",
                 "run_name": marker_path.parent.name,
                 "result_source": "baseline-imputed",
                 "run_status": "no-learning",
@@ -597,7 +644,7 @@ def parse_args() -> argparse.Namespace:
     )
     parser.add_argument(
         "--summary-glob",
-        default="*/summary.csv",
+        default="**/hold_out_eval/summary.csv",
         help="Glob below --input-root selecting completion summary CSV files.",
     )
     return parser.parse_args()

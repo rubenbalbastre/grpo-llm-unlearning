@@ -8,7 +8,7 @@ That helper resolves repository paths and activates the training environment.
 Create or update the cluster environment with:
 
 ```bash
-sbatch scripts/create-conda-env.sh
+sbatch scripts/others/create-conda-env.sh
 ```
 
 Useful environment variables:
@@ -28,7 +28,7 @@ training jobs do not write it to the shared Hugging Face credential cache.
 Download fastText language ID data with:
 
 ```bash
-scripts/download-fasttext-lid.sh
+scripts/others/download-fasttext-lid.sh
 ```
 
 ## Training Jobs
@@ -51,11 +51,15 @@ GRPO:
 sbatch scripts/run-grpo.sh experiment.forget_concept="Stephen King"
 ```
 
-SFT followed by GRPO:
+Run the complete target/reward matrix, including SFT warm-up, GRPO, RWKU, and
+hold-out evaluation:
 
 ```bash
-REWARDS=r2,r4 scripts/run-sft-grpo.sh experiment.forget_concept="Stephen King"
+scripts/run-target-reward-matrix.sh
 ```
+
+The generated target datasets must already exist under `data/`. The model,
+target, and reward matrix is defined in `scripts/run-target-reward-matrix.py`.
 
 ## GPU Configuration
 
@@ -83,17 +87,17 @@ ACCELERATE_CONFIG=config/accelerate_multi_gpu.yaml sbatch scripts/run-grpo.sh
 RWKU:
 
 ```bash
-CHECKPOINT_ROOT=outputs/<run> sbatch scripts/eval-rwku.sh
+CHECKPOINT_ROOT=outputs/<run> sbatch scripts/run-eval-rwku.sh
 ```
 
 Hold-out completion analysis:
 
 ```bash
-sbatch scripts/run-hold-out-completions-analysis.sh
+sbatch scripts/run-eval-behaviour.sh
 ```
 
 Training diagnostics:
 
 ```bash
-sbatch scripts/slurm-plot-training-diagnostics-by-model-size.sh
+sbatch scripts/others/slurm-plot-training-diagnostics-by-model-size.sh
 ```

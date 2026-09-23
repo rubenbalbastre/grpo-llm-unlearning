@@ -1,5 +1,4 @@
 #!/usr/bin/env python3
-from __future__ import annotations
 
 import argparse
 import sys
@@ -8,17 +7,15 @@ from pathlib import Path
 import hydra
 import pandas as pd
 from dotenv import load_dotenv
-from datasets import load_from_disk
 from tqdm import tqdm
 from transformers import AutoModelForCausalLM, AutoTokenizer
-import torch
 
 
 REPO_ROOT = Path(__file__).resolve().parents[2]
 sys.path.insert(0, str(REPO_ROOT))
 
 from eval.rwku.scoring import generate_batch  # noqa: E402
-from eval.hold_out_styles.analysis_utils import (  # noqa: E402
+from eval.behaviour.analysis_utils import (  # noqa: E402
     add_llm_judge_metrics,
     aggregate_metric_summary,
 )
@@ -49,9 +46,12 @@ def load_model_and_tokenizer(args: argparse.Namespace):
         tokenizer.pad_token = tokenizer.eos_token
     tokenizer.padding_side = "left"
 
-    model = AutoModelForCausalLM.from_pretrained(args.model_name_or_path)
+    model = AutoModelForCausalLM.from_pretrained(
+        args.model_name_or_path,
+        torch_dtype="auto",
+        device_map="auto",
+    )
     model.eval()
-    model.to("cuda" if torch.cuda.is_available() else "cpu")
     return model, tokenizer
 
 
@@ -101,7 +101,7 @@ def write_outputs(output_dir: str | Path, df: pd.DataFrame, summary: pd.DataFram
     summary.to_csv(output_path / "summary.csv", index=False)
 
 
-@hydra.main(version_base=None, config_path="../../config", config_name="hold_out_eval")
+@hydra.main(version_base=None, config_path="../../config", config_name="eval_behaviour")
 def main(args) -> None:
     load_dotenv(dotenv_path=REPO_ROOT / ".env", override=False)
 
@@ -125,12 +125,7 @@ def main(args) -> None:
         max_concurrent_requests=args.judge_concurrency,
     )
     summary = aggregate_results(df, args)
-    output_dir = (
-        Path(args.paths.storage_root)
-        / "outputs"
-        / "hold_out_styles"
-        / f"{args.concept.replace(' ', '-').lower()}-{args.model_name_or_path.replace('/', '-')}"
-    )
+    output_dir = Path(args.output_dir or Path(args.model_name_or_path) / "hold_out_eval")
     write_outputs(output_dir, df, summary)
     print(f"Wrote metrics and summary to {output_dir}", flush=True)
 

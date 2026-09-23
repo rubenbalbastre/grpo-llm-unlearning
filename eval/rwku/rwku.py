@@ -82,17 +82,15 @@ def log_wandb_results(
         **{f"rwku/{split}/loss": value for split, value in mia_by_split.items()},
         **{f"rwku/{split}/score": value for split, value in utility_by_split.items()},
     }
-    checkpoint_metadata = OmegaConf.to_container(
-        evaluation.get("checkpoint", {}),
-        resolve=True,
-    )
     training_config_path = evaluation.get("training_config_path")
     hydra_config = None
     if training_config_path:
         training_config_file = Path(training_config_path)
         hydra_config = load_yaml_config(training_config_file, "Training Hydra")
 
-    eval_config_path = Path(__file__).resolve().parents[2] / "config" / "eval.yaml"
+    eval_config_path = (
+        Path(__file__).resolve().parents[2] / "config" / "eval_rwku.yaml"
+    )
     eval_config = load_yaml_config(eval_config_path, "Evaluation Hydra")
 
     artifact = None
@@ -103,7 +101,6 @@ def log_wandb_results(
             metadata={
                 "model_name_or_path": str(evaluation.model_name_or_path),
                 "subjects": str(evaluation.subjects),
-                "checkpoint": checkpoint_metadata,
             },
         )
         if evaluation.wandb.log_model_artifact:
@@ -124,7 +121,6 @@ def log_wandb_results(
             "subjects": str(evaluation.subjects),
             "sets": OmegaConf.to_container(evaluation.sets, resolve=True),
             "metrics": OmegaConf.to_container(evaluation.metrics, resolve=True),
-            "checkpoint": checkpoint_metadata,
             "training_config_path": str(training_config_path) if training_config_path else None,
             "hydra": hydra_config,
             "eval_config_path": str(eval_config_path),
@@ -210,8 +206,6 @@ def run_evaluation(cfg: DictConfig) -> None:
         **from_pretrained_kwargs,
     )
 
-    if tokenizer.pad_token is None:
-        tokenizer.pad_token = tokenizer.eos_token
     tokenizer.padding_side = "left"
 
     model_kwargs = {
@@ -227,6 +221,8 @@ def run_evaluation(cfg: DictConfig) -> None:
         **from_pretrained_kwargs,
     )
     model.eval()
+    if tokenizer.pad_token is None:
+        tokenizer.pad_token_id = model.generation_config.pad_token_id
 
     forget_rows = []
     if evaluation.sets.forget:
@@ -328,7 +324,7 @@ def run_evaluation(cfg: DictConfig) -> None:
     }, indent=2))
 
 
-@hydra.main(version_base=None, config_path="../../config", config_name="eval")
+@hydra.main(version_base=None, config_path="../../config", config_name="eval_rwku")
 def main(cfg: DictConfig) -> None:
     run_evaluation(cfg)
 

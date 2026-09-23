@@ -1,10 +1,9 @@
-from __future__ import annotations
 
 import asyncio
 
 import pandas as pd
 
-from eval.hold_out_styles.llm_completion_classification import (
+from eval.behaviour.llm_completion_classification import (
     AsyncCompletionClassificationTool,
     llm_judge_metrics,
 )

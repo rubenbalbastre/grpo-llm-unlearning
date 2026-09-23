@@ -74,7 +74,8 @@ python train.py model.name=outputs/<sft-run>/final_model reward.type=r2
 
 ## Checkpointing
 
-`training.grpo.save_final_model` controls whether `final_model` is written.
+`training.sft.save_final_model` and `training.grpo.save_final_model` independently
+control whether `final_model` is written for each training stage.
 Checkpoint snapshots are written by the trainer during training.
 
 Token-budget checkpointing is configured under:

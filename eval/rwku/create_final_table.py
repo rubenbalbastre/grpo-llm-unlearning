@@ -1,7 +1,6 @@
 #!/usr/bin/env python3
 """Aggregate RWKU results across authors using matched original-model baselines."""
 
-from __future__ import annotations
 
 import argparse
 import csv
@@ -192,8 +191,8 @@ def build_author_rows(
             "author": match.group("author"),
             "model_name_or_path": f"Qwen/Qwen2.5-{size}-Instruct",
             "model_size": size,
-            "reward_function": match.group("reward").lower(),
-            "rlvr_mode": "zero-RLVR" if variant == "original" else "warm-up",
+            "reward_function": match.group("reward_type").lower(),
+            "rlvr_mode": "cold" if variant == "original" else "warm",
             "run_name": run_name,
             "baseline_run_name": baseline_name,
         }

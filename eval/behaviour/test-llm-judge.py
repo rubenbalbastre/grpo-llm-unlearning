@@ -1,5 +1,5 @@
 import asyncio
-from eval.hold_out_styles.llm_completion_classification import AsyncCompletionClassificationTool
+from eval.behaviour.llm_completion_classification import AsyncCompletionClassificationTool
 
 
 if __name__ == "__main__":
