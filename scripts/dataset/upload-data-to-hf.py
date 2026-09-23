@@ -1,5 +1,4 @@
 #!/usr/bin/env python3
-fro
 
 import argparse
 import os

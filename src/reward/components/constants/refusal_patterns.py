@@ -1,4 +1,3 @@
-fro
 
 
 DEFAULT_REFUSAL_PATTERNS = [

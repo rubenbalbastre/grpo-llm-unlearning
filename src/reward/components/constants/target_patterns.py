@@ -1,4 +1,3 @@
-fro
 
 from collections.abc import Iterable
 

@@ -1,4 +1,3 @@
-fro
 
 from dataclasses import dataclass
 import os

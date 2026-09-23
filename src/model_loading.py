@@ -1,4 +1,3 @@
-fro
 
 from pathlib import Path
 

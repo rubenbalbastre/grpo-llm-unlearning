@@ -1,7 +1,6 @@
 #!/usr/bin/env python3
 """Recompute hold-out rubrics from exported prompt/completion CSVs."""
 
-fro
 
 import argparse
 import re

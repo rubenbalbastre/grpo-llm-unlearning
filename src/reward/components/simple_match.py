@@ -1,4 +1,3 @@
-fro
 
 import math
 import re
