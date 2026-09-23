@@ -35,7 +35,7 @@ TARGETS = [
     "Confucius",
 ]
 REWARDS = ["r0", "r1", "r2", "r4"]
-RUN_RWKU_EVAL = False
+RUN_RWKU_EVAL = True
 RUN_HOLD_OUT_EVAL = False
 
 
