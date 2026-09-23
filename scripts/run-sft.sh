@@ -2,6 +2,7 @@
 #SBATCH --job-name=sft
 #SBATCH --output=logs/sft-%j.log
 #SBATCH --gres=gpu:1
+#SBATCH --mem=32G
 #SBATCH --time=01:00:00
 #SBATCH --partition=hopper
 #SBATCH --qos=hopper
@@ -12,6 +13,14 @@ ENV_DIR="${ENV_DIR:-/storage/scratch/lv13/lv13594/}"
 source "$ENV_DIR/anaconda3_bis/etc/profile.d/conda.sh"
 conda activate py312_cu118_bis
 
-python sft_warm_up.py "$@"
+JOB_UNIQUE_ID="${SLURM_JOB_ID:-$$}"
+MAIN_PROCESS_PORT="${MAIN_PROCESS_PORT:-$((20000 + JOB_UNIQUE_ID % 40000))}"
+
+accelerate launch \
+    --config_file config/accelerate_single_gpu.yaml \
+    --num_processes 1 \
+    --main_process_port "${MAIN_PROCESS_PORT}" \
+    sft_warm_up.py \
+    "$@"
 
 date
