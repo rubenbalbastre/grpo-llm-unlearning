@@ -8,6 +8,8 @@ import subprocess
 from dataclasses import dataclass
 from pathlib import Path
 
+from omegaconf import OmegaConf
+
 
 REPO_ROOT = Path(__file__).resolve().parents[1]
 STORAGE_ROOT = Path(".")
@@ -50,19 +52,8 @@ def slug(value: str, separator: str = "-") -> str:
 
 
 def reasoning_effort() -> str:
-    in_judge_config = False
-    config_lines = (REPO_ROOT / "config/train.yaml").read_text(
-        encoding="utf-8"
-    ).splitlines()
-    for line in config_lines:
-        stripped = line.strip()
-        if stripped == "llm-judge:":
-            in_judge_config = True
-        elif in_judge_config and stripped.startswith("reasoning_effort:"):
-            return stripped.split(":", 1)[1].split("#", 1)[0].strip().strip('"\'')
-    raise ValueError(
-        "reward.functions.llm-judge.reasoning_effort is missing from config/train.yaml"
-    )
+    config = OmegaConf.load(REPO_ROOT / "config/train.yaml")
+    return str(config.reward.functions["llm-judge"].reasoning_effort)
 
 
 def submit(
