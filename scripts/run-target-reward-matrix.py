@@ -177,7 +177,12 @@ def holdout_output_dir(
 ) -> Path:
     if checkpoint_root is not None:
         return Path(model_path) / "hold_out_eval"
-    return OUTPUT_ROOT / f"hold-out-baseline-{slug(model_path)}-{slug(target)}" / "hold_out_eval"
+    return (
+        OUTPUT_ROOT
+        / f"holdout-baseline-{slug(model_path)}-{slug(target)}"
+        / "final_model"
+        / "hold_out_eval"
+    )
 
 
 def submit_rwku(
