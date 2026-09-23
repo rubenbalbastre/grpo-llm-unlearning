@@ -18,7 +18,7 @@ REPO_ROOT = Path(__file__).resolve().parents[2]
 sys.path.insert(0, str(REPO_ROOT))
 
 from eval.rwku.scoring import generate_batch  # noqa: E402
-from eval.hold_out_styles.analysis_utils import (  # noqa: E402
+from eval.behaviour.analysis_utils import (  # noqa: E402
     add_llm_judge_metrics,
     aggregate_metric_summary,
 )
@@ -101,7 +101,7 @@ def write_outputs(output_dir: str | Path, df: pd.DataFrame, summary: pd.DataFram
     summary.to_csv(output_path / "summary.csv", index=False)
 
 
-@hydra.main(version_base=None, config_path="../../config", config_name="hold_out_eval")
+@hydra.main(version_base=None, config_path="../../config", config_name="eval_behaviour")
 def main(args) -> None:
     load_dotenv(dotenv_path=REPO_ROOT / ".env", override=False)
 
@@ -128,7 +128,7 @@ def main(args) -> None:
     output_dir = (
         Path(args.paths.storage_root)
         / "outputs"
-        / "hold_out_styles"
+        / "behaviour"
         / f"{args.concept.replace(' ', '-').lower()}-{args.model_name_or_path.replace('/', '-')}"
     )
     write_outputs(output_dir, df, summary)

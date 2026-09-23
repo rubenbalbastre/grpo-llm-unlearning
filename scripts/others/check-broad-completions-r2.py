@@ -5,7 +5,7 @@ from datasets import concatenate_datasets, load_from_disk
 from omegaconf import OmegaConf
 
 
-REPO_ROOT = Path(__file__).resolve().parents[1]
+REPO_ROOT = Path(__file__).resolve().parents[2]
 sys.path.insert(0, str(REPO_ROOT))
 
 from src.reward.reward_r2 import build_reward_funcs  # noqa: E402

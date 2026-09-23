@@ -12,4 +12,4 @@ conda activate py312_cu118_bis
 
 cd "${REPO_DIR}"
 
-python3 scripts/check-broad-completions-r2.py
+python3 scripts/others/check-broad-completions-r2.py

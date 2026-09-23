@@ -46,19 +46,19 @@ python -m eval.rwku.rwku evaluation.model_name_or_path=outputs/<run>/checkpoint-
 Run hold-out evaluation for one trained checkpoint:
 
 ```bash
-python eval/hold_out_styles/generate-and-analyze-completions.py \
+python eval/behaviour/generate-and-analyze-completions.py \
   concept="Stephen King" \
   model_name_or_path=outputs/<run>/checkpoint-175
 ```
 
 This writes `metrics.csv` and `summary.csv` under
-`outputs/hold_out_styles/<concept>-<model>/`.
+`outputs/behaviour/<concept>-<model>/`.
 
 Run training-dynamics hold-out analysis from W&B completion tables:
 
 ```bash
-python eval/hold_out_styles/analyze-training-dynamics.py --download-only --last-steps 5
-python eval/hold_out_styles/analyze-training-dynamics.py --skip-download --last-steps 5
+python eval/behaviour/analyze-training-dynamics.py --download-only --last-steps 5
+python eval/behaviour/analyze-training-dynamics.py --skip-download --last-steps 5
 ```
 
 The first command downloads or reuses the selected W&B tables and writes the run
@@ -78,7 +78,7 @@ writes aggregated CSVs under `outputs/training_dynamics_hold_out_rubrics/`.
 ```text
 config/                       # Hydra configs for training, evaluation, Accelerate, DeepSpeed
 eval/rwku/                    # RWKU evaluation implementation
-eval/hold_out_styles/         # hold-out completion generation and analysis
+eval/behaviour/         # hold-out completion generation and analysis
 scripts/                      # Slurm and utility launchers
 src/data_preprocessing/       # prompt loading and chat-template rendering
 src/reward/                   # reward compositions and reusable reward components

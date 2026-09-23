@@ -121,7 +121,7 @@ def write_csv(path: Path, columns: list[str], rows: list[dict[str, object]]) -> 
 
 def parse_args() -> argparse.Namespace:
     parser = argparse.ArgumentParser(description=__doc__)
-    parser.add_argument("--input-dir", type=Path, default=Path("outputs/hold_out_styles"))
+    parser.add_argument("--input-dir", type=Path, default=Path("outputs/behaviour"))
     parser.add_argument("--all-output", type=Path, default=None)
     parser.add_argument("--summary-output", type=Path, default=None)
     return parser.parse_args()

@@ -1,7 +1,7 @@
 paths:
   storage_root: .
 
-model_name_or_path: "./outputs/unlearning-4550/checkpoint-159"
+model_name_or_path: "./outputs/unlearning-4550/final_model"
 output_dir: null
 concept: Rihanna
 prompt_column: prompt

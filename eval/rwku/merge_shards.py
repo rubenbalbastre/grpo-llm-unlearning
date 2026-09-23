@@ -106,7 +106,7 @@ def merge_shards(cfg: DictConfig) -> None:
     }, indent=2))
 
 
-@hydra.main(version_base=None, config_path="../../config", config_name="eval")
+@hydra.main(version_base=None, config_path="../../config", config_name="eval_rwku")
 def main(cfg: DictConfig) -> None:
     merge_shards(cfg)
 

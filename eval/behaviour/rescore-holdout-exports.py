@@ -16,15 +16,15 @@ from omegaconf import OmegaConf
 REPO_ROOT = Path(__file__).resolve().parents[2]
 sys.path.insert(0, str(REPO_ROOT))
 
-from eval.hold_out_styles.analysis_utils import add_llm_judge_metrics  # noqa: E402
-from eval.hold_out_styles.llm_completion_classification import (  # noqa: E402
+from eval.behaviour.analysis_utils import add_llm_judge_metrics  # noqa: E402
+from eval.behaviour.llm_completion_classification import (  # noqa: E402
     llm_judge_metrics,
 )
 
 
 DEFAULT_INPUT_DIR = REPO_ROOT / "outputs/hold_out_evals/holdout_metrics_export"
 DEFAULT_OUTPUT_DIR = REPO_ROOT / "outputs/hold_out_evals/holdout_metrics_rescored"
-EVAL_CONFIG_PATH = REPO_ROOT / "config/hold_out_eval.yaml"
+EVAL_CONFIG_PATH = REPO_ROOT / "config/eval_behaviour.yaml"
 KEY_COLUMNS = ["subject", "prompt", "completion"]
 SOURCE_COLUMNS = ["prompt", "completion", "subject", "index"]
 RUN_RE = re.compile(

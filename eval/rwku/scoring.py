@@ -53,7 +53,7 @@ def generate_batch(
         max_new_tokens=max_new_tokens,
         do_sample=do_sample,
         temperature=temperature if do_sample else None,
-        pad_token_id=tokenizer.eos_token_id,
+        pad_token_id=tokenizer.pad_token_id,
     )
 
     prompt_width = inputs["input_ids"].shape[1]

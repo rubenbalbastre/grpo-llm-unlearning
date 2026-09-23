@@ -11,7 +11,7 @@ from pathlib import Path
 
 
 REPO_ROOT = Path(__file__).resolve().parents[2]
-DEFAULT_INPUT_ROOT = REPO_ROOT / "outputs" / "hold_out_styles"
+DEFAULT_INPUT_ROOT = REPO_ROOT / "outputs" / "behaviour"
 DEFAULT_OUTPUT_CSV = DEFAULT_INPUT_ROOT / "final_table.csv"
 DEFAULT_SFT_WARMUP_CSV = DEFAULT_INPUT_ROOT / "final_table_sft_warmup.csv"
 DEFAULT_CONDITIONAL_CSV = DEFAULT_INPUT_ROOT / "final_table_conditional.csv"
@@ -93,7 +93,7 @@ def read_summary(path: Path) -> list[dict[str, str]]:
 
 
 def folder_metadata(summary_path: Path, rows: list[dict[str, str]]) -> dict[str, str]:
-    """Extract run metadata from a hold_out_styles run directory name."""
+    """Extract run metadata from a behaviour run directory name."""
     folder_name = summary_path.parent.name
     first_row = rows[0] if rows else {}
 

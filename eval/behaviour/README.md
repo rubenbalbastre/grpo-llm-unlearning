@@ -40,7 +40,7 @@ still matches the fuzzy forgetting reward logic.
 ## Example
 
 ```bash
-python eval/hold_out_styles/analyze-completions.py \
+python eval/behaviour/analyze-completions.py \
   --concept Confucius \
   --model-name Qwen/Qwen2.5-1.5B-Instruct \
   --output-csv outputs/completion_analysis/confucius-wandb-completions.csv
