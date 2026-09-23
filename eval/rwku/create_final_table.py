@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
 """Aggregate RWKU results across authors using matched original-model baselines."""
 
-from __future__ import annotations
+fro
 
 import argparse
 import csv

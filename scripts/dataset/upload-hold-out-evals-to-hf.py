@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
 """Build and upload the rescored hold-out evaluations to Hugging Face."""
 
-from __future__ import annotations
+fro
 
 import argparse
 import os

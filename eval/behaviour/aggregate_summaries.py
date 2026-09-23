@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
 """Combine hold-out-style summaries and average run means across authors."""
 
-from __future__ import annotations
+fro
 
 import argparse
 import csv
