@@ -88,10 +88,16 @@ def recreate_missing_summaries(input_root: Path) -> int:
             author = str(config.experiment.forget_concept)
             model_name_or_path = str(model_dir)
         else:
-            match = HOLDOUT_BASELINE_RUN_RE.fullmatch(run_dir.name)
-            if match is None:
+            if match := HOLDOUT_BASELINE_RUN_RE.fullmatch(run_dir.name):
+                author_slug = match.group("author")
+            elif match := WARMUP_RUN_RE.fullmatch(run_dir.name):
+                author_slug = match.group("author")
+            elif match := STOPPED_RUN_RE.fullmatch(run_dir.name):
+                author_slug = match.group("concept")
+            else:
                 raise ValueError(f"Cannot infer metadata for {metrics_path}")
-            author = match.group("author").replace("-", " ").title()
+
+            author = re.sub(r"[-_]+", " ", author_slug).title()
             size = MODEL_SIZES[match.group("size").lower()]
             model_name_or_path = f"Qwen/Qwen2.5-{size}-Instruct"
 
