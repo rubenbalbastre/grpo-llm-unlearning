@@ -202,11 +202,10 @@ def make_llm_judge_reward_func(
                     "input": build_input(prompt, completion),
                     "text_format": SoftTermsLeakageJudgment,
                     "reasoning": {"effort": reasoning_effort},
+                    "temperature": temperature,
                     "prompt_cache_key": prompt_cache_key,
                     "prompt_cache_retention": prompt_cache_retention,
                 }
-                if reasoning_effort == "none":
-                    request_kwargs["temperature"] = temperature
                 response = await client.responses.parse(
                     **request_kwargs
                 )
