@@ -2,7 +2,7 @@
 #SBATCH --job-name=eval-rwku
 #SBATCH --output=logs/eval-rwku-%j.log
 #SBATCH --gres=gpu:2
-#SBATCH --mem=16G
+#SBATCH --mem=32G
 #SBATCH --time=00:20:00
 #SBATCH --partition=hopper
 #SBATCH --qos=hopper
