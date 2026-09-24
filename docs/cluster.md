@@ -25,15 +25,9 @@ WANDB_API_KEY=...
 WANDB_PROJECT=machine-unlearning-llm
 OPENAI_API_KEY=...
 HF_TOKEN=...
-FASTTEXT_LID_PATH=/path/to/lid.176.ftz
 ```
 
-Hugging Face clients read `HF_TOKEN` from the process environment. Download the
-optional fastText language-ID model with:
-
-```bash
-scripts/env/download-fasttext-lid.sh
-```
+Hugging Face clients read `HF_TOKEN` from the process environment.
 
 ## Matrix Workflow
 

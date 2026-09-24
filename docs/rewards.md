@@ -33,14 +33,10 @@ non-refusal.
 `llm-judge` uses the OpenAI Responses API. Its model, reasoning effort,
 temperature, and request concurrency are configured in `config/train.yaml`.
 
-`language` uses fastText language identification when `FASTTEXT_LID_PATH` is
-configured. Short or uncertain completions receive a neutral score.
-
 ## Requirements and Logging
 
 R2 requires `OPENAI_API_KEY`. The refusal component downloads its classifier
-from Hugging Face unless already cached. The language component requires the
-fastText model path only when used.
+from Hugging Face unless already cached.
 
 Reward components log per-completion values and aggregate metrics through TRL
 and W&B. They do not create a separate local reward log file.

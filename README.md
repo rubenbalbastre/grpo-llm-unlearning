@@ -20,7 +20,6 @@ Set the credentials required by the workflow:
 - `OPENAI_API_KEY`: broad SFT completions, the R2 reward, and behavioural judges
 - `WANDB_API_KEY` and `WANDB_PROJECT`: experiment tracking and training dynamics
 - `HF_TOKEN`: private Hugging Face dataset upload/download
-- `FASTTEXT_LID_PATH`: optional fastText language identification model
 
 ## Data
 
