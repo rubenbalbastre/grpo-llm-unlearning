@@ -73,8 +73,8 @@ def recreate_missing_summaries(input_root: Path) -> int:
     recreated = 0
     for metrics_path in sorted(input_root.glob("**/hold_out_eval/metrics.csv")):
         summary_path = metrics_path.with_name("summary.csv")
-        if summary_path.exists():
-            continue
+        # if summary_path.exists():
+        #     continue
 
         metrics = pd.read_csv(metrics_path)
         if metrics.empty:
