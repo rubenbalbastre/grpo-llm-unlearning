@@ -53,7 +53,6 @@ def main(cfg: DictConfig) -> None:
         eval_steps=cfg.training.sft.eval_steps,
         logging_steps=cfg.training.sft.logging_steps,
         save_strategy=cfg.training.sft.save_strategy,
-        save_steps=cfg.training.sft.save_steps,
         eval_on_start=True,
         per_device_train_batch_size=cfg.training.sft.per_device_train_batch_size,
         gradient_accumulation_steps=cfg.training.sft.gradient_accumulation_steps,
