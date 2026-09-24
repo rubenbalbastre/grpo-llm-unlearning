@@ -16,21 +16,15 @@ the target before non-refusal behavior helps.
 the completions; refusals receive zero without an API request, while
 non-refusals are judged for target leakage and broad-topic helpfulness.
 
-`r3` uses fuzzy target matching with the configured length-aware behavior.
-
 `r4` directly rewards refusal according to the local refusal classifier. It is
 used as a comparison objective.
 
-The standard matrix currently runs `r0`, `r1`, `r2`, and `r4`; `r3` remains
-available for individual experiments.
+The supported reward types are `r0`, `r1`, `r2`, and `r4`.
 
 ## Components
 
 `simple_match` performs case-insensitive matching against target patterns. Its
 modes include `binary`, `entity_count`, `exponential`, and `length_aware`.
-
-`fuzzy_match` normalizes text and uses RapidFuzz partial matching. It supports
-`binary` and `length_aware` modes.
 
 `refusal_reward_classifier` uses
 `garak-llm/garak-refusal-detector` by default and can reward either refusal or

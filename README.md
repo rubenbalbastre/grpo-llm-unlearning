@@ -88,7 +88,7 @@ This writes author-level and aggregate RWKU and behavioural CSV files under
 
 - [Data](docs/data.md): split generation, local layout, and Hugging Face transfer
 - [Training](docs/training.md): SFT, GRPO, matrix execution, callbacks, and outputs
-- [Rewards](docs/rewards.md): reward functions `r0` through `r4`
+- [Rewards](docs/rewards.md): reward functions `r0`, `r1`, `r2`, and `r4`
 - [Evaluation](docs/evaluation.md): RWKU, behavioural evaluation, and final tables
 - [Cluster](docs/cluster.md): Slurm environment and launchers
 

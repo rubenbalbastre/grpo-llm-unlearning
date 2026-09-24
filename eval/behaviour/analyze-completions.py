@@ -40,9 +40,6 @@ def scan_completion_files(
             tmp_dfs.append(pd.read_json(completion_file, orient="split"))
         tmp_df = pd.concat(tmp_dfs)
 
-        # filter reward = 1 completions
-        # reward_column = "forgetting_reward" if run.reward_type in ["r0", "r1"] else "forgetting_fuzzy_reward"
-        # tmp_df = tmp_df[tmp_df[reward_column] == 1.0]
         # filter last optimization step
         tmp_df = tmp_df[tmp_df['step'] == 159]
         
@@ -61,7 +58,7 @@ def scan_completion_files(
 
 def aggregate_results(df):
 
-    candidate_metrics = ['forgetting_reward', 'forgetting_fuzzy_reward', 'language_reward'] + llm_judge_metrics
+    candidate_metrics = ['forgetting_reward', 'language_reward'] + llm_judge_metrics
     metrics = [metric for metric in candidate_metrics if metric in df.columns]
     if not metrics:
         raise ValueError("No reward or judge metric columns available to aggregate.")
@@ -150,7 +147,7 @@ def write_outputs(args: argparse.Namespace, df: pd.DataFrame, analysis: pd.DataF
 
 def parse_args() -> argparse.Namespace:
     parser = argparse.ArgumentParser(
-        description="Download W&B training completions and scan them with exact and fuzzy reward matching."
+        description="Download and score W&B training completions."
     )
     parser.add_argument("--concept", default="Karl Marx")
     parser.add_argument("--output-csv", type=Path, default=None)

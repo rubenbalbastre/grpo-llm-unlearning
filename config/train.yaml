@@ -30,11 +30,6 @@ reward:
     simple_match:
       mode: binary
       pattern_splits: ["hard", "soft"]
-    fuzzy_match:
-      mode: length_aware
-      pattern_splits: ["hard"]
-      length_aware_min_words: 50
-      length_aware_alpha: 30.0
     llm-judge:
       model_name: gpt-5.4-nano
       reasoning_effort: low
