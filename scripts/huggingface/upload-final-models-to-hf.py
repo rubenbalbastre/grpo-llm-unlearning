@@ -13,6 +13,7 @@ from huggingface_hub import HfApi
 OUTPUTS_DIR = Path("outputs")
 IGNORED_FILES = ["eval_rwku/**", "hold_out_eval/**", "ref/**"]
 TARGETS = ["Jennifer Lopez", "John D. Rockefeller", "Karl Marx"]
+ARXIV_ID = "2608.17804"
 
 
 def slug(value: str, separator: str) -> str:
@@ -60,6 +61,12 @@ def normalize_model_metadata(model_dir: Path) -> None:
             lambda match: f"base_model: {model_id(match.group(1).strip())}",
             readme,
         )
+        if re.search(r"(?m)^arxiv:", readme):
+            readme = re.sub(r"(?m)^arxiv:.*$", f'arxiv: "{ARXIV_ID}"', readme)
+        elif readme.startswith("---\n"):
+            readme = readme.replace("---\n", f'---\narxiv: "{ARXIV_ID}"\n', 1)
+        else:
+            readme = f'---\narxiv: "{ARXIV_ID}"\n---\n\n{readme}'
         readme_path.write_text(readme, encoding="utf-8")
 
 
