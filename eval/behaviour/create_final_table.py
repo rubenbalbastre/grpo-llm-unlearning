@@ -358,12 +358,19 @@ def parse_args() -> argparse.Namespace:
         default="**/hold_out_eval/summary.csv",
         help="Glob below --input-root selecting completion summary CSV files.",
     )
+    parser.add_argument(
+        "--recreate-summaries",
+        action=argparse.BooleanOptionalAction,
+        default=True,
+        help="Recreate missing summary.csv files from metrics.csv (default: enabled).",
+    )
     return parser.parse_args()
 
 
 def main() -> None:
     args = parse_args()
-    recreate_missing_summaries(args.input_root)
+    if args.recreate_summaries:
+        recreate_missing_summaries(args.input_root)
     summary_paths = sorted(args.input_root.glob(args.summary_glob))
     if not summary_paths:
         raise SystemExit(f"No summary CSV files found with {args.input_root / args.summary_glob}")
