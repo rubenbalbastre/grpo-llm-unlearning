@@ -119,6 +119,14 @@ def read_summary(path: Path) -> list[dict[str, str]]:
         return list(csv.DictReader(handle))
 
 
+def print_runs_with_column(summary_paths: list[Path], column: str) -> None:
+    for summary_path in summary_paths:
+        with summary_path.open(encoding="utf-8", newline="") as handle:
+            fieldnames = csv.DictReader(handle).fieldnames or []
+        if column in fieldnames:
+            print(summary_path.parents[2].name)
+
+
 def folder_metadata(summary_path: Path, rows: list[dict[str, str]]) -> dict[str, str]:
     """Extract run metadata from a behaviour run directory name."""
     folder_name = summary_path.parent.name
@@ -361,7 +369,7 @@ def parse_args() -> argparse.Namespace:
     parser.add_argument(
         "--recreate-summaries",
         action=argparse.BooleanOptionalAction,
-        default=True,
+        default=False,
         help="Recreate missing summary.csv files from metrics.csv (default: enabled).",
     )
     return parser.parse_args()
@@ -374,6 +382,9 @@ def main() -> None:
     summary_paths = sorted(args.input_root.glob(args.summary_glob))
     if not summary_paths:
         raise SystemExit(f"No summary CSV files found with {args.input_root / args.summary_glob}")
+
+    print("runs containing helpful_relevant_answer:")
+    print_runs_with_column(summary_paths, "helpful_relevant_answer")
 
     rows = build_table(summary_paths)
     if not rows:
