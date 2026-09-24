@@ -93,13 +93,8 @@ R2 run names include the configured judge reasoning effort, for example
 
 ## Callbacks
 
-GRPO callback settings live under `training.grpo.callback`:
-
-- `checkpoint_token_milestones`: request checkpoints after token thresholds
-- `token_budget`: stop after the configured number of input tokens
-- `high_reward_stop`: stop after sustained high reward
-- `no_learning_stop`: stop when the first-epoch active reward-group rate is at
-  or below the configured threshold
+The GRPO `no_learning_stop` callback stops when the first-epoch active
+reward-group rate is at or below its configured threshold.
 
 The no-learning callback writes `low_reward_stop.json` in the run directory.
 The matrix workflow does not evaluate runs carrying this marker, and final

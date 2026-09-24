@@ -1,114 +1,11 @@
 
-import re
 from typing import Any
-
-from src.reward.components.constants.refusal_patterns import (
-    DEFAULT_REFUSAL_PATTERNS,
-    REDIRECTION_MARKERS,
-)
-
 
 DEFAULT_GARAK_REFUSAL_MODEL = "garak-llm/garak-refusal-detector"
 REFUSAL_CLASSIFIER_MODES = {
     "reward_refusal": (1.0, 0.0),
     "reward_non_refusal": (0.0, 1.0),
 }
-
-
-def build_rediction_matchers(markers: list[str]) -> list[tuple[str, re.Pattern]]:
-    return [
-        (marker, re.compile(re.escape(marker), flags=re.IGNORECASE))
-        for marker in markers
-    ]
-
-
-def matched_redirection_markers(
-    completion: str,
-    matchers: list[tuple[str, re.Pattern]],
-) -> list[str]:
-    return [marker for marker, matcher in matchers if matcher.search(completion)]
-
-
-def reward_redirection_reward(
-    completion: str,
-    matchers: list[tuple[str, re.Pattern]],
-) -> tuple[float, list[str]]:
-    matches = matched_redirection_markers(completion, matchers)
-    return (1.0 if matches else 0.0), matches
-
-
-def build_refusal_matchers(patterns: list[str]) -> list[tuple[str, re.Pattern]]:
-    return [
-        (pattern, re.compile(re.escape(pattern), flags=re.IGNORECASE))
-        for pattern in patterns
-    ]
-
-
-def matched_refusal_patterns(
-    completion: str,
-    matchers: list[tuple[str, re.Pattern]],
-) -> list[str]:
-    return [pattern for pattern, matcher in matchers if matcher.search(completion)]
-
-
-def compute_avoid_refusal_reward_regex(
-    completion: str,
-    matchers: list[tuple[str, re.Pattern]],
-) -> tuple[float, list[str]]:
-    matches = matched_refusal_patterns(completion, matchers)
-    return (0.0 if matches else 1.0), matches
-
-
-def make_avoid_refusal_reward_regex_func(
-    config: Any,
-):
-    patterns = list(config.get("patterns", DEFAULT_REFUSAL_PATTERNS))
-    if not patterns:
-        raise ValueError(
-            "reward.functions.avoid_refusal_reward_regex.patterns must not be empty."
-        )
-
-    matchers = build_refusal_matchers(patterns)
-    require_redirection = bool(config.get("require_redirection", False))
-    redirection_matchers = build_rediction_matchers(REDIRECTION_MARKERS)
-
-    def avoid_refusal_reward_regex_func(prompts, completions, **kwargs) -> list[float]:
-        log_extra = kwargs.get("log_extra")
-
-        completions_list = list(completions) if completions is not None else []
-
-        rewards: list[float] = []
-        refusal_matches_log: list[str] = []
-        redirection_matches_log: list[str] = []
-        for completion in completions_list:
-            reward, matches = compute_avoid_refusal_reward_regex(
-                str(completion),
-                matchers,
-            )
-            redirection_reward, redirection_matches = reward_redirection_reward(
-                str(completion), redirection_matchers
-            )
-            if require_redirection:
-                reward = reward * redirection_reward
-            rewards.append(reward)
-            refusal_matches_log.append("|".join(matches))
-            redirection_matches_log.append("|".join(redirection_matches))
-
-        if log_extra is not None:
-            log_extra("refusal_reward", rewards)
-            log_extra("refusal_matches", refusal_matches_log)
-            log_extra("redirection_matches", redirection_matches_log)
-
-        return rewards
-
-    avoid_refusal_reward_regex_func.__name__ = "avoid_refusal_reward_regex"
-    return avoid_refusal_reward_regex_func
-
-
-def build_avoid_refusal_reward_regex(
-    config: Any,
-):
-    return make_avoid_refusal_reward_regex_func(config)
 
 
 def _is_garak_refusal_label(label: str) -> bool:
