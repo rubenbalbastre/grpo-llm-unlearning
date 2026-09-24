@@ -9,11 +9,15 @@ from dotenv import load_dotenv
 from huggingface_hub import HfApi
 
 
-SPLITS = {
-    "grpo_train": "grpo/train",
-    "sft_train": "sft/train",
-    "sft_validation": "sft/test",
-    "holdout": "grpo/test",
+CONFIGS = {
+    "grpo": {
+        "train": "grpo/train",
+        "test": "grpo/test",
+    },
+    "sft": {
+        "train": "sft/train",
+        "validation": "sft/test",
+    },
 }
 
 
@@ -49,14 +53,20 @@ def main() -> None:
     token = get_token()
     api = HfApi(token=token)
     repo_id = resolve_repo_id(api, args.repo_id)
-    dataset = load_dataset(repo_id, token=token)
+    datasets = {
+        name: load_dataset(repo_id, name=name, token=token)
+        for name in CONFIGS
+    }
 
-    concepts = sorted(set(dataset["grpo_train"]["concept"]))
+    concepts = sorted(set(datasets["grpo"]["train"]["concept"]))
     for concept in concepts:
         splits = {}
-        for hub_split, local_split in SPLITS.items():
-            split_dataset = dataset[hub_split].filter(lambda row: row["concept"] == concept)
-            splits[local_split] = without_concept_column(split_dataset)
+        for config_name, config_splits in CONFIGS.items():
+            for hub_split, local_split in config_splits.items():
+                split_dataset = datasets[config_name][hub_split].filter(
+                    lambda row: row["concept"] == concept
+                )
+                splits[local_split] = without_concept_column(split_dataset)
 
         output_path = args.output_dir / concept
         DatasetDict(splits).save_to_disk(output_path)

@@ -7,7 +7,7 @@ from pathlib import Path
 
 from datasets import DatasetDict, concatenate_datasets, load_from_disk
 from dotenv import load_dotenv
-from huggingface_hub import HfApi
+from huggingface_hub import HfApi, add_collection_item
 
 
 SPLITS = {
@@ -17,6 +17,10 @@ SPLITS = {
     "grpo/test": "holdout.parquet",
 }
 GRPO_SPLITS = {"grpo/train", "grpo/test"}
+COLLECTION_SLUG = (
+    "rubenbalbastre/grpo-based-llm-unlearning-reward-specification-and-benchmark"
+)
+ARXIV_ID = "2608.17804"
 
 
 def write_readme(
@@ -36,21 +40,24 @@ task_categories:
 - text-generation
 license: cc-by-4.0
 configs:
-- config_name: default
+- config_name: grpo
   data_files:
-  - split: grpo_train
+  - split: train
     path: grpo_train.parquet
-  - split: sft_train
-    path: sft_train.parquet
-  - split: sft_validation
-    path: sft_validation.parquet
-  - split: holdout
+  - split: test
     path: holdout.parquet
+- config_name: sft
+  data_files:
+  - split: train
+    path: sft_train.parquet
+  - split: validation
+    path: sft_validation.parquet
 ---
 
 # {repo_id}
 
-Dataset splits for targeted machine unlearning experiments.
+Dataset splits for targeted machine unlearning experiments accompanying
+[arXiv:{ARXIV_ID}](https://arxiv.org/abs/{ARXIV_ID}).
 
 ## License and Attribution
 
@@ -175,6 +182,20 @@ def main() -> None:
             repo_type="dataset",
             folder_path=str(export_dir),
             commit_message="Upload dataset splits",
+        )
+        add_collection_item(
+            collection_slug=COLLECTION_SLUG,
+            item_id=repo_id,
+            item_type="dataset",
+            exists_ok=True,
+            token=token,
+        )
+        add_collection_item(
+            collection_slug=COLLECTION_SLUG,
+            item_id=ARXIV_ID,
+            item_type="paper",
+            exists_ok=True,
+            token=token,
         )
 
     print(f"Uploaded {args.data_dir} to https://huggingface.co/datasets/{repo_id}")
