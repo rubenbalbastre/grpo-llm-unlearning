@@ -97,8 +97,8 @@ size, and training initialization, plus the author count. Runs marked with
 
 RWKU forget, neighbor, and MIA values are expressed as deltas from the matching
 original-model baseline for each model size and author. SFT warmup rows are also
-matched to those baselines and reported as `r2-warmup` when their RWKU results
-are present. Utility values remain the evaluated model's raw values.
+matched to those baselines and reported as `r2-warmup`. Utility values remain
+the evaluated model's raw values.
 
 The behavioural table reads existing `summary.csv` files only. It does not
 rescore `metrics.csv` or reconstruct missing summaries.

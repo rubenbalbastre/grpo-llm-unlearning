@@ -310,13 +310,7 @@ def main() -> None:
             sft_run = submit_sft(original_model, target, previous_sft_job)
             if sft_run.job_id:
                 previous_sft_job = sft_run.job_id
-            if not sft_run.blocked:
-                submit_holdout(
-                    target=target,
-                    model_path=sft_run.model_path,
-                    dependency=sft_run.job_id,
-                    checkpoint_root=sft_run.checkpoint_root,
-                )
+            submit_evaluations(sft_run, target)
 
             for reward in REWARDS:
                 original_dependencies = (

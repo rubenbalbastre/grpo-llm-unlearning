@@ -83,7 +83,7 @@ submits:
 
 - original-model RWKU and behavioural baselines
 - one broad-objective SFT warmup
-- behavioural evaluation of the SFT warmup
+- RWKU and behavioural evaluation of the SFT warmup
 - cold GRPO from the original model for every reward
 - warm GRPO from the SFT model for every reward
 - enabled RWKU and behavioural evaluations of the GRPO final models
