@@ -14,6 +14,7 @@ OUTPUTS_DIR = Path("outputs")
 IGNORED_FILES = ["eval_rwku/**", "hold_out_eval/**", "ref/**"]
 TARGETS = ["Jennifer Lopez", "John D. Rockefeller", "Karl Marx"]
 ARXIV_ID = "2608.17804"
+PAPER_URL = f"https://arxiv.org/abs/{ARXIV_ID}"
 
 
 def slug(value: str, separator: str) -> str:
@@ -61,12 +62,17 @@ def normalize_model_metadata(model_dir: Path) -> None:
             lambda match: f"base_model: {model_id(match.group(1).strip())}",
             readme,
         )
-        if re.search(r"(?m)^arxiv:", readme):
-            readme = re.sub(r"(?m)^arxiv:.*$", f'arxiv: "{ARXIV_ID}"', readme)
-        elif readme.startswith("---\n"):
-            readme = readme.replace("---\n", f'---\narxiv: "{ARXIV_ID}"\n', 1)
-        else:
-            readme = f'---\narxiv: "{ARXIV_ID}"\n---\n\n{readme}'
+        readme = re.sub(r"(?m)^arxiv:.*\n?", "", readme)
+        readme = re.sub(
+            r"https?://arxiv\.org/(?:abs|pdf)/1910\.09700(?:\.pdf)?",
+            "https://mlco2.github.io/impact/",
+            readme,
+        )
+        if PAPER_URL not in readme:
+            readme = (
+                readme.rstrip()
+                + f"\n\n## Paper\n\n[{ARXIV_ID}]({PAPER_URL})\n"
+            )
         readme_path.write_text(readme, encoding="utf-8")
 
 
