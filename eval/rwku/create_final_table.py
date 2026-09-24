@@ -31,7 +31,14 @@ BASELINE_RUN_RE = re.compile(
     r"instruct-(?P<author>.+)$",
     re.IGNORECASE,
 )
-SIZE_NAMES = {"0-5b": "0.5B", "1-5b": "1.5B", "3b": "3B", "7b": "7B"}
+SIZE_NAMES = {
+    "0-5b": "0.5B",
+    "1-5b": "1.5B",
+    "0_5b": "0.5B",
+    "1_5b": "1.5B",
+    "3b": "3B",
+    "7b": "7B",
+}
 
 CSV_METRICS = {
     "Forget Set FB down": "forget_fb",
@@ -138,30 +145,49 @@ def build_author_rows(
     rows: list[dict[str, object]] = []
     unmatched: list[Path] = []
     paths = sorted(
-        outputs_root.glob("unlearning-*/final_model/eval_rwku/rwku_summary_table.csv")
+        [
+            *outputs_root.glob(
+                "unlearning-*/final_model/eval_rwku/rwku_summary_table.csv"
+            ),
+            *outputs_root.glob(
+                "r2warmup_*/final_model/eval_rwku/rwku_summary_table.csv"
+            ),
+        ]
     )
     for path in paths:
         if (path.parents[2] / "low_reward_stop.json").is_file():
             continue
         run_name = path.parents[2].name
         match = TRAINED_RUN_RE.fullmatch(run_name)
-        if match is None:
+        warmup_match = WARMUP_RUN_RE.fullmatch(run_name)
+        if match:
+            size = SIZE_NAMES[match.group("size").lower()]
+            author = match.group("author")
+            reward_function = match.group("reward_type").lower()
+            training_initialization = (
+                "cold" if match.group("variant").lower() == "original" else "warm"
+            )
+        elif warmup_match:
+            size = SIZE_NAMES[warmup_match.group("size").lower()]
+            author = warmup_match.group("author")
+            reward_function = "r2-warmup"
+            training_initialization = "warm"
+        else:
             continue
-        size = SIZE_NAMES[match.group("size").lower()]
-        baseline_entry = baselines.get((size, author_key(match.group("author"))))
+
+        baseline_entry = baselines.get((size, author_key(author)))
         if baseline_entry is None:
             unmatched.append(path)
             continue
 
         baseline_name, baseline = baseline_entry
         trained = read_rwku_summary(path)
-        variant = match.group("variant").lower()
         row: dict[str, object] = {
-            "author": match.group("author"),
+            "author": author,
             "model_name_or_path": f"Qwen/Qwen2.5-{size}-Instruct",
             "model_size": size,
-            "reward_function": match.group("reward_type").lower(),
-            "training_initialization": "cold" if variant == "original" else "warm",
+            "reward_function": reward_function,
+            "training_initialization": training_initialization,
             "run_name": run_name,
             "baseline_run_name": baseline_name,
         }
