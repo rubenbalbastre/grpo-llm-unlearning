@@ -31,7 +31,14 @@ BASELINE_RUN_RE = re.compile(
     r"instruct-(?P<author>.+)$",
     re.IGNORECASE,
 )
-SIZE_NAMES = {"0-5b": "0.5B", "1-5b": "1.5B", "3b": "3B", "7b": "7B"}
+SIZE_NAMES = {
+    "0-5b": "0.5B",
+    "1-5b": "1.5B",
+    "0_5b": "0.5B",
+    "1_5b": "1.5B",
+    "3b": "3B",
+    "7b": "7B",
+}
 
 CSV_METRICS = {
     "Forget Set FB down": "forget_fb",
@@ -67,29 +74,12 @@ UTILITY_METRICS = [
     "utility_fac",
     "utility_flu",
 ]
-METRIC_LABELS = {
-    "forget": "Δ Forget ↓",
-    "neighbor": "Δ Neighbor ↑",
-    "forget_fb": "Δ Forget FB ↓",
-    "forget_qa": "Δ Forget QA ↓",
-    "forget_aa": "Δ Forget AA ↓",
-    "neighbor_fb": "Δ Neighbor FB ↑",
-    "neighbor_qa": "Δ Neighbor QA ↑",
-    "mia_fm": "Δ MIA FM ↑",
-    "mia_rm": "Δ MIA RM ↓",
-    "utility_ga": "Utility GA ↑",
-    "utility_ra": "Utility RA ↑",
-    "utility_tru": "Utility TRU ↑",
-    "utility_fac": "Utility FAC ↑",
-    "utility_flu": "Utility FLU ↑",
-}
-
 AUTHOR_COLUMNS = [
     "author",
     "model_name_or_path",
     "model_size",
     "reward_function",
-    "rlvr_mode",
+    "training_initialization",
     "run_name",
     "baseline_run_name",
     *[f"{metric}_delta" for metric in SPLIT_AGGREGATES],
@@ -97,35 +87,19 @@ AUTHOR_COLUMNS = [
     *UTILITY_METRICS,
 ]
 FINAL_COLUMNS = [
-    "model_name_or_path",
-    "model_size",
     "reward_function",
-    "rlvr_mode",
+    "model_size",
+    "training_initialization",
     "author_count",
 ]
-for _metric in SPLIT_AGGREGATES:
+AGGREGATE_METRICS = [
+    *[f"{metric}_delta" for metric in SPLIT_AGGREGATES],
+    *[f"{metric}_delta" for metric in DELTA_METRICS],
+    *UTILITY_METRICS,
+]
+for _metric in AGGREGATE_METRICS:
     FINAL_COLUMNS.extend(
-        [
-            f"{_metric}_delta_mean",
-            f"{_metric}_delta_std_across_authors",
-            f"{_metric}_author_count",
-        ]
-    )
-for _metric in DELTA_METRICS:
-    FINAL_COLUMNS.extend(
-        [
-            f"{_metric}_delta_mean",
-            f"{_metric}_delta_std_across_authors",
-            f"{_metric}_author_count",
-        ]
-    )
-for _metric in UTILITY_METRICS:
-    FINAL_COLUMNS.extend(
-        [
-            f"{_metric}_mean",
-            f"{_metric}_std_across_authors",
-            f"{_metric}_author_count",
-        ]
+        [f"{_metric}_median", f"{_metric}_q1", f"{_metric}_q3"]
     )
 
 
@@ -171,28 +145,49 @@ def build_author_rows(
     rows: list[dict[str, object]] = []
     unmatched: list[Path] = []
     paths = sorted(
-        outputs_root.glob("unlearning-*/final_model/eval_rwku/rwku_summary_table.csv")
+        [
+            *outputs_root.glob(
+                "unlearning-*/final_model/eval_rwku/rwku_summary_table.csv"
+            ),
+            *outputs_root.glob(
+                "r2warmup_*/final_model/eval_rwku/rwku_summary_table.csv"
+            ),
+        ]
     )
     for path in paths:
+        if (path.parents[2] / "low_reward_stop.json").is_file():
+            continue
         run_name = path.parents[2].name
         match = TRAINED_RUN_RE.fullmatch(run_name)
-        if match is None:
+        warmup_match = WARMUP_RUN_RE.fullmatch(run_name)
+        if match:
+            size = SIZE_NAMES[match.group("size").lower()]
+            author = match.group("author")
+            reward_function = match.group("reward_type").lower()
+            training_initialization = (
+                "cold" if match.group("variant").lower() == "original" else "warm"
+            )
+        elif warmup_match:
+            size = SIZE_NAMES[warmup_match.group("size").lower()]
+            author = warmup_match.group("author")
+            reward_function = "r2-warmup"
+            training_initialization = "warm"
+        else:
             continue
-        size = SIZE_NAMES[match.group("size").lower()]
-        baseline_entry = baselines.get((size, author_key(match.group("author"))))
+
+        baseline_entry = baselines.get((size, author_key(author)))
         if baseline_entry is None:
             unmatched.append(path)
             continue
 
         baseline_name, baseline = baseline_entry
         trained = read_rwku_summary(path)
-        variant = match.group("variant").lower()
         row: dict[str, object] = {
-            "author": match.group("author"),
+            "author": author,
             "model_name_or_path": f"Qwen/Qwen2.5-{size}-Instruct",
             "model_size": size,
-            "reward_function": match.group("reward_type").lower(),
-            "rlvr_mode": "cold" if variant == "original" else "warm",
+            "reward_function": reward_function,
+            "training_initialization": training_initialization,
             "run_name": run_name,
             "baseline_run_name": baseline_name,
         }
@@ -217,59 +212,41 @@ def build_author_rows(
     return rows, unmatched
 
 
-def mean(values: list[float]) -> float | None:
-    return statistics.mean(values) if values else None
-
-
-def sample_std(values: list[float]) -> float | None:
-    return statistics.stdev(values) if len(values) > 1 else None
+def quantile(values: list[float], probability: float) -> float | None:
+    if not values:
+        return None
+    ordered = sorted(values)
+    position = (len(ordered) - 1) * probability
+    lower = int(position)
+    upper = min(lower + 1, len(ordered) - 1)
+    return ordered[lower] + (ordered[upper] - ordered[lower]) * (position - lower)
 
 
 def aggregate_author_rows(rows: list[dict[str, object]]) -> list[dict[str, object]]:
-    groups: dict[tuple[str, str, str, str], list[dict[str, object]]] = defaultdict(list)
+    groups: dict[tuple[str, str, str], list[dict[str, object]]] = defaultdict(list)
     for row in rows:
         key = (
-            str(row["model_name_or_path"]),
-            str(row["model_size"]),
             str(row["reward_function"]),
-            str(row["rlvr_mode"]),
+            str(row["model_size"]),
+            str(row["training_initialization"]),
         )
         groups[key].append(row)
 
     output_rows = []
-    for (model, size, reward, mode), group in sorted(groups.items()):
+    for (reward, size, mode), group in sorted(groups.items()):
         output: dict[str, object] = {
-            "model_name_or_path": model,
-            "model_size": size,
             "reward_function": reward,
-            "rlvr_mode": mode,
+            "model_size": size,
+            "training_initialization": mode,
             "author_count": len({str(row["author"]) for row in group}),
         }
-        for metric in SPLIT_AGGREGATES:
-            values = [
-                float(row[f"{metric}_delta"])
-                for row in group
-                if row.get(f"{metric}_delta") is not None
-            ]
-            output[f"{metric}_delta_mean"] = mean(values)
-            output[f"{metric}_delta_std_across_authors"] = sample_std(values)
-            output[f"{metric}_author_count"] = len(values)
-        for metric in DELTA_METRICS:
-            values = [
-                float(row[f"{metric}_delta"])
-                for row in group
-                if row.get(f"{metric}_delta") is not None
-            ]
-            output[f"{metric}_delta_mean"] = mean(values)
-            output[f"{metric}_delta_std_across_authors"] = sample_std(values)
-            output[f"{metric}_author_count"] = len(values)
-        for metric in UTILITY_METRICS:
+        for metric in AGGREGATE_METRICS:
             values = [
                 float(row[metric]) for row in group if row.get(metric) is not None
             ]
-            output[f"{metric}_mean"] = mean(values)
-            output[f"{metric}_std_across_authors"] = sample_std(values)
-            output[f"{metric}_author_count"] = len(values)
+            output[f"{metric}_median"] = quantile(values, 0.5)
+            output[f"{metric}_q1"] = quantile(values, 0.25)
+            output[f"{metric}_q3"] = quantile(values, 0.75)
         output_rows.append(output)
     return output_rows
 
@@ -288,67 +265,10 @@ def write_csv(path: Path, columns: list[str], rows: list[dict[str, object]]) -> 
         )
 
 
-def format_mean_std(mean_value: object, std_value: object) -> str:
-    if mean_value is None:
-        return "NA"
-    text = f"{float(mean_value):.3f}"
-    if std_value is not None:
-        text += f" ± {float(std_value):.3f}"
-    return text
-
-
-def write_markdown(path: Path, rows: list[dict[str, object]]) -> None:
-    headers = [
-        "model_size",
-        "reward_function",
-        "rlvr_mode",
-        "author_count",
-        METRIC_LABELS["forget"],
-        METRIC_LABELS["neighbor"],
-        *[METRIC_LABELS[metric] for metric in ["mia_fm", "mia_rm", *UTILITY_METRICS]],
-    ]
-    lines = [
-        "| " + " | ".join(headers) + " |",
-        "| " + " | ".join(["---"] * len(headers)) + " |",
-    ]
-    for row in rows:
-        cells = [
-            str(row["model_size"]),
-            str(row["reward_function"]),
-            str(row["rlvr_mode"]),
-            str(row["author_count"]),
-        ]
-        for metric in SPLIT_AGGREGATES:
-            cells.append(
-                format_mean_std(
-                    row.get(f"{metric}_delta_mean"),
-                    row.get(f"{metric}_delta_std_across_authors"),
-                )
-            )
-        for metric in ["mia_fm", "mia_rm"]:
-            cells.append(
-                format_mean_std(
-                    row.get(f"{metric}_delta_mean"),
-                    row.get(f"{metric}_delta_std_across_authors"),
-                )
-            )
-        for metric in UTILITY_METRICS:
-            cells.append(
-                format_mean_std(
-                    row.get(f"{metric}_mean"),
-                    row.get(f"{metric}_std_across_authors"),
-                )
-            )
-        lines.append("| " + " | ".join(cells) + " |")
-    path.parent.mkdir(parents=True, exist_ok=True)
-    path.write_text("\n".join(lines) + "\n", encoding="utf-8")
-
-
 def parse_args() -> argparse.Namespace:
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("--outputs-root", type=Path, default=DEFAULT_OUTPUTS_ROOT)
     parser.add_argument("--output-csv", type=Path, default=DEFAULT_OUTPUT_CSV)
-    parser.add_argument("--output-md", type=Path, default=None)
     parser.add_argument("--author-output-csv", type=Path, default=DEFAULT_AUTHOR_CSV)
     parser.add_argument(
         "--require-complete-baselines",
@@ -360,7 +280,6 @@ def parse_args() -> argparse.Namespace:
 
 def main() -> None:
     args = parse_args()
-    output_md = args.output_md or args.output_csv.with_suffix(".md")
     author_rows, unmatched = build_author_rows(args.outputs_root)
     if unmatched and args.require_complete_baselines:
         examples = "\n".join(f"  {path}" for path in unmatched[:10])
@@ -371,12 +290,10 @@ def main() -> None:
     final_rows = aggregate_author_rows(author_rows)
     write_csv(args.author_output_csv, AUTHOR_COLUMNS, author_rows)
     write_csv(args.output_csv, FINAL_COLUMNS, final_rows)
-    write_markdown(output_md, final_rows)
     print(f"matched {len(author_rows)} trained result(s) to baselines")
     print(f"unmatched trained results: {len(unmatched)}")
     print(f"wrote author-level deltas: {args.author_output_csv}")
     print(f"wrote final table: {args.output_csv}")
-    print(f"wrote final markdown: {output_md}")
 
 
 if __name__ == "__main__":
