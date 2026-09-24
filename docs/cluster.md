@@ -1,103 +1,91 @@
 # Cluster
 
-Cluster launchers assume a Slurm environment and source `scripts/slurm-env.sh`.
-That helper resolves repository paths and activates the training environment.
+The shell launchers target Slurm and activate the `py312_cu118_bis` Conda
+environment. Their defaults point to the project cluster paths; override
+`ENV_DIR` and `REPO_DIR` when using another checkout or environment root.
 
 ## Environment
 
 Create or update the cluster environment with:
 
 ```bash
-sbatch scripts/others/create-conda-env.sh
+sbatch scripts/env/create-conda-env.sh
 ```
+
+The environment script installs the CUDA 11.8 PyTorch stack and the Python
+dependencies needed by training and evaluation. The launchers expect Conda
+under `$ENV_DIR/anaconda3_bis`.
 
 Useful environment variables:
 
 ```bash
-REPO_DIR=/storage/scratch/<group>/<user>/machine-unlearning-llm
-TRAIN_ENV_PATH=/storage/scratch/<group>/<user>/anaconda3_bis/envs/py312_cu118_bis_cu118
+ENV_DIR=/storage/scratch/<group>/<user>
+REPO_DIR=/storage/scratch/<group>/<user>/grpo-llm-unlearning
+WANDB_API_KEY=...
 WANDB_PROJECT=machine-unlearning-llm
 OPENAI_API_KEY=...
 HF_TOKEN=...
 FASTTEXT_LID_PATH=/path/to/lid.176.ftz
 ```
 
-Hugging Face clients read the token directly from the process environment. The
-training jobs do not write it to the shared Hugging Face credential cache.
-
-Download fastText language ID data with:
+Hugging Face clients read `HF_TOKEN` from the process environment. Download the
+optional fastText language-ID model with:
 
 ```bash
-scripts/others/download-fasttext-lid.sh
+scripts/env/download-fasttext-lid.sh
 ```
 
-## Training Jobs
+## Matrix Workflow
 
-Generate splits:
-
-```bash
-sbatch scripts/generate-data-splits.sh experiment.forget_concept="Stephen King"
-```
-
-SFT:
-
-```bash
-sbatch scripts/run-sft.sh experiment.forget_concept="Stephen King"
-```
-
-GRPO:
-
-```bash
-sbatch scripts/run-grpo.sh experiment.forget_concept="Stephen King"
-```
-
-Run the complete target/reward matrix, including SFT warm-up, GRPO, RWKU, and
-hold-out evaluation:
+After generating every target dataset listed in the matrix runner, execute:
 
 ```bash
 scripts/run-target-reward-matrix.sh
 ```
 
-The generated target datasets must already exist under `data/`. The model,
-target, and reward matrix is defined in `scripts/run-target-reward-matrix.py`.
+This local launcher calls `scripts/run-target-reward-matrix.py`, which submits
+the required Slurm jobs and dependencies with `sbatch`. Edit `MODELS`,
+`TARGETS`, `REWARDS`, `RUN_RWKU_EVAL`, and `RUN_HOLD_OUT_EVAL` in that Python
+file to select the experiment matrix.
 
-## GPU Configuration
+The runner does not overwrite partial runs. A run directory with no
+`final_model/` is reported as incomplete and must be inspected or removed
+manually before resubmission.
 
-`scripts/run-grpo.sh` selects the Accelerate config based on visible GPUs and
-PEFT mode:
+## Individual Jobs
+
+```bash
+sbatch scripts/generate-data-splits.sh experiment.forget_concept="Stephen King"
+sbatch scripts/run-sft.sh experiment.forget_concept="Stephen King"
+sbatch scripts/run-grpo.sh experiment.forget_concept="Stephen King"
+```
+
+`run-sft.sh` uses one GPU through Accelerate. `run-grpo.sh` selects its
+Accelerate configuration from the visible GPU count and PEFT setting:
 
 - one GPU: `config/accelerate_single_gpu.yaml`
 - multiple GPUs with PEFT: `config/accelerate_multi_gpu.yaml`
 - multiple GPUs without PEFT: `config/accelerate_deepspeed_zero3.yaml`
 
-Override GPU count manually:
-
-```bash
-NUM_GPUS=2 sbatch scripts/run-grpo.sh
-```
-
-Force a config:
-
-```bash
-ACCELERATE_CONFIG=config/accelerate_multi_gpu.yaml sbatch scripts/run-grpo.sh
-```
+Override selection with `NUM_GPUS` or `ACCELERATE_CONFIG` when needed.
 
 ## Evaluation Jobs
 
-RWKU:
+RWKU evaluates only the final model under a training run:
 
 ```bash
 CHECKPOINT_ROOT=outputs/<run> sbatch scripts/run-eval-rwku.sh
 ```
 
-Hold-out completion analysis:
+The RWKU launcher shards evaluation across the allocated GPUs and merges the
+results. Behavioural evaluation uses one GPU:
 
 ```bash
-sbatch scripts/run-eval-behaviour.sh
+sbatch scripts/run-eval-behaviour.sh \
+  concept="Stephen King" \
+  model_name_or_path=outputs/<run>/final_model \
+  output_dir=outputs/<run>/final_model/hold_out_eval
 ```
 
-Training diagnostics:
-
-```bash
-sbatch scripts/others/slurm-plot-training-diagnostics-by-model-size.sh
-```
+Both launchers honor `SKIP_IF_MARKER`; the matrix runner sets it to the run's
+`low_reward_stop.json` path so early-stopped no-learning runs are not evaluated.
