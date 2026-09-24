@@ -3,20 +3,10 @@
 import argparse
 import csv
 import re
-import sys
 from collections import defaultdict
 from pathlib import Path
 
-import pandas as pd
-from omegaconf import OmegaConf
-
-
 REPO_ROOT = Path(__file__).resolve().parents[2]
-sys.path.insert(0, str(REPO_ROOT))
-
-from eval.behaviour.analysis_utils import aggregate_metric_summary  # noqa: E402
-
-
 DEFAULT_INPUT_ROOT = REPO_ROOT / "outputs"
 DEFAULT_OUTPUT_ROOT = DEFAULT_INPUT_ROOT / "tables"
 DEFAULT_OUTPUT_CSV = DEFAULT_OUTPUT_ROOT / "behaviour.csv"
@@ -42,11 +32,6 @@ WARMUP_RUN_RE = re.compile(
     r"^r2warmup_qwen_qwen2_5_(?P<size>0_5b|1_5b|3b|7b)_instruct_(?P<author>.+)$",
     re.IGNORECASE,
 )
-HOLDOUT_BASELINE_RUN_RE = re.compile(
-    r"^holdout-baseline-qwen-qwen2-5-(?P<size>0-5b|1-5b|3b|7b)-"
-    r"instruct-(?P<author>.+)$",
-    re.IGNORECASE,
-)
 MODEL_PATH_RE = re.compile(
     r"Qwen2\.5-(?P<size>0\.5B|1\.5B|3B|7B)-Instruct$",
     re.IGNORECASE,
@@ -67,51 +52,6 @@ MODEL_SIZES = {
     "3b": "3B",
     "7b": "7B",
 }
-
-
-def recreate_missing_summaries(input_root: Path) -> int:
-    recreated = 0
-    for metrics_path in sorted(input_root.glob("**/hold_out_eval/metrics.csv")):
-        summary_path = metrics_path.with_name("summary.csv")
-        # if summary_path.exists():
-        #     continue
-
-        metrics = pd.read_csv(metrics_path)
-        if metrics.empty:
-            raise ValueError(f"Cannot recreate summary from empty file: {metrics_path}")
-
-        model_dir = metrics_path.parents[1]
-        run_dir = model_dir.parent if model_dir.name == "final_model" else model_dir
-        config_path = run_dir / "hydra_config.yaml"
-        if config_path.exists():
-            config = OmegaConf.load(config_path)
-            author = str(config.experiment.forget_concept)
-            model_name_or_path = str(model_dir)
-        else:
-            if match := HOLDOUT_BASELINE_RUN_RE.fullmatch(run_dir.name):
-                author_slug = match.group("author")
-            elif match := WARMUP_RUN_RE.fullmatch(run_dir.name):
-                author_slug = match.group("author")
-            elif match := STOPPED_RUN_RE.fullmatch(run_dir.name):
-                author_slug = match.group("concept")
-            else:
-                raise ValueError(f"Cannot infer metadata for {metrics_path}")
-
-            author = re.sub(r"[-_]+", " ", author_slug).title()
-            size = MODEL_SIZES[match.group("size").lower()]
-            model_name_or_path = f"Qwen/Qwen2.5-{size}-Instruct"
-
-        summary = aggregate_metric_summary(
-            metrics,
-            metadata={
-                "forget_concept": author,
-                "model_name_or_path": model_name_or_path,
-            },
-        )
-        summary.to_csv(summary_path, index=False)
-        print(f"recreated missing summary: {summary_path}")
-        recreated += 1
-    return recreated
 
 
 def read_summary(path: Path) -> list[dict[str, str]]:
@@ -366,19 +306,11 @@ def parse_args() -> argparse.Namespace:
         default="**/hold_out_eval/summary.csv",
         help="Glob below --input-root selecting completion summary CSV files.",
     )
-    parser.add_argument(
-        "--recreate-summaries",
-        action=argparse.BooleanOptionalAction,
-        default=False,
-        help="Recreate missing summary.csv files from metrics.csv (default: enabled).",
-    )
     return parser.parse_args()
 
 
 def main() -> None:
     args = parse_args()
-    if args.recreate_summaries:
-        recreate_missing_summaries(args.input_root)
     summary_paths = sorted(args.input_root.glob(args.summary_glob))
     if not summary_paths:
         raise SystemExit(f"No summary CSV files found with {args.input_root / args.summary_glob}")
