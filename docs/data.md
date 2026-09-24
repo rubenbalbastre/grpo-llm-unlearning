@@ -73,8 +73,8 @@ README.md
 
 Every parquet file includes a `concept` column. The GRPO train and hold-out
 exports omit the RWKU reference `completion`; both SFT exports retain it. The
-generated dataset card declares the custom split names so the Hugging Face
-Dataset Viewer can render them.
+generated dataset card exposes separate `grpo` and `sft` configurations so
+their different schemas load correctly and render in the Dataset Viewer.
 
 Download the private repository back into the local per-concept layout:
 
