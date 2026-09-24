@@ -7,7 +7,7 @@ import re
 from pathlib import Path
 
 from dotenv import load_dotenv
-from huggingface_hub import HfApi
+from huggingface_hub import HfApi, add_collection_item
 
 
 OUTPUTS_DIR = Path("outputs")
@@ -15,6 +15,9 @@ IGNORED_FILES = ["eval_rwku/**", "hold_out_eval/**", "ref/**"]
 TARGETS = ["Jennifer Lopez", "John D. Rockefeller", "Karl Marx"]
 ARXIV_ID = "2608.17804"
 PAPER_URL = f"https://arxiv.org/abs/{ARXIV_ID}"
+COLLECTION_SLUG = (
+    "rubenbalbastre/grpo-based-llm-unlearning-reward-specification-and-benchmark"
+)
 
 
 def slug(value: str, separator: str) -> str:
@@ -112,6 +115,13 @@ def main() -> None:
             folder_path=model_dir,
             ignore_patterns=IGNORED_FILES,
             commit_message="Upload final model",
+        )
+        add_collection_item(
+            collection_slug=COLLECTION_SLUG,
+            item_id=repo_id,
+            item_type="model",
+            exists_ok=True,
+            token=token,
         )
 
     print(f"Uploaded {len(models)} model(s).")
