@@ -141,6 +141,8 @@ def build_author_rows(
         outputs_root.glob("unlearning-*/final_model/eval_rwku/rwku_summary_table.csv")
     )
     for path in paths:
+        if (path.parents[2] / "low_reward_stop.json").is_file():
+            continue
         run_name = path.parents[2].name
         match = TRAINED_RUN_RE.fullmatch(run_name)
         if match is None:

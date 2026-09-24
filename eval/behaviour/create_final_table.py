@@ -2,7 +2,6 @@
 
 import argparse
 import csv
-import json
 import re
 import sys
 from collections import defaultdict
@@ -239,68 +238,13 @@ def build_table(summary_paths: list[Path]) -> list[dict[str, str]]:
     return rows
 
 
-def concept_key(value: str) -> str:
-    return re.sub(r"[^a-z0-9]+", "", value.lower())
-
-
-def add_observed_provenance(rows: list[dict[str, str]]) -> list[dict[str, str]]:
-    return [
-        {
-            **row,
-            "result_source": "observed",
-            "run_status": "observed",
-            "stop_reason": "",
-        }
-        for row in rows
-    ]
-
-
-def add_confirmed_no_learning_baselines(
+def learning_rows(
     rows: list[dict[str, str]], outputs_root: Path
 ) -> list[dict[str, str]]:
-    """Add baseline-valued rows only for runs carrying a low-reward stop marker."""
-    baselines = {
-        (concept_key(row["author"]), row["model_size"]): row
-        for row in rows
-        if row.get("training_variant") == "baseline"
+    stopped_runs = {
+        marker.parent.name for marker in outputs_root.glob("*/low_reward_stop.json")
     }
-    observed_keys = {
-        (
-            concept_key(row["author"]),
-            row["training_variant"],
-            row["model_size"],
-            row["reward_function"],
-        )
-        for row in rows
-    }
-    imputed_rows: list[dict[str, str]] = []
-    for marker_path in sorted(outputs_root.glob("*/low_reward_stop.json")):
-        match = STOPPED_RUN_RE.fullmatch(marker_path.parent.name)
-        if not match:
-            continue
-        size = MODEL_SIZES[match.group("size").lower()]
-        training_variant = match.group("training_variant").lower()
-        reward_type = match.group("reward_type").lower()
-        key = (concept_key(match.group("concept")), training_variant, size, reward_type)
-        if key in observed_keys:
-            continue
-        baseline = baselines.get((key[0], size))
-        if baseline is None:
-            continue
-        marker = json.loads(marker_path.read_text(encoding="utf-8"))
-        imputed_rows.append(
-            {
-                **baseline,
-                "reward_function": reward_type,
-                "training_variant": training_variant,
-                "training_initialization": "cold" if training_variant == "original" else "warm",
-                "run_name": marker_path.parent.name,
-                "result_source": "baseline-imputed",
-                "run_status": "no-learning",
-                "stop_reason": str(marker.get("reason", "")),
-            }
-        )
-    return [*rows, *imputed_rows]
+    return [row for row in rows if row.get("run_name") not in stopped_runs]
 
 
 def numeric_value(value: str) -> float | None:
@@ -418,11 +362,11 @@ def main() -> None:
     if not summary_paths:
         raise SystemExit(f"No summary CSV files found with {args.input_root / args.summary_glob}")
 
-    rows = add_observed_provenance(build_table(summary_paths))
+    rows = build_table(summary_paths)
     if not rows:
         raise SystemExit("No non-empty summary CSV files found.")
 
-    author_rows = add_confirmed_no_learning_baselines(rows, REPO_ROOT / "outputs")
+    author_rows = learning_rows(rows, args.input_root)
     grouped_rows = aggregate_rows(author_rows)
     write_csv(
         args.author_output_csv,

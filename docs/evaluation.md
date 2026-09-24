@@ -97,7 +97,8 @@ scripts/tables/final-table.sh
 Four CSV files are written under `outputs/tables/`: author-level and aggregate
 tables for RWKU and behavioural evaluation. Aggregate tables contain the median,
 Q1, and Q3 of each metric grouped by reward function, model size, and training
-initialization. The files are also packaged as `outputs/tables/final-tables.tar.gz`.
+initialization, using only runs without a `low_reward_stop.json` marker. The
+files are also packaged as `outputs/tables/final-tables.tar.gz`.
 Missing behavioural `summary.csv` files are recreated from their existing
 `metrics.csv` files before the tables are built.
 
