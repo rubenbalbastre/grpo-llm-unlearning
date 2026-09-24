@@ -38,19 +38,29 @@ def find_final_models(targets: list[str]) -> list[Path]:
     return sorted(set(models))
 
 
-def normalize_adapter_config(model_dir: Path) -> None:
+def model_id(value: str) -> str:
+    cache_name = Path(value).name
+    return cache_name.replace("--", "/", 1) if "--" in cache_name else value
+
+
+def normalize_model_metadata(model_dir: Path) -> None:
     config_path = model_dir / "adapter_config.json"
-    if not config_path.is_file():
-        return
+    if config_path.is_file():
+        config = json.loads(config_path.read_text(encoding="utf-8"))
+        for key in ("base_model_name_or_path", "base_model"):
+            if key in config:
+                config[key] = model_id(str(config[key]))
+        config_path.write_text(json.dumps(config, indent=2) + "\n", encoding="utf-8")
 
-    config = json.loads(config_path.read_text(encoding="utf-8"))
-    base_model = str(config.get("base_model_name_or_path", ""))
-    cache_name = Path(base_model).name
-    if "--" not in cache_name:
-        return
-
-    config["base_model_name_or_path"] = cache_name.replace("--", "/", 1)
-    config_path.write_text(json.dumps(config, indent=2) + "\n", encoding="utf-8")
+    readme_path = model_dir / "README.md"
+    if readme_path.is_file():
+        readme = readme_path.read_text(encoding="utf-8")
+        readme = re.sub(
+            r"(?m)^base_model:\s*['\"]?([^'\"\n]+)['\"]?\s*$",
+            lambda match: f"base_model: {model_id(match.group(1).strip())}",
+            readme,
+        )
+        readme_path.write_text(readme, encoding="utf-8")
 
 
 def parse_args() -> argparse.Namespace:
@@ -79,7 +89,7 @@ def main() -> None:
     namespace = args.namespace or api.whoami()["name"]
 
     for model_dir in models:
-        normalize_adapter_config(model_dir)
+        normalize_model_metadata(model_dir)
         run_name = model_dir.parent.name
         repo_id = f"{namespace}/{run_name}"
         print(f"Uploading {model_dir} to {repo_id}", flush=True)
