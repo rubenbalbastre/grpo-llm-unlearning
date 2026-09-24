@@ -1,20 +1,43 @@
 #!/usr/bin/env python3
-"""Build and upload the rescored hold-out evaluations to Hugging Face."""
+"""Build and upload the hold-out evaluations from run output directories."""
 
 
 import argparse
 import os
+import re
 import tempfile
 from pathlib import Path
 
 import pandas as pd
 from datasets import Dataset
 from dotenv import load_dotenv
-from huggingface_hub import HfApi
+from huggingface_hub import HfApi, add_collection_item
 
 
-DEFAULT_INPUT_DIR = Path("outputs/hold_out_evals/holdout_metrics_rescored")
+DEFAULT_OUTPUTS_DIR = Path("outputs")
 DEFAULT_REPO_ID = "machine-unlearning-holdout-evals"
+COLLECTION_SLUG = (
+    "rubenbalbastre/grpo-based-llm-unlearning-reward-specification-and-benchmark"
+)
+MODEL_SIZES = {
+    "0-5b": "0.5B",
+    "0_5b": "0.5B",
+    "1-5b": "1.5B",
+    "1_5b": "1.5B",
+    "3b": "3B",
+    "7b": "7B",
+}
+UNLEARNING_RUN_RE = re.compile(
+    r"^unlearning-(?P<variant>original|r2-warmed)-qwen-qwen2-5-"
+    r"(?P<size>0-5b|1-5b|3b|7b)-instruct-.+-(?P<reward>r\d+)"
+    r"(?:-reasoning-[a-z0-9-]+)?$"
+)
+WARMUP_RUN_RE = re.compile(
+    r"^r2warmup_qwen_qwen2_5_(?P<size>0_5b|1_5b|3b|7b)_instruct_.+$"
+)
+BASELINE_RUN_RE = re.compile(
+    r"^holdout-baseline-qwen-qwen2-5-(?P<size>0-5b|1-5b|3b|7b)-instruct-.+$"
+)
 METRICS = [
     "lexical_leakage",
     "semantic_leakage",
@@ -36,49 +59,59 @@ OUTPUT_COLUMNS = [
 ]
 
 
-def load_dataset_frame(input_dir: Path) -> pd.DataFrame:
-    metadata_path = input_dir / "per_run_summary.csv"
-    if not metadata_path.exists():
-        raise ValueError(f"Missing run metadata: {metadata_path}")
+def run_metadata(run_name: str) -> dict[str, str]:
+    match = UNLEARNING_RUN_RE.fullmatch(run_name)
+    if match:
+        return {
+            "model_size": MODEL_SIZES[match.group("size")],
+            "reward_function": match.group("reward"),
+            "training_variant": match.group("variant"),
+        }
 
-    metadata = pd.read_csv(metadata_path, keep_default_na=False)
-    required_metadata = {
-        "run_name",
-        "model_size",
-        "reward_function",
-        "training_variant",
-    }
-    missing_metadata = required_metadata - set(metadata.columns)
-    if missing_metadata:
-        raise ValueError(f"{metadata_path} is missing columns: {sorted(missing_metadata)}")
-    if metadata["run_name"].duplicated().any():
-        raise ValueError(f"{metadata_path} contains duplicate run names")
-    metadata = metadata.set_index("run_name")
+    match = WARMUP_RUN_RE.fullmatch(run_name)
+    if match:
+        return {
+            "model_size": MODEL_SIZES[match.group("size")],
+            "reward_function": "r2-warmup",
+            "training_variant": "r2-warmup",
+        }
+
+    match = BASELINE_RUN_RE.fullmatch(run_name)
+    if match:
+        return {
+            "model_size": MODEL_SIZES[match.group("size")],
+            "reward_function": "baseline",
+            "training_variant": "baseline",
+        }
+
+    raise ValueError(f"Cannot infer metadata from run name: {run_name}")
+
+
+def load_dataset_frame(outputs_dir: Path) -> pd.DataFrame:
+    metrics_paths = sorted(
+        outputs_dir.glob("*/final_model/hold_out_eval/metrics.csv")
+    )
+    if not metrics_paths:
+        raise ValueError(f"No hold-out metrics.csv files found under {outputs_dir}")
 
     frames = []
-    for path in sorted(input_dir.glob("*_metrics.csv")):
-        run_name = path.stem.removesuffix("_metrics")
-        if run_name not in metadata.index:
-            raise ValueError(f"No metadata found for {path.name}")
-
+    for path in metrics_paths:
+        run_name = path.parents[2].name
         frame = pd.read_csv(path, keep_default_na=False)
         required_columns = {"index", "prompt", "completion", "subject", *METRICS}
         missing_columns = required_columns - set(frame.columns)
         if missing_columns:
             raise ValueError(f"{path} is missing columns: {sorted(missing_columns)}")
 
-        run_metadata = metadata.loc[run_name]
+        metadata = run_metadata(run_name)
         frame = frame.copy()
         frame["id"] = [f"{run_name}:{int(index):03d}" for index in frame["index"]]
         frame["run_name"] = run_name
-        frame["model_size"] = run_metadata["model_size"]
-        frame["reward_function"] = run_metadata["reward_function"]
+        frame["model_size"] = metadata["model_size"]
+        frame["reward_function"] = metadata["reward_function"]
         frame["target"] = frame["subject"]
-        frame["training_variant"] = run_metadata["training_variant"]
+        frame["training_variant"] = metadata["training_variant"]
         frames.append(frame[OUTPUT_COLUMNS])
-
-    if not frames:
-        raise ValueError(f"No rescored run CSVs found under {input_dir}")
 
     dataset_frame = pd.concat(frames, ignore_index=True)
     if dataset_frame["id"].duplicated().any():
@@ -101,8 +134,9 @@ configs:
 
 # {repo_id}
 
-Hold-out completions and LLM-judge rubric labels for targeted machine-unlearning
-experiments.
+Hold-out completions and LLM-judge rubric labels produced by the targeted
+machine-unlearning experiment runs accompanying
+[arXiv:2608.17804](https://arxiv.org/abs/2608.17804).
 
 The dataset contains {len(frame):,} prompt/completion evaluations from
 {frame['run_name'].nunique()} model runs across {frame['target'].nunique()} target
@@ -134,9 +168,9 @@ Apache-2.0 in the `machine-unlearning-llm` repository.
 
 
 def get_token() -> str:
-    token = os.environ.get("HF_TOKEN") or os.environ.get("HUGGINGFACE_HUB_TOKEN")
+    token = os.environ.get("HF_TOKEN")
     if not token:
-        raise ValueError("Set HF_TOKEN or HUGGINGFACE_HUB_TOKEN in .env before uploading.")
+        raise ValueError("Set HF_TOKEN in .env before uploading.")
     return token
 
 
@@ -148,7 +182,9 @@ def resolve_repo_id(api: HfApi, repo_id: str) -> str:
 
 def parse_args() -> argparse.Namespace:
     parser = argparse.ArgumentParser(description=__doc__)
-    parser.add_argument("input_dir", nargs="?", type=Path, default=DEFAULT_INPUT_DIR)
+    parser.add_argument(
+        "outputs_dir", nargs="?", type=Path, default=DEFAULT_OUTPUTS_DIR
+    )
     parser.add_argument("repo_id", nargs="?", default=DEFAULT_REPO_ID)
     return parser.parse_args()
 
@@ -156,9 +192,10 @@ def parse_args() -> argparse.Namespace:
 def main() -> None:
     load_dotenv()
     args = parse_args()
-    frame = load_dataset_frame(args.input_dir)
+    frame = load_dataset_frame(args.outputs_dir)
 
-    api = HfApi(token=get_token())
+    token = get_token()
+    api = HfApi(token=token)
     repo_id = resolve_repo_id(api, args.repo_id)
 
     with tempfile.TemporaryDirectory() as tmpdir:
@@ -177,7 +214,21 @@ def main() -> None:
             repo_id=repo_id,
             repo_type="dataset",
             folder_path=str(export_dir),
-            commit_message="Upload rescored hold-out evaluations",
+            commit_message="Upload hold-out evaluations",
+        )
+        add_collection_item(
+            collection_slug=COLLECTION_SLUG,
+            item_id=repo_id,
+            item_type="dataset",
+            exists_ok=True,
+            token=token,
+        )
+        add_collection_item(
+            collection_slug=COLLECTION_SLUG,
+            item_id="2608.17804",
+            item_type="paper",
+            exists_ok=True,
+            token=token,
         )
 
     print(
