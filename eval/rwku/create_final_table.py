@@ -12,8 +12,9 @@ from pathlib import Path
 
 REPO_ROOT = Path(__file__).resolve().parents[2]
 DEFAULT_OUTPUTS_ROOT = REPO_ROOT / "outputs"
-DEFAULT_OUTPUT_CSV = DEFAULT_OUTPUTS_ROOT / "rwku_final_table.csv"
-DEFAULT_AUTHOR_CSV = DEFAULT_OUTPUTS_ROOT / "rwku_author_deltas.csv"
+DEFAULT_TABLES_ROOT = DEFAULT_OUTPUTS_ROOT / "tables"
+DEFAULT_OUTPUT_CSV = DEFAULT_TABLES_ROOT / "rwku.csv"
+DEFAULT_AUTHOR_CSV = DEFAULT_TABLES_ROOT / "rwku_authors.csv"
 
 TRAINED_RUN_RE = re.compile(
     r"^unlearning-(?P<variant>original|r2-warmed)-qwen-qwen2-5-"
@@ -281,6 +282,8 @@ def parse_args() -> argparse.Namespace:
 def main() -> None:
     args = parse_args()
     author_rows, unmatched = build_author_rows(args.outputs_root)
+    if not author_rows:
+        raise SystemExit(f"No matched RWKU results found under {args.outputs_root}")
     if unmatched and args.require_complete_baselines:
         examples = "\n".join(f"  {path}" for path in unmatched[:10])
         raise SystemExit(

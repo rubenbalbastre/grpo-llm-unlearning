@@ -18,7 +18,7 @@ cp .env.example .env
 Set the credentials required by the workflow:
 
 - `OPENAI_API_KEY`: broad SFT completions, the R2 reward, and behavioural judges
-- `WANDB_API_KEY` and `WANDB_PROJECT`: experiment tracking and training dynamics
+- `WANDB_API_KEY` and `WANDB_PROJECT`: experiment tracking and training rollouts
 - `HF_TOKEN`: private Hugging Face dataset upload/download
 
 ## Data
@@ -74,14 +74,24 @@ RWKU results are written to `final_model/eval_rwku/`. Behavioural evaluation
 writes prompt-level `metrics.csv` and aggregate `summary.csv` to
 `final_model/hold_out_eval/`.
 
-Create the article tables after evaluations are complete:
+Download and score the last five optimizer steps from the selected W&B runs:
+
+```bash
+scripts/run-training-behavior.sh
+```
+
+Use `--skip-download` to reuse `outputs/terminal_training_audit/` and score only
+missing prompt/completion pairs.
+
+After final-model evaluations and training-rollout scoring are complete, create
+the article tables:
 
 ```bash
 scripts/tables/final-table.sh
 ```
 
-This writes author-level and aggregate RWKU and behavioural CSV files under
-`outputs/tables/`, then packages them as `final-tables.tar.gz`.
+This aggregates RWKU, held-out behaviour, and terminal training behaviour under
+`outputs/tables/`, then packages the six CSV files as `final-tables.tar.gz`.
 
 ## Documentation
 
@@ -97,7 +107,7 @@ This writes author-level and aggregate RWKU and behavioural CSV files under
 config/                       Hydra, Accelerate, and DeepSpeed configuration
 docs/                         research workflow documentation
 eval/rwku/                    RWKU benchmark implementation and tables
-eval/behaviour/               hold-out evaluation and training-dynamics analysis
+eval/behaviour/               held-out and terminal-training behaviour audits
 scripts/                      Slurm launchers and utilities
 src/callbacks/                SFT and GRPO callbacks
 src/data_preprocessing/       dataset loading and prompt formatting
