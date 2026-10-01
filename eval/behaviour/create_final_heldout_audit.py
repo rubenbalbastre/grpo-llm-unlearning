@@ -9,8 +9,8 @@ from pathlib import Path
 REPO_ROOT = Path(__file__).resolve().parents[2]
 DEFAULT_INPUT_ROOT = REPO_ROOT / "outputs"
 DEFAULT_OUTPUT_ROOT = DEFAULT_INPUT_ROOT / "tables"
-DEFAULT_OUTPUT_CSV = DEFAULT_OUTPUT_ROOT / "behaviour.csv"
-DEFAULT_AUTHOR_CSV = DEFAULT_OUTPUT_ROOT / "behaviour_authors.csv"
+DEFAULT_OUTPUT_CSV = DEFAULT_OUTPUT_ROOT / "heldout_behaviour.csv"
+DEFAULT_AUTHOR_CSV = DEFAULT_OUTPUT_ROOT / "heldout_behaviour_authors.csv"
 SUMMARY_METADATA_COLUMNS = {"forget_concept", "model_name_or_path", "stat"}
 BASELINE_FOLDER_RE = re.compile(
     r"^(?P<concept>.+)-Qwen-Qwen2\.5-(?P<size>0\.5B|1\.5B|3B|7B)-Instruct$",

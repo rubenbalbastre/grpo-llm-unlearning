@@ -90,8 +90,8 @@ python eval/behaviour/download_training_dynamics.py --last-steps 5
 scripts/tables/training-dynamics.sh --last-steps 5
 ```
 
-This writes `training_dynamics.csv` and `training_dynamics_authors.csv` under
-`outputs/tables/`.
+This writes `terminal_training_behaviour.csv` and
+`terminal_training_behaviour_authors.csv` under `outputs/tables/`.
 
 ## Documentation
 

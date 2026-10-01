@@ -87,10 +87,10 @@ The resulting table directory and archive contain:
 ```text
 outputs/tables/rwku.csv
 outputs/tables/rwku_authors.csv
-outputs/tables/behaviour.csv
-outputs/tables/behaviour_authors.csv
-outputs/tables/training_dynamics.csv
-outputs/tables/training_dynamics_authors.csv
+outputs/tables/heldout_behaviour.csv
+outputs/tables/heldout_behaviour_authors.csv
+outputs/tables/terminal_training_behaviour.csv
+outputs/tables/terminal_training_behaviour_authors.csv
 outputs/tables/final-tables.tar.gz
 ```
 
@@ -130,8 +130,8 @@ Per-run judge results are saved incrementally under
 are written to:
 
 ```text
-outputs/tables/training_dynamics.csv
-outputs/tables/training_dynamics_authors.csv
+outputs/tables/terminal_training_behaviour.csv
+outputs/tables/terminal_training_behaviour_authors.csv
 ```
 
 The author table averages generations, prompts, and selected optimizer steps

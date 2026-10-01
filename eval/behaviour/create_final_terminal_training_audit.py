@@ -25,9 +25,11 @@ from eval.behaviour.download_training_dynamics import (  # noqa: E402
 )
 
 
-DEFAULT_OUTPUT_CSV = REPO_ROOT / "outputs" / "tables" / "training_dynamics.csv"
+DEFAULT_OUTPUT_CSV = (
+    REPO_ROOT / "outputs" / "tables" / "terminal_training_behaviour.csv"
+)
 DEFAULT_AUTHOR_CSV = (
-    REPO_ROOT / "outputs" / "tables" / "training_dynamics_authors.csv"
+    REPO_ROOT / "outputs" / "tables" / "terminal_training_behaviour_authors.csv"
 )
 
 

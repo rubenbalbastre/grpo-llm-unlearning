@@ -18,7 +18,7 @@ tar -czf outputs/tables/final-tables.tar.gz \
   -C outputs/tables \
   rwku.csv \
   rwku_authors.csv \
-  behaviour.csv \
-  behaviour_authors.csv \
-  training_dynamics.csv \
-  training_dynamics_authors.csv
+  heldout_behaviour.csv \
+  heldout_behaviour_authors.csv \
+  terminal_training_behaviour.csv \
+  terminal_training_behaviour_authors.csv
