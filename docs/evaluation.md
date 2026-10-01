@@ -7,6 +7,7 @@ The repository has two final-model evaluation paths:
 
 The matrix runner submits both by default. Set `RUN_RWKU_EVAL` or
 `RUN_HOLD_OUT_EVAL` in `scripts/run-target-reward-matrix.py` to disable one.
+Terminal training rollouts are scored separately from W&B after training.
 
 ## RWKU
 
@@ -73,6 +74,29 @@ outputs/<run>/final_model/hold_out_eval/
   summary.csv                # mean of each rubric
 ```
 
+## Terminal Training Behaviour
+
+`eval/behaviour/prepare_training_rollouts.py` filters the configured W&B runs,
+skips runs with fewer than 101 completion tables, downloads only the most recent
+selected tables, and scores unique prompt/completion pairs. Judge defaults come
+from `config/eval_behaviour.yaml`.
+
+Download and score the last five optimizer steps:
+
+```bash
+scripts/run-training-behavior.sh
+```
+
+Reuse existing downloads and score only missing pairs:
+
+```bash
+scripts/run-training-behavior.sh --skip-download
+```
+
+Per-run judge results are saved incrementally under
+`outputs/terminal_training_audit/run_metrics/`. The downloaded tables and run
+inventory are stored in the same directory.
+
 ## Final Tables
 
 After all required evaluations and terminal training rollout scores exist, run:
@@ -81,7 +105,10 @@ After all required evaluations and terminal training rollout scores exist, run:
 scripts/tables/final-table.sh
 ```
 
-The resulting table directory and archive contain:
+`scripts/tables/final-table.sh` runs
+`eval/behaviour/create_final_terminal_training_audit.py` to aggregate those
+cached scores. It does not download rollouts or call the judge. The resulting
+table directory and archive contain:
 
 ```text
 outputs/tables/rwku.csv
@@ -93,53 +120,15 @@ outputs/tables/terminal_training_behaviour_authors.csv
 outputs/tables/final-tables.tar.gz
 ```
 
-The aggregate CSVs report median, Q1, and Q3 grouped by reward function, model
-size, and training initialization, plus the author count. Runs marked with
-`low_reward_stop.json` are excluded.
+The terminal-training author table averages generations, prompts, and optimizer
+steps into one row per author and condition. Aggregate tables report median, Q1,
+and Q3 across author rows, grouped by reward function, model size, and training
+initialization, plus the author count. Runs marked with `low_reward_stop.json`
+are excluded from the final-model tables.
 
-RWKU forget, neighbor, and MIA values are expressed as deltas from the matching
-original-model baseline for each model size and author. SFT warmup rows are also
-matched to those baselines and reported as `r2-warmup`. Utility values remain
-the evaluated model's raw values.
-
-The behavioural table reads existing `summary.csv` files only. It does not
-rescore `metrics.csv` or reconstruct missing summaries.
-
-## Training Dynamics
-
-`eval/behaviour/prepare_training_rollouts.py` filters the configured W&B runs,
-skips runs with fewer than 101 completion tables, downloads only the most recent
-selected tables, and scores unique prompt/completion pairs. Judge defaults come
-from `config/eval_behaviour.yaml`.
-
-Download and score the rollouts:
-
-```bash
-scripts/run-training-behavior.sh
-```
-
-Reuse existing downloads without querying W&B:
-
-```bash
-scripts/run-training-behavior.sh --skip-download
-```
-
-Per-run judge results are saved incrementally under
-`outputs/terminal_training_audit/run_metrics/`.
-
-`scripts/tables/final-table.sh` runs
-`eval/behaviour/create_final_terminal_training_audit.py` to aggregate those
-cached scores. The article tables are written to:
-
-```text
-outputs/tables/terminal_training_behaviour.csv
-outputs/tables/terminal_training_behaviour_authors.csv
-```
-
-The author table averages generations, prompts, and selected optimizer steps
-into one row per author and experimental condition. The aggregate table reports
-median, Q1, and Q3 across those author rows, grouped by reward function, model
-size, and cold/warm training initialization, plus the author count.
+RWKU forget, neighbor, and MIA values are deltas from the matching original
+model baseline. Utility values remain raw. The held-out behaviour table reads
+existing `summary.csv` files and does not rescore `metrics.csv`.
 
 `WANDB_PROJECT` is required for downloading. `OPENAI_API_KEY` is required only
 when uncached prompt/completion pairs must be judged.
