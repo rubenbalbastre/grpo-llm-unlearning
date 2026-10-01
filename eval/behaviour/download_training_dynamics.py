@@ -325,6 +325,8 @@ def main() -> None:
     if not args.project:
         raise ValueError("Set WANDB_PROJECT or pass --project.")
     runs = download_runs(args)
+    if not runs:
+        raise SystemExit("No matching W&B runs found; existing inventory was not changed.")
     write_inventory(runs, args.output_dir, args.last_steps)
     print(f"Wrote {len(runs)} runs to {inventory_path(args.output_dir)}")
 

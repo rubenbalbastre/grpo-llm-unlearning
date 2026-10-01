@@ -282,6 +282,8 @@ def parse_args() -> argparse.Namespace:
 def main() -> None:
     args = parse_args()
     author_rows, unmatched = build_author_rows(args.outputs_root)
+    if not author_rows:
+        raise SystemExit(f"No matched RWKU results found under {args.outputs_root}")
     if unmatched and args.require_complete_baselines:
         examples = "\n".join(f"  {path}" for path in unmatched[:10])
         raise SystemExit(
