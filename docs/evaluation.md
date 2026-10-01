@@ -75,8 +75,7 @@ outputs/<run>/final_model/hold_out_eval/
 
 ## Final Tables
 
-After all required evaluations have produced their summaries and the training
-dynamics tables described below exist, run:
+After all required evaluations and terminal training rollout scores exist, run:
 
 ```bash
 scripts/tables/final-table.sh
@@ -108,26 +107,29 @@ rescore `metrics.csv` or reconstruct missing summaries.
 
 ## Training Dynamics
 
-`eval/behaviour/download_training_dynamics.py` filters the configured W&B runs,
-skips runs with fewer than 101 completion tables, and downloads only the most
-recent selected tables. `eval/behaviour/create_final_terminal_training_audit.py`
-then scores those cached completions and creates the article tables.
+`eval/behaviour/prepare_training_rollouts.py` filters the configured W&B runs,
+skips runs with fewer than 101 completion tables, downloads only the most recent
+selected tables, and scores unique prompt/completion pairs. Judge defaults come
+from `config/eval_behaviour.yaml`.
 
-Download data and inspect the inventory first:
+Download and score the rollouts:
 
 ```bash
-python eval/behaviour/download_training_dynamics.py --last-steps 5
+scripts/run-training-behavior.sh
 ```
 
-Then reuse those downloads for scoring and aggregation:
+Reuse existing downloads without querying W&B:
 
 ```bash
-scripts/tables/training-dynamics.sh --last-steps 5
+scripts/run-training-behavior.sh --skip-download
 ```
 
 Per-run judge results are saved incrementally under
-`outputs/terminal_training_audit/run_metrics/`. The article tables
-are written to:
+`outputs/terminal_training_audit/run_metrics/`.
+
+`scripts/tables/final-table.sh` runs
+`eval/behaviour/create_final_terminal_training_audit.py` to aggregate those
+cached scores. The article tables are written to:
 
 ```text
 outputs/tables/terminal_training_behaviour.csv

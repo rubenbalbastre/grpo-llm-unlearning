@@ -83,15 +83,16 @@ scripts/tables/final-table.sh
 This writes author-level and aggregate RWKU and behavioural CSV files under
 `outputs/tables/`, then packages them as `final-tables.tar.gz`.
 
-Create the training-dynamics tables from cached W&B downloads and rubric scores:
+Download and score the terminal training rollouts:
 
 ```bash
-python eval/behaviour/download_training_dynamics.py --last-steps 5
-scripts/tables/training-dynamics.sh --last-steps 5
+scripts/run-training-behavior.sh
 ```
 
-This writes `terminal_training_behaviour.csv` and
-`terminal_training_behaviour_authors.csv` under `outputs/tables/`.
+Use `--skip-download` to reuse the existing W&B downloads. Running
+`scripts/tables/final-table.sh` then aggregates the scored rollouts into
+`terminal_training_behaviour.csv` and `terminal_training_behaviour_authors.csv`
+under `outputs/tables/`.
 
 ## Documentation
 

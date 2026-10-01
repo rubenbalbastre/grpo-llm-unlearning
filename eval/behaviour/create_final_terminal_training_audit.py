@@ -5,23 +5,18 @@ import sys
 from pathlib import Path
 
 import pandas as pd
-from dotenv import load_dotenv
 
 
 REPO_ROOT = Path(__file__).resolve().parents[2]
 sys.path.insert(0, str(REPO_ROOT))
 
-from eval.behaviour.analysis_utils import (  # noqa: E402
-    add_llm_judge_metrics,
-    llm_judge_metrics,
-)
-from eval.behaviour.download_training_dynamics import (  # noqa: E402
+from eval.behaviour.analysis_utils import llm_judge_metrics  # noqa: E402
+from eval.behaviour.prepare_training_rollouts import (  # noqa: E402
     DEFAULT_OUTPUT_DIR,
     DownloadedRun,
-    load_last_steps,
+    load_scored_run,
     normalize_training_variant,
     read_inventory,
-    run_score_path,
 )
 
 
@@ -37,82 +32,13 @@ def training_initialization(variant: str) -> str:
     return {"original": "cold", "r2-warmed": "warm"}.get(variant, variant)
 
 
-def add_rubrics(frame: pd.DataFrame, args: argparse.Namespace) -> pd.DataFrame:
-    scored = []
-    for concept, concept_frame in frame.groupby("forget_concept", sort=False):
-        scored.append(
-            add_llm_judge_metrics(
-                concept_frame,
-                concept=concept,
-                judge_model=args.judge_model,
-                judge_reasoning_effort=args.judge_reasoning_effort,
-                max_concurrent_requests=args.judge_concurrency,
-            )
-        )
-    return pd.concat(scored, ignore_index=True)
-
-
-def score_run(run: DownloadedRun, args: argparse.Namespace) -> pd.DataFrame:
-    selected = load_last_steps(run, args.last_steps)
-    unique_pairs = selected.drop_duplicates(["prompt", "completion"]).copy()
-    path = run_score_path(args.output_dir, run)
-
-    if path.exists() and not args.overwrite_run_metrics:
-        cache = pd.read_csv(path)
-        print(f"Reusing {path}", flush=True)
-    else:
-        cache = pd.DataFrame(columns=["prompt", "completion", *llm_judge_metrics])
-
-    for metric in llm_judge_metrics:
-        if metric not in cache:
-            cache[metric] = pd.NA
-    lookup = cache[["prompt", "completion", *llm_judge_metrics]].drop_duplicates(
-        ["prompt", "completion"], keep="last"
+def load_scored_runs(
+    runs: list[DownloadedRun], output_dir: Path, last_steps: int
+) -> pd.DataFrame:
+    return pd.concat(
+        [load_scored_run(run, output_dir, last_steps) for run in runs],
+        ignore_index=True,
     )
-    scored_pairs = unique_pairs.merge(lookup, on=["prompt", "completion"], how="left")
-    missing = scored_pairs[llm_judge_metrics].isna().any(axis=1)
-
-    if missing.any():
-        if args.reaverage_cached_only and not args.overwrite_run_metrics:
-            print(
-                f"Skipping {path}: missing rubric scores for {missing.sum()} pair(s).",
-                flush=True,
-            )
-            return pd.DataFrame()
-
-        missing_pairs = scored_pairs.loc[missing, unique_pairs.columns]
-        print(
-            f"Scoring {len(missing_pairs)} missing prompt+completion pair(s) "
-            f"from {run.run_name}.",
-            flush=True,
-        )
-        cache = pd.concat([cache, add_rubrics(missing_pairs, args)], ignore_index=True)
-        cache = cache.drop_duplicates(["prompt", "completion"], keep="last")
-        path.parent.mkdir(parents=True, exist_ok=True)
-        cache.to_csv(path, index=False)
-
-    lookup = cache[["prompt", "completion", *llm_judge_metrics]].drop_duplicates(
-        ["prompt", "completion"], keep="last"
-    )
-    expanded = selected.merge(lookup, on=["prompt", "completion"], how="left")
-    print(
-        f"Expanded {len(lookup)} cached pair(s) to {len(expanded)} selected row(s).",
-        flush=True,
-    )
-    return expanded
-
-
-def score_runs(runs: list[DownloadedRun], args: argparse.Namespace) -> pd.DataFrame:
-    frames = []
-    for run in runs:
-        if args.reaverage_cached_only and not run_score_path(args.output_dir, run).exists():
-            continue
-        frame = score_run(run, args)
-        if not frame.empty:
-            frames.append(frame)
-    if not frames:
-        raise ValueError("No scored completion rows found.")
-    return pd.concat(frames, ignore_index=True)
 
 
 def mean_table(
@@ -198,28 +124,18 @@ def aggregate_authors(authors: pd.DataFrame) -> pd.DataFrame:
 
 def parse_args() -> argparse.Namespace:
     parser = argparse.ArgumentParser(
-        description="Score downloaded training completions and create article tables."
+        description="Aggregate scored terminal training rollouts into article tables."
     )
-    parser.add_argument("--last-steps", type=int, default=10)
+    parser.add_argument("--last-steps", type=int, default=5)
     parser.add_argument("--max-tables-per-run", type=int, default=10)
     parser.add_argument("--min-available-tables", type=int, default=101)
     parser.add_argument("--output-dir", type=Path, default=DEFAULT_OUTPUT_DIR)
     parser.add_argument("--output-csv", type=Path, default=DEFAULT_OUTPUT_CSV)
     parser.add_argument("--author-output-csv", type=Path, default=DEFAULT_AUTHOR_CSV)
-    parser.add_argument("--judge-model", default="gpt-5.6-luna")
-    parser.add_argument("--judge-reasoning-effort", default="low")
-    parser.add_argument("--judge-concurrency", type=int, default=16)
-    parser.add_argument("--overwrite-run-metrics", action="store_true")
-    parser.add_argument(
-        "--reaverage-cached-only",
-        action="store_true",
-        help="Skip runs whose cached rubric scores are missing selected pairs.",
-    )
     return parser.parse_args()
 
 
 def main() -> None:
-    load_dotenv(REPO_ROOT / ".env")
     args = parse_args()
     runs = read_inventory(
         args.output_dir,
@@ -227,7 +143,9 @@ def main() -> None:
         args.min_available_tables,
     )
     print(f"Using {len(runs)} downloaded W&B run(s).", flush=True)
-    authors, grouped = build_tables(score_runs(runs, args))
+    authors, grouped = build_tables(
+        load_scored_runs(runs, args.output_dir, args.last_steps)
+    )
 
     args.author_output_csv.parent.mkdir(parents=True, exist_ok=True)
     args.output_csv.parent.mkdir(parents=True, exist_ok=True)

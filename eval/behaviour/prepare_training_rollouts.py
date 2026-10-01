@@ -5,15 +5,26 @@ import json
 import os
 import re
 import shutil
+import sys
 from dataclasses import dataclass
 from pathlib import Path
 
 import pandas as pd
 from dotenv import load_dotenv
+from omegaconf import OmegaConf
 
 
 REPO_ROOT = Path(__file__).resolve().parents[2]
+sys.path.insert(0, str(REPO_ROOT))
+
+from eval.behaviour.analysis_utils import (  # noqa: E402
+    add_llm_judge_metrics,
+    llm_judge_metrics,
+)
+
+
 DEFAULT_OUTPUT_DIR = REPO_ROOT / "outputs" / "terminal_training_audit"
+JUDGE_CONFIG = REPO_ROOT / "config" / "eval_behaviour.yaml"
 DEFAULT_NOTES = "lluis-vives-runs-1-1M"
 RUN_NAME_PATTERN = re.compile(r"(?:^|-)original(?:-|$)|(?:^|-)r\d+-warmed(?:-|$)")
 AUTHORS = {
@@ -162,6 +173,77 @@ def run_score_path(output_dir: Path, run: DownloadedRun) -> Path:
     return output_dir / "run_metrics" / f"{safe_name(run.run_name)}-{run.run_id}.csv"
 
 
+def cached_scores(run: DownloadedRun, output_dir: Path) -> pd.DataFrame:
+    path = run_score_path(output_dir, run)
+    if not path.exists():
+        return pd.DataFrame(columns=["prompt", "completion", *llm_judge_metrics])
+
+    scores = pd.read_csv(path)
+    scores[["prompt", "completion"]] = scores[["prompt", "completion"]].fillna("")
+    for metric in llm_judge_metrics:
+        if metric not in scores:
+            scores[metric] = pd.NA
+    return scores[["prompt", "completion", *llm_judge_metrics]].drop_duplicates(
+        ["prompt", "completion"], keep="last"
+    )
+
+
+def score_run(run: DownloadedRun, args: argparse.Namespace) -> None:
+    selected = load_last_steps(run, args.last_steps)
+    unique_pairs = selected.drop_duplicates(["prompt", "completion"]).copy()
+    path = run_score_path(args.output_dir, run)
+    scores = (
+        pd.DataFrame(columns=["prompt", "completion", *llm_judge_metrics])
+        if args.overwrite_run_metrics
+        else cached_scores(run, args.output_dir)
+    )
+    merged = unique_pairs.merge(scores, on=["prompt", "completion"], how="left")
+    missing = merged[llm_judge_metrics].isna().any(axis=1)
+
+    if not missing.any():
+        print(f"Reusing {path}", flush=True)
+        return
+
+    missing_pairs = merged.loc[missing, unique_pairs.columns]
+    print(
+        f"Scoring {len(missing_pairs)} prompt+completion pair(s) from {run.run_name}.",
+        flush=True,
+    )
+    scored = []
+    for concept, frame in missing_pairs.groupby("forget_concept", sort=False):
+        scored.append(
+            add_llm_judge_metrics(
+                frame,
+                concept=concept,
+                judge_model=args.judge_model,
+                judge_reasoning_effort=args.judge_reasoning_effort,
+                max_concurrent_requests=args.judge_concurrency,
+            )
+        )
+    scores = pd.concat([scores, *scored], ignore_index=True).drop_duplicates(
+        ["prompt", "completion"], keep="last"
+    )
+    path.parent.mkdir(parents=True, exist_ok=True)
+    scores.to_csv(path, index=False)
+
+
+def load_scored_run(
+    run: DownloadedRun,
+    output_dir: Path,
+    last_steps: int,
+) -> pd.DataFrame:
+    selected = load_last_steps(run, last_steps)
+    scores = cached_scores(run, output_dir)
+    expanded = selected.merge(scores, on=["prompt", "completion"], how="left")
+    missing = expanded[llm_judge_metrics].isna().any(axis=1)
+    if missing.any():
+        raise ValueError(
+            f"{run_score_path(output_dir, run)} is missing scores for "
+            f"{missing.sum()} selected row(s). Run scripts/run-training-behavior.sh first."
+        )
+    return expanded
+
+
 def delete_local_run(output_dir: Path, run_name: str, run_id: str) -> None:
     run_dir = output_dir / "wandb-downloads" / f"{safe_name(run_name)}-{run_id}"
     score_path = output_dir / "run_metrics" / f"{safe_name(run_name)}-{run_id}.csv"
@@ -279,7 +361,9 @@ def read_inventory(
 ) -> list[DownloadedRun]:
     path = inventory_path(output_dir)
     if not path.exists():
-        raise FileNotFoundError(f"Missing {path}. Run download_training_dynamics.py first.")
+        raise FileNotFoundError(
+            f"Missing {path}. Run scripts/run-training-behavior.sh first."
+        )
 
     runs = []
     for row in pd.read_csv(path).fillna("").to_dict(orient="records"):
@@ -309,26 +393,47 @@ def read_inventory(
 
 
 def parse_args() -> argparse.Namespace:
-    parser = argparse.ArgumentParser(description="Download training completion tables from W&B.")
+    judge = OmegaConf.load(JUDGE_CONFIG)
+    parser = argparse.ArgumentParser(
+        description="Download and score terminal training rollouts."
+    )
     parser.add_argument("--project", default=os.environ.get("WANDB_PROJECT"))
     parser.add_argument("--notes", default=DEFAULT_NOTES)
-    parser.add_argument("--last-steps", type=int, default=10)
+    parser.add_argument("--last-steps", type=int, default=5)
     parser.add_argument("--max-tables-per-run", type=int, default=10)
     parser.add_argument("--min-available-tables", type=int, default=101)
     parser.add_argument("--output-dir", type=Path, default=DEFAULT_OUTPUT_DIR)
+    parser.add_argument("--skip-download", action="store_true")
+    parser.add_argument("--judge-model", default=str(judge.judge_model))
+    parser.add_argument(
+        "--judge-reasoning-effort", default=str(judge.judge_reasoning_effort)
+    )
+    parser.add_argument("--judge-concurrency", type=int, default=int(judge.judge_concurrency))
+    parser.add_argument("--overwrite-run-metrics", action="store_true")
     return parser.parse_args()
 
 
 def main() -> None:
     load_dotenv(REPO_ROOT / ".env")
     args = parse_args()
-    if not args.project:
-        raise ValueError("Set WANDB_PROJECT or pass --project.")
-    runs = download_runs(args)
-    if not runs:
-        raise SystemExit("No matching W&B runs found; existing inventory was not changed.")
-    write_inventory(runs, args.output_dir, args.last_steps)
-    print(f"Wrote {len(runs)} runs to {inventory_path(args.output_dir)}")
+    if args.skip_download:
+        runs = read_inventory(
+            args.output_dir,
+            args.max_tables_per_run,
+            args.min_available_tables,
+        )
+    else:
+        if not args.project:
+            raise ValueError("Set WANDB_PROJECT or pass --project.")
+        runs = download_runs(args)
+        if not runs:
+            raise SystemExit("No matching W&B runs found; existing inventory was not changed.")
+        write_inventory(runs, args.output_dir, args.last_steps)
+        print(f"Wrote {len(runs)} runs to {inventory_path(args.output_dir)}")
+
+    for run in runs:
+        score_run(run, args)
+    print(f"Prepared rubric scores for {len(runs)} run(s).")
 
 
 if __name__ == "__main__":

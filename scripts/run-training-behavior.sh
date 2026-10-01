@@ -7,4 +7,4 @@ source "$ENV_DIR/anaconda3_bis/etc/profile.d/conda.sh"
 conda activate py312_cu118_bis
 
 cd "${REPO_DIR}"
-python3 eval/behaviour/create_final_terminal_training_audit.py "$@"
+python3 eval/behaviour/prepare_training_rollouts.py "$@"

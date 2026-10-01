@@ -13,6 +13,7 @@ python3 eval/rwku/create_final_table.py \
   --author-output-csv outputs/tables/rwku_authors.csv
 
 python3 eval/behaviour/create_final_heldout_audit.py
+python3 eval/behaviour/create_final_terminal_training_audit.py
 
 tar -czf outputs/tables/final-tables.tar.gz \
   -C outputs/tables \
