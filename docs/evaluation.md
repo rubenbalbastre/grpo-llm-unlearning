@@ -75,19 +75,22 @@ outputs/<run>/final_model/hold_out_eval/
 
 ## Final Tables
 
-After all required evaluations have produced their summaries, run:
+After all required evaluations have produced their summaries and the training
+dynamics tables described below exist, run:
 
 ```bash
 scripts/tables/final-table.sh
 ```
 
-This creates:
+The resulting table directory and archive contain:
 
 ```text
 outputs/tables/rwku.csv
 outputs/tables/rwku_authors.csv
 outputs/tables/behaviour.csv
 outputs/tables/behaviour_authors.csv
+outputs/tables/training_dynamics.csv
+outputs/tables/training_dynamics_authors.csv
 outputs/tables/final-tables.tar.gz
 ```
 
@@ -105,32 +108,36 @@ rescore `metrics.csv` or reconstruct missing summaries.
 
 ## Training Dynamics
 
-`eval/behaviour/analyze-training-dynamics.py` evaluates completions logged in
-W&B during GRPO training. It filters the configured author set and qualifying
-training runs, skips runs with fewer than 101 completion tables, and downloads
-only the most recent selected tables.
+`eval/behaviour/download_training_dynamics.py` filters the configured W&B runs,
+skips runs with fewer than 101 completion tables, and downloads only the most
+recent selected tables. `eval/behaviour/create_final_terminal_training_audit.py`
+then scores those cached completions and creates the article tables.
 
 Download data and inspect the inventory first:
 
 ```bash
-python eval/behaviour/analyze-training-dynamics.py \
-  --download-only \
-  --last-steps 5
+python eval/behaviour/download_training_dynamics.py --last-steps 5
 ```
 
 Then reuse those downloads for scoring and aggregation:
 
 ```bash
-python eval/behaviour/analyze-training-dynamics.py \
-  --skip-download \
-  --last-steps 5
+scripts/tables/training-dynamics.sh --last-steps 5
 ```
 
 Per-run judge results are saved incrementally under
-`outputs/training_dynamics_hold_out_rubrics/run_metrics/`. Final outputs include
-prompt, run, author, and experiment-group summaries. `summary_median_iqr.csv`
-contains median, Q1, and Q3 grouped by model size, reward type, and training
-variant.
+`outputs/terminal_training_audit/run_metrics/`. The article tables
+are written to:
+
+```text
+outputs/tables/training_dynamics.csv
+outputs/tables/training_dynamics_authors.csv
+```
+
+The author table averages generations, prompts, and selected optimizer steps
+into one row per author and experimental condition. The aggregate table reports
+median, Q1, and Q3 across those author rows, grouped by reward function, model
+size, and cold/warm training initialization, plus the author count.
 
 `WANDB_PROJECT` is required for downloading. `OPENAI_API_KEY` is required only
 when uncached prompt/completion pairs must be judged.

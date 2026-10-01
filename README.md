@@ -83,6 +83,16 @@ scripts/tables/final-table.sh
 This writes author-level and aggregate RWKU and behavioural CSV files under
 `outputs/tables/`, then packages them as `final-tables.tar.gz`.
 
+Create the training-dynamics tables from cached W&B downloads and rubric scores:
+
+```bash
+python eval/behaviour/download_training_dynamics.py --last-steps 5
+scripts/tables/training-dynamics.sh --last-steps 5
+```
+
+This writes `training_dynamics.csv` and `training_dynamics_authors.csv` under
+`outputs/tables/`.
+
 ## Documentation
 
 - [Data](docs/data.md): split generation, local layout, and Hugging Face transfer
