@@ -85,6 +85,29 @@ python scripts/dataset/download-data-from-hf.py username/repository data
 
 Both transfer scripts load `.env` and require `HF_TOKEN`.
 
+### Terminal Training Audit
+
+After `scripts/run-training-behavior.sh` has downloaded and scored the terminal
+training rollouts, create and upload the completion-level audit dataset with:
+
+```bash
+python scripts/dataset/upload-terminal-training-audit-to-hf.py
+```
+
+The default public repository is `terminal-training-behaviour-audit` under the
+authenticated account. Override the input directory or repository ID with:
+
+```bash
+python scripts/dataset/upload-terminal-training-audit-to-hf.py \
+  outputs/terminal_training_audit username/repository
+```
+
+The upload contains `terminal_training_audit.parquet` and a generated
+`README.md` dataset card. Each row represents one logged completion from the
+last five optimizer steps and includes run metadata and all six behavioural
+rubrics. All evaluated models are Qwen2.5-Instruct variants; only `model_size`
+is stored per row.
+
 ## Licenses
 
 Repository code and documentation are Apache-2.0 licensed. The exported dataset
