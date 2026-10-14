@@ -52,11 +52,6 @@ def slug(value: str, separator: str = "-") -> str:
     return re.sub(r"[^a-z0-9]+", separator, value.lower()).strip(separator)
 
 
-def reasoning_effort() -> str:
-    config = OmegaConf.load(REPO_ROOT / "config/train.yaml")
-    return str(config.reward.functions["llm-judge"].reasoning_effort)
-
-
 def submit(
     script: str,
     *args: str,
@@ -100,8 +95,10 @@ def require_datasets() -> None:
         raise SystemExit("Missing generated datasets:\n" + "\n".join(missing))
 
 
-def submit_sft(model: str, target: str, previous_job: str | None) -> TrainingRun:
-    run_name = f"r2warmup_{slug(model, '_')}_{slug(target, '_')}"
+def submit_sft(
+    model: str, target: str, previous_job: str | None, seed: int
+) -> TrainingRun:
+    run_name = f"r2warmup_{slug(model, '_')}_{slug(target, '_')}_seed_{seed}"
     checkpoint_root = OUTPUT_ROOT / run_name
     final_model = checkpoint_root / "final_model"
     run = TrainingRun(run_name, checkpoint_root, str(final_model))
@@ -136,12 +133,14 @@ def submit_grpo(
     model_label: str,
     target: str,
     reward: str,
+    seed: int,
     dependencies: tuple[str | None, ...],
     r2_reasoning_effort: str,
 ) -> TrainingRun:
     run_name = f"unlearning-{slug(variant)}-{slug(model_label)}-{slug(target)}-{reward}"
     if reward == "r2":
         run_name += f"-reasoning-{slug(r2_reasoning_effort)}"
+    run_name += f"-seed-{seed}"
     checkpoint_root = OUTPUT_ROOT / run_name
     final_model = checkpoint_root / "final_model"
     run = TrainingRun(run_name, checkpoint_root, str(final_model))
@@ -289,7 +288,9 @@ def submit_evaluations(run: TrainingRun, target: str) -> None:
 def main() -> None:
     os.chdir(REPO_ROOT)
     require_datasets()
-    r2_effort = reasoning_effort()
+    config = OmegaConf.load(REPO_ROOT / "config/train.yaml")
+    seed = int(config.experiment.seed)
+    r2_effort = str(config.reward.functions["llm-judge"].reasoning_effort)
     previous_sft_job: str | None = None
     previous_r2_job: str | None = None
 
@@ -307,7 +308,7 @@ def main() -> None:
             )
             submit_holdout(target=target, model_path=original_model)
 
-            sft_run = submit_sft(original_model, target, previous_sft_job)
+            sft_run = submit_sft(original_model, target, previous_sft_job, seed)
             if sft_run.job_id:
                 previous_sft_job = sft_run.job_id
             submit_evaluations(sft_run, target)
@@ -322,6 +323,7 @@ def main() -> None:
                     model_label=original_model,
                     target=target,
                     reward=reward,
+                    seed=seed,
                     dependencies=original_dependencies,
                     r2_reasoning_effort=r2_effort,
                 )
@@ -340,6 +342,7 @@ def main() -> None:
                     model_label=original_model,
                     target=target,
                     reward=reward,
+                    seed=seed,
                     dependencies=warmed_dependencies,
                     r2_reasoning_effort=r2_effort,
                 )
