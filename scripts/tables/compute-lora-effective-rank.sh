@@ -14,4 +14,4 @@ source "$ENV_DIR/anaconda3_bis/etc/profile.d/conda.sh"
 conda activate py312_cu118_bis
 
 cd "$REPO_DIR"
-python3 scripts/tables/compute-lora-effective-rank.py "$@"
+python3 scripts/tables/compute-lora-effective-rank.py "$@" "--n 0"

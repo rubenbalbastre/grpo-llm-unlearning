@@ -134,7 +134,7 @@ def parse_args() -> argparse.Namespace:
         "--n",
         type=int,
         default=10,
-        help="Maximum number of learning runs to analyze (default: 10)",
+        help="Maximum number of learning runs to analyze; 0 means all (default: 10)",
     )
     parser.add_argument(
         "--module-output",
@@ -165,7 +165,8 @@ def main() -> None:
         f"Skipping {len(no_learning_paths)} run(s) marked with "
         f"{NO_LEARNING_MARKER}"
     )
-    adapter_paths = adapter_paths[: args.n]
+    if args.n > 0:
+        adapter_paths = adapter_paths[: args.n]
     rows = []
     module_rows = []
     for path in tqdm(adapter_paths, desc="LoRA adapters", unit="run"):
