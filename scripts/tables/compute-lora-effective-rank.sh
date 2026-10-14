@@ -6,7 +6,7 @@
 set -euo pipefail
 
 ENV_DIR="${ENV_DIR:-/storage/scratch/lv13/lv13594/}"
-REPO_DIR="${REPO_DIR:-$(cd "$(dirname "${BASH_SOURCE[0]}")/../.." && pwd)}"
+REPO_DIR="${REPO_DIR:-/storage/scratch/lv13/lv13594/fresh-repo/grpo-llm-unlearning}"
 
 echo "${REPO_DIR}"
 
