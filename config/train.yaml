@@ -2,7 +2,7 @@ experiment:
   seed: 42
   forget_concept: Serena Williams
   push_to_hub: false
-  notes: seed-42
+  notes: seed-${experiment.seed}
 
 paths:
   storage_root: .
