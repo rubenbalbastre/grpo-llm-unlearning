@@ -3,6 +3,8 @@
 #SBATCH --output=logs/lora-effective-rank-%j.log
 #SBATCH --time=01:00:00
 #SBATCH --mem=16G
+#SBATCH --partition=hopper
+#SBATCH --qos=hopper
 set -euo pipefail
 
 ENV_DIR="${ENV_DIR:-/storage/scratch/lv13/lv13594/}"
