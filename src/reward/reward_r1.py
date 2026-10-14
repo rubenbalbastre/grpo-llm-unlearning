@@ -14,9 +14,12 @@ def build_reward_funcs(reward_config: Any, forget_concept: str) -> list[Callable
         forget_concept=forget_concept,
     )
 
-    functions_config.refusal_reward_classifier.mode = 'reward_non_refusal'
+    refusal_classifier_config = dict(
+        functions_config.get("refusal_reward_classifier", {})
+    )
+    refusal_classifier_config["mode"] = "reward_non_refusal"
     avoid_refusal_reward = build_refusal_reward_classifier(
-        functions_config.get("refusal_reward_classifier", {}),
+        refusal_classifier_config,
     )
 
     def reward_r1(prompts, completions, **kwargs) -> list[float]:
