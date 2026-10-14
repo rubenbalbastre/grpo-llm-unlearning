@@ -116,6 +116,7 @@ def submit_sft(
         "run-sft.sh",
         f"wandb.run_name={run_name}",
         f"model.name={model}",
+        f"experiment.seed={seed}",
         f"experiment.forget_concept={target}",
         f"paths.storage_root={STORAGE_ROOT}",
         "training.sft.objective=broad",
@@ -159,6 +160,7 @@ def submit_grpo(
     run.job_id = submit(
         "run-grpo.sh",
         f"model.name={base_model}",
+        f"experiment.seed={seed}",
         f"experiment.forget_concept={target}",
         f"paths.storage_root={STORAGE_ROOT}",
         f"reward.type={reward}",
