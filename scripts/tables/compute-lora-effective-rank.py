@@ -133,7 +133,7 @@ def parse_args() -> argparse.Namespace:
     parser.add_argument(
         "--n",
         type=int,
-        default=10,
+        default=0,
         help="Maximum number of learning runs to analyze; 0 means all (default: 10)",
     )
     parser.add_argument(
