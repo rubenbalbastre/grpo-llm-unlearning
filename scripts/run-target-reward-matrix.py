@@ -37,6 +37,7 @@ TARGETS = [
 REWARDS = ["r0", "r1", "r2", "r4"]
 RUN_RWKU_EVAL = False
 RUN_HOLD_OUT_EVAL = False
+RUN_ONLY_COLD = True
 
 
 @dataclass
@@ -308,10 +309,12 @@ def main() -> None:
             )
             submit_holdout(target=target, model_path=original_model)
 
-            sft_run = submit_sft(original_model, target, previous_sft_job, seed)
-            if sft_run.job_id:
-                previous_sft_job = sft_run.job_id
-            submit_evaluations(sft_run, target)
+            sft_run = None
+            if not RUN_ONLY_COLD:
+                sft_run = submit_sft(original_model, target, previous_sft_job, seed)
+                if sft_run.job_id:
+                    previous_sft_job = sft_run.job_id
+                submit_evaluations(sft_run, target)
 
             for reward in REWARDS:
                 original_dependencies = (
@@ -331,6 +334,9 @@ def main() -> None:
                     previous_r2_job = original_run.job_id
                 submit_evaluations(original_run, target)
 
+                if RUN_ONLY_COLD:
+                    continue
+                assert sft_run is not None
                 if sft_run.blocked:
                     continue
                 warmed_dependencies = (sft_run.job_id,)
