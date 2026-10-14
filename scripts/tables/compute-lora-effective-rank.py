@@ -22,6 +22,11 @@ MODULE_RE = re.compile(
 )
 MODEL_SIZES = {"0-5b": "0.5B", "1-5b": "1.5B", "3b": "3B", "7b": "7B"}
 ENERGY_THRESHOLD = 0.95
+NO_LEARNING_MARKER = "low_reward_stop.json"
+
+
+def did_not_learn(adapter_path: Path) -> bool:
+    return (adapter_path.parents[1] / NO_LEARNING_MARKER).is_file()
 
 
 def effective_rank_95(a: torch.Tensor, b: torch.Tensor) -> int:
@@ -72,7 +77,7 @@ def run_rows(
 ) -> tuple[dict[str, object], list[dict[str, object]]] | None:
     run_dir = adapter_path.parents[1]
     match = RUN_RE.fullmatch(run_dir.name)
-    if match is None or (run_dir / "low_reward_stop.json").is_file():
+    if match is None or did_not_learn(adapter_path):
         return None
 
     metadata = {
@@ -147,6 +152,12 @@ def main() -> None:
     args = parse_args()
     adapter_paths = sorted(
         args.outputs_root.glob("unlearning-*/final_model/adapter_model.safetensors")
+    )
+    no_learning_paths = [path for path in adapter_paths if did_not_learn(path)]
+    adapter_paths = [path for path in adapter_paths if not did_not_learn(path)]
+    print(
+        f"Skipping {len(no_learning_paths)} run(s) marked with "
+        f"{NO_LEARNING_MARKER}"
     )
     rows = []
     module_rows = []
