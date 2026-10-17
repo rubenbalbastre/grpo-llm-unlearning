@@ -34,10 +34,10 @@ TARGETS = [
     "Karl Marx",
     "Confucius",
 ]
-REWARDS = ["r0", "r1",  "r4", "r2"] # ,
+REWARDS = ["r0", "r1",  "r4",] # ,
 RUN_RWKU_EVAL = False
 RUN_HOLD_OUT_EVAL = False
-RUN_ONLY_COLD = True
+RUN_ONLY_COLD = False
 
 
 @dataclass
