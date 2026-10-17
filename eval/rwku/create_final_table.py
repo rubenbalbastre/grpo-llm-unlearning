@@ -19,12 +19,14 @@ DEFAULT_AUTHOR_CSV = DEFAULT_TABLES_ROOT / "rwku_authors.csv"
 TRAINED_RUN_RE = re.compile(
     r"^unlearning-(?P<variant>original|r2-warmed)-qwen-qwen2-5-"
     r"(?P<size>0-5b|1-5b|3b|7b)-instruct-(?P<author>.+)-"
-    r"(?P<reward_type>r\d+)(?:-reasoning-[a-z0-9-]+)?$",
+    r"(?P<reward_type>r\d+)(?:-reasoning-[a-z0-9-]+?)?"
+    r"(?:-seed-(?P<seed>\d+))?$",
     re.IGNORECASE,
 )
 WARMUP_RUN_RE = re.compile(
     r"^r2warmup_qwen_qwen2_5_"
-    r"(?P<size>0_5b|1_5b|3b|7b)_instruct_(?P<author>.+)$",
+    r"(?P<size>0_5b|1_5b|3b|7b)_instruct_(?P<author>.+?)"
+    r"(?:_seed_(?P<seed>\d+))?$",
     re.IGNORECASE,
 )
 BASELINE_RUN_RE = re.compile(
@@ -82,6 +84,7 @@ AUTHOR_COLUMNS = [
     "reward_function",
     "training_initialization",
     "run_name",
+    "experiment_seed",
     "baseline_run_name",
     *[f"{metric}_delta" for metric in SPLIT_AGGREGATES],
     *[f"{metric}_delta" for metric in DELTA_METRICS],
@@ -168,11 +171,13 @@ def build_author_rows(
             training_initialization = (
                 "cold" if match.group("variant").lower() == "original" else "warm"
             )
+            experiment_seed = match.group("seed") or ""
         elif warmup_match:
             size = SIZE_NAMES[warmup_match.group("size").lower()]
             author = warmup_match.group("author")
             reward_function = "r2-warmup"
             training_initialization = "warm"
+            experiment_seed = warmup_match.group("seed") or ""
         else:
             continue
 
@@ -190,6 +195,7 @@ def build_author_rows(
             "reward_function": reward_function,
             "training_initialization": training_initialization,
             "run_name": run_name,
+            "experiment_seed": experiment_seed,
             "baseline_run_name": baseline_name,
         }
         for metric in DELTA_METRICS:

@@ -30,10 +30,11 @@ MODEL_SIZES = {
 UNLEARNING_RUN_RE = re.compile(
     r"^unlearning-(?P<variant>original|r2-warmed)-qwen-qwen2-5-"
     r"(?P<size>0-5b|1-5b|3b|7b)-instruct-.+-(?P<reward>r\d+)"
-    r"(?:-reasoning-[a-z0-9-]+)?$"
+    r"(?:-reasoning-[a-z0-9-]+?)?(?:-seed-(?P<seed>\d+))?$"
 )
 WARMUP_RUN_RE = re.compile(
-    r"^r2warmup_qwen_qwen2_5_(?P<size>0_5b|1_5b|3b|7b)_instruct_.+$"
+    r"^r2warmup_qwen_qwen2_5_(?P<size>0_5b|1_5b|3b|7b)_instruct_.+?"
+    r"(?:_seed_(?P<seed>\d+))?$"
 )
 BASELINE_RUN_RE = re.compile(
     r"^holdout-baseline-qwen-qwen2-5-(?P<size>0-5b|1-5b|3b|7b)-instruct-.+$"
@@ -56,6 +57,7 @@ OUTPUT_COLUMNS = [
     "reward_function",
     "target",
     "training_variant",
+    "experiment_seed",
 ]
 
 
@@ -66,6 +68,7 @@ def run_metadata(run_name: str) -> dict[str, str]:
             "model_size": MODEL_SIZES[match.group("size")],
             "reward_function": match.group("reward"),
             "training_variant": match.group("variant"),
+            "experiment_seed": match.group("seed") or "",
         }
 
     match = WARMUP_RUN_RE.fullmatch(run_name)
@@ -74,6 +77,7 @@ def run_metadata(run_name: str) -> dict[str, str]:
             "model_size": MODEL_SIZES[match.group("size")],
             "reward_function": "r2-warmup",
             "training_variant": "r2-warmup",
+            "experiment_seed": match.group("seed") or "",
         }
 
     match = BASELINE_RUN_RE.fullmatch(run_name)
@@ -82,6 +86,7 @@ def run_metadata(run_name: str) -> dict[str, str]:
             "model_size": MODEL_SIZES[match.group("size")],
             "reward_function": "baseline",
             "training_variant": "baseline",
+            "experiment_seed": "",
         }
 
     raise ValueError(f"Cannot infer metadata from run name: {run_name}")
@@ -111,6 +116,7 @@ def load_dataset_frame(outputs_dir: Path) -> pd.DataFrame:
         frame["reward_function"] = metadata["reward_function"]
         frame["target"] = frame["subject"]
         frame["training_variant"] = metadata["training_variant"]
+        frame["experiment_seed"] = metadata["experiment_seed"]
         frames.append(frame[OUTPUT_COLUMNS])
 
     dataset_frame = pd.concat(frames, ignore_index=True)

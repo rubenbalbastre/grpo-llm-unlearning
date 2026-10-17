@@ -1,8 +1,8 @@
 experiment:
-  seed: 1234
+  seed: 42
   forget_concept: Serena Williams
   push_to_hub: false
-  notes: lluis-vives-runs-1-1M
+  notes: seed-${experiment.seed}
 
 paths:
   storage_root: .

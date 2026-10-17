@@ -20,16 +20,18 @@ UNLEARNING_FOLDER_RE = re.compile(
     r"^(?P<concept>.+)-\.-outputs-unlearning-"
     r"(?P<training_variant>original|r2-warmed)-qwen-qwen2-5-"
     r"(?P<size>0-5b|1-5b|3b|7b)-instruct-.+-(?P<reward_type>r\d+)"
-    r"(?:-reasoning-[a-z0-9-]+)?-final_model$",
+    r"(?:-reasoning-[a-z0-9-]+?)?(?:-seed-(?P<seed>\d+))?-final_model$",
     re.IGNORECASE,
 )
 WARMUP_FOLDER_RE = re.compile(
     r"^(?P<concept>.+)-\.-outputs-r2warmup_qwen_qwen2_5_"
-    r"(?P<size>0_5b|1_5b|3b|7b)_instruct_.+-final_model$",
+    r"(?P<size>0_5b|1_5b|3b|7b)_instruct_.+?"
+    r"(?:_seed_(?P<seed>\d+))?-final_model$",
     re.IGNORECASE,
 )
 WARMUP_RUN_RE = re.compile(
-    r"^r2warmup_qwen_qwen2_5_(?P<size>0_5b|1_5b|3b|7b)_instruct_(?P<author>.+)$",
+    r"^r2warmup_qwen_qwen2_5_(?P<size>0_5b|1_5b|3b|7b)_instruct_"
+    r"(?P<author>.+?)(?:_seed_(?P<seed>\d+))?$",
     re.IGNORECASE,
 )
 MODEL_PATH_RE = re.compile(
@@ -39,7 +41,8 @@ MODEL_PATH_RE = re.compile(
 STOPPED_RUN_RE = re.compile(
     r"^unlearning-(?P<training_variant>original|r2-warmed)-qwen-qwen2-5-"
     r"(?P<size>0-5b|1-5b|3b|7b)-instruct-(?P<concept>.+)-"
-    r"(?P<reward_type>r\d+)(?:-reasoning-[a-z0-9-]+)?$",
+    r"(?P<reward_type>r\d+)(?:-reasoning-[a-z0-9-]+?)?"
+    r"(?:-seed-(?P<seed>\d+))?$",
     re.IGNORECASE,
 )
 MODEL_SIZES = {
@@ -84,14 +87,17 @@ def folder_metadata(summary_path: Path, rows: list[dict[str, str]]) -> dict[str,
             size = MODEL_SIZES[run_match.group("size").lower()]
             training_variant = run_match.group("training_variant").lower()
             reward_type = run_match.group("reward_type").lower()
+            experiment_seed = run_match.group("seed") or ""
         elif warmup_match:
             size = MODEL_SIZES[warmup_match.group("size").lower()]
             training_variant = "r2-warmup"
             reward_type = "r2-warmup"
+            experiment_seed = warmup_match.group("seed") or ""
         elif run_name.startswith("holdout-baseline-") and model_match:
             size = MODEL_SIZES[model_match.group("size").lower()]
             training_variant = "baseline"
             reward_type = "baseline"
+            experiment_seed = ""
         else:
             raise ValueError(f"Cannot extract metadata from hold-out run: {run_dir}")
 
@@ -108,18 +114,20 @@ def folder_metadata(summary_path: Path, rows: list[dict[str, str]]) -> dict[str,
                 "baseline": "baseline",
             }[training_variant],
             "run_name": run_name,
-            "experiment_seed": "",
+            "experiment_seed": experiment_seed,
         }
 
     match = BASELINE_FOLDER_RE.fullmatch(folder_name)
     if match:
         training_variant = "baseline"
         reward_type = "baseline"
+        experiment_seed = ""
     else:
         match = UNLEARNING_FOLDER_RE.fullmatch(folder_name)
         if match:
             training_variant = match.group("training_variant").lower()
             reward_type = match.group("reward_type").lower()
+            experiment_seed = match.group("seed") or ""
         else:
             match = WARMUP_FOLDER_RE.fullmatch(folder_name)
             if not match:
@@ -128,6 +136,7 @@ def folder_metadata(summary_path: Path, rows: list[dict[str, str]]) -> dict[str,
                 )
             training_variant = "r2-warmup"
             reward_type = "r2-warmup"
+            experiment_seed = match.group("seed") or ""
 
     size = MODEL_SIZES[match.group("size").lower()]
     folder_concept = match.group("concept")
@@ -148,7 +157,7 @@ def folder_metadata(summary_path: Path, rows: list[dict[str, str]]) -> dict[str,
             "baseline": "baseline",
         }[training_variant],
         "run_name": folder_name,
-        "experiment_seed": "",
+        "experiment_seed": experiment_seed,
     }
 
 
