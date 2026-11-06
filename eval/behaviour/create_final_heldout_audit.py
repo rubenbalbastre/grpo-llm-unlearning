@@ -14,6 +14,7 @@ DEFAULT_OUTPUT_ROOT = DEFAULT_INPUT_ROOT / "tables"
 DEFAULT_OUTPUT_CSV = DEFAULT_OUTPUT_ROOT / "heldout_behaviour.csv"
 DEFAULT_AUTHOR_CSV = DEFAULT_OUTPUT_ROOT / "heldout_behaviour_authors.csv"
 DEFAULT_SEED_CSV = DEFAULT_OUTPUT_ROOT / "heldout_behaviour_by_seed.csv"
+LEGACY_SEED = "1234"
 SUMMARY_METADATA_COLUMNS = {"forget_concept", "model_name_or_path", "stat"}
 BASELINE_FOLDER_RE = re.compile(
     r"^(?P<concept>.+)-Qwen-Qwen2\.5-(?P<size>0\.5B|1\.5B|3B|7B)-Instruct$",
@@ -65,9 +66,11 @@ def resolve_experiment_seed(run_dir: Path, parsed_seed: str | None) -> str:
         return parsed_seed
     config_path = run_dir / "hydra_config.yaml"
     if not config_path.exists():
-        return ""
+        return LEGACY_SEED
     return str(
-        OmegaConf.select(OmegaConf.load(config_path), "experiment.seed", default="")
+        OmegaConf.select(
+            OmegaConf.load(config_path), "experiment.seed", default=LEGACY_SEED
+        )
     )
 
 
@@ -145,7 +148,7 @@ def folder_metadata(summary_path: Path, rows: list[dict[str, str]]) -> dict[str,
         if match:
             training_variant = match.group("training_variant").lower()
             reward_type = match.group("reward_type").lower()
-            experiment_seed = match.group("seed") or ""
+            experiment_seed = match.group("seed") or LEGACY_SEED
         else:
             match = WARMUP_FOLDER_RE.fullmatch(folder_name)
             if not match:
@@ -154,7 +157,7 @@ def folder_metadata(summary_path: Path, rows: list[dict[str, str]]) -> dict[str,
                 )
             training_variant = "r2-warmup"
             reward_type = "r2-warmup"
-            experiment_seed = match.group("seed") or ""
+            experiment_seed = match.group("seed") or LEGACY_SEED
 
     size = MODEL_SIZES[match.group("size").lower()]
     folder_concept = match.group("concept")

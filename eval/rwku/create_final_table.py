@@ -18,6 +18,7 @@ DEFAULT_TABLES_ROOT = DEFAULT_OUTPUTS_ROOT / "tables"
 DEFAULT_OUTPUT_CSV = DEFAULT_TABLES_ROOT / "rwku.csv"
 DEFAULT_AUTHOR_CSV = DEFAULT_TABLES_ROOT / "rwku_authors.csv"
 DEFAULT_SEED_CSV = DEFAULT_TABLES_ROOT / "rwku_by_seed.csv"
+LEGACY_SEED = "1234"
 
 TRAINED_RUN_RE = re.compile(
     r"^unlearning-(?P<variant>original|r2-warmed)-qwen-qwen2-5-"
@@ -133,9 +134,11 @@ def resolve_experiment_seed(run_dir: Path, parsed_seed: str | None) -> str:
         return parsed_seed
     config_path = run_dir / "hydra_config.yaml"
     if not config_path.exists():
-        return ""
+        return LEGACY_SEED
     return str(
-        OmegaConf.select(OmegaConf.load(config_path), "experiment.seed", default="")
+        OmegaConf.select(
+            OmegaConf.load(config_path), "experiment.seed", default=LEGACY_SEED
+        )
     )
 
 
