@@ -61,6 +61,10 @@ MODEL_SIZES = {
 }
 
 
+def author_key(value: str) -> str:
+    return re.sub(r"[^a-z0-9]+", "", value.lower())
+
+
 def resolve_experiment_seed(run_dir: Path, parsed_seed: str | None) -> str:
     if parsed_seed:
         return parsed_seed
@@ -272,7 +276,7 @@ def mean_rows_by_author(rows: list[dict[str, str]]) -> list[dict[str, str]]:
     groups: dict[tuple[str, str, str, str], list[dict[str, str]]] = defaultdict(list)
     for row in rows:
         key = (
-            row.get("author", ""),
+            author_key(row.get("author", "")),
             row.get("reward_function", ""),
             row.get("model_size", ""),
             row.get("training_initialization", ""),
@@ -320,7 +324,9 @@ def aggregate_rows(
             "reward_function": reward_function,
             "model_size": model_size,
             "training_initialization": training_initialization,
-            "author_count": len({row.get("author", "") for row in group_rows}),
+            "author_count": len(
+                {author_key(row.get("author", "")) for row in group_rows}
+            ),
             "run_count": len(group_rows),
         }
         if by_seed:
@@ -328,7 +334,7 @@ def aggregate_rows(
         else:
             seeds_by_author: dict[str, set[str]] = defaultdict(set)
             for row in group_rows:
-                seeds_by_author[row.get("author", "")].add(
+                seeds_by_author[author_key(row.get("author", ""))].add(
                     row.get("experiment_seed", "")
                 )
             output["seed_count"] = len(

@@ -268,7 +268,7 @@ def mean_rows_by_author(rows: list[dict[str, object]]) -> list[dict[str, object]
     groups: dict[tuple[str, str, str, str], list[dict[str, object]]] = defaultdict(list)
     for row in rows:
         key = (
-            str(row["author"]),
+            author_key(str(row["author"])),
             str(row["reward_function"]),
             str(row["model_size"]),
             str(row["training_initialization"]),
@@ -311,7 +311,7 @@ def aggregate_rows(
             "reward_function": reward,
             "model_size": size,
             "training_initialization": mode,
-            "author_count": len({str(row["author"]) for row in group}),
+            "author_count": len({author_key(str(row["author"])) for row in group}),
             "run_count": len(group),
         }
         if by_seed:
@@ -319,7 +319,9 @@ def aggregate_rows(
         else:
             seeds_by_author: dict[str, set[str]] = defaultdict(set)
             for row in group:
-                seeds_by_author[str(row["author"])].add(str(row["experiment_seed"]))
+                seeds_by_author[author_key(str(row["author"]))].add(
+                    str(row["experiment_seed"])
+                )
             output["seed_count"] = len(
                 {str(row["experiment_seed"]) for row in group}
             )
