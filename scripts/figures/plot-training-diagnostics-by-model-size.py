@@ -33,7 +33,9 @@ FIXED_Y_LIMITS = {
 }
 SIZE_FROM_MODEL_RE = re.compile(r"Qwen2\.5-(0\.5B|1\.5B|3B|7B)-Instruct", re.I)
 SIZE_FROM_RUN_RE = re.compile(r"qwen-qwen2-5-(0-5b?|1-5b?|3b?|7b?)(?:-|_|$)", re.I)
-REWARD_FROM_RUN_RE = re.compile(r"-(r\d+)$", re.I)
+REWARD_FROM_RUN_RE = re.compile(
+    r"-(r\d+)(?:-reasoning-[a-z0-9-]+?)?(?:-seed-\d+)?$", re.I
+)
 RUN_SIZE_NAMES = {
     "0-5": "0.5B",
     "0-5b": "0.5B",
