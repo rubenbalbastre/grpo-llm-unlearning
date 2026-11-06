@@ -42,6 +42,8 @@ def main(cfg: DictConfig) -> None:
     trainer_config = SFTConfig(
         output_dir=str(paths.output_dir),
         run_name=run_name,
+        seed=cfg.experiment.seed,
+        data_seed=cfg.experiment.seed,
         learning_rate=cfg.training.sft.learning_rate,
         lr_scheduler_type=cfg.training.sft.lr_scheduler_type,
         warmup_steps=cfg.training.sft.warmup_steps,
