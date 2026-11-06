@@ -17,3 +17,4 @@ cd "$REPO_DIR"
 python3 scripts/tables/compute-lora-effective-rank.py "$@"
 python3 scripts/figures/plot-lora-effective-rank.py
 python3 scripts/figures/plot-lora-effective-rank-by-module.py
+tar -czf outputs/lora-effective-rank-tables.tar.gz -C outputs lora-effective-rank-tables
