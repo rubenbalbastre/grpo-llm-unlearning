@@ -6,11 +6,14 @@ import re
 from collections import defaultdict
 from pathlib import Path
 
+from omegaconf import OmegaConf
+
 REPO_ROOT = Path(__file__).resolve().parents[2]
 DEFAULT_INPUT_ROOT = REPO_ROOT / "outputs"
 DEFAULT_OUTPUT_ROOT = DEFAULT_INPUT_ROOT / "tables"
 DEFAULT_OUTPUT_CSV = DEFAULT_OUTPUT_ROOT / "heldout_behaviour.csv"
 DEFAULT_AUTHOR_CSV = DEFAULT_OUTPUT_ROOT / "heldout_behaviour_authors.csv"
+DEFAULT_SEED_CSV = DEFAULT_OUTPUT_ROOT / "heldout_behaviour_by_seed.csv"
 SUMMARY_METADATA_COLUMNS = {"forget_concept", "model_name_or_path", "stat"}
 BASELINE_FOLDER_RE = re.compile(
     r"^(?P<concept>.+)-Qwen-Qwen2\.5-(?P<size>0\.5B|1\.5B|3B|7B)-Instruct$",
@@ -57,6 +60,17 @@ MODEL_SIZES = {
 }
 
 
+def resolve_experiment_seed(run_dir: Path, parsed_seed: str | None) -> str:
+    if parsed_seed:
+        return parsed_seed
+    config_path = run_dir / "hydra_config.yaml"
+    if not config_path.exists():
+        return ""
+    return str(
+        OmegaConf.select(OmegaConf.load(config_path), "experiment.seed", default="")
+    )
+
+
 def read_summary(path: Path) -> list[dict[str, str]]:
     with path.open(encoding="utf-8", newline="") as handle:
         return list(csv.DictReader(handle))
@@ -87,17 +101,21 @@ def folder_metadata(summary_path: Path, rows: list[dict[str, str]]) -> dict[str,
             size = MODEL_SIZES[run_match.group("size").lower()]
             training_variant = run_match.group("training_variant").lower()
             reward_type = run_match.group("reward_type").lower()
-            experiment_seed = run_match.group("seed") or ""
+            experiment_seed_value = resolve_experiment_seed(
+                run_dir, run_match.group("seed")
+            )
         elif warmup_match:
             size = MODEL_SIZES[warmup_match.group("size").lower()]
             training_variant = "r2-warmup"
             reward_type = "r2-warmup"
-            experiment_seed = warmup_match.group("seed") or ""
+            experiment_seed_value = resolve_experiment_seed(
+                run_dir, warmup_match.group("seed")
+            )
         elif run_name.startswith("holdout-baseline-") and model_match:
             size = MODEL_SIZES[model_match.group("size").lower()]
             training_variant = "baseline"
             reward_type = "baseline"
-            experiment_seed = ""
+            experiment_seed_value = ""
         else:
             raise ValueError(f"Cannot extract metadata from hold-out run: {run_dir}")
 
@@ -114,7 +132,7 @@ def folder_metadata(summary_path: Path, rows: list[dict[str, str]]) -> dict[str,
                 "baseline": "baseline",
             }[training_variant],
             "run_name": run_name,
-            "experiment_seed": experiment_seed,
+            "experiment_seed": experiment_seed_value,
         }
 
     match = BASELINE_FOLDER_RE.fullmatch(folder_name)
@@ -246,25 +264,77 @@ def quantile(values: list[float], probability: float) -> float | None:
     return ordered[lower] + (ordered[upper] - ordered[lower]) * (position - lower)
 
 
-def aggregate_rows(rows: list[dict[str, str]]) -> list[dict[str, str]]:
-    groups: dict[tuple[str, str, str], list[dict[str, str]]] = defaultdict(list)
+def mean_rows_by_author(rows: list[dict[str, str]]) -> list[dict[str, str]]:
+    metrics = metric_columns(rows)
+    groups: dict[tuple[str, str, str, str], list[dict[str, str]]] = defaultdict(list)
     for row in rows:
         key = (
+            row.get("author", ""),
             row.get("reward_function", ""),
             row.get("model_size", ""),
             row.get("training_initialization", ""),
         )
         groups[key].append(row)
 
+    output = []
+    for (author, reward, size, initialization), group in sorted(groups.items()):
+        row = {
+            "author": author,
+            "reward_function": reward,
+            "model_size": size,
+            "training_initialization": initialization,
+        }
+        for metric in metrics:
+            values = [
+                value
+                for value in (
+                    numeric_value(item.get(f"{metric}_mean", "")) for item in group
+                )
+                if value is not None
+            ]
+            row[f"{metric}_mean"] = format_number(
+                sum(values) / len(values) if values else None
+            )
+        output.append(row)
+    return output
+
+
+def aggregate_rows(
+    rows: list[dict[str, str]], *, by_seed: bool
+) -> list[dict[str, str]]:
+    key_columns = ["reward_function", "model_size", "training_initialization"]
+    if by_seed:
+        key_columns.append("experiment_seed")
+    groups: dict[tuple[str, ...], list[dict[str, str]]] = defaultdict(list)
+    for row in rows:
+        groups[tuple(row.get(column, "") for column in key_columns)].append(row)
+
     metrics = metric_columns(rows)
     aggregate_rows = []
-    for (reward_function, model_size, training_initialization), group_rows in sorted(groups.items()):
+    for key, group_rows in sorted(groups.items()):
+        reward_function, model_size, training_initialization = key[:3]
         output = {
             "reward_function": reward_function,
             "model_size": model_size,
             "training_initialization": training_initialization,
             "author_count": len({row.get("author", "") for row in group_rows}),
+            "run_count": len(group_rows),
         }
+        if by_seed:
+            output["experiment_seed"] = key[3]
+        else:
+            seeds_by_author: dict[str, set[str]] = defaultdict(set)
+            for row in group_rows:
+                seeds_by_author[row.get("author", "")].add(
+                    row.get("experiment_seed", "")
+                )
+            output["seed_count"] = len(
+                {row.get("experiment_seed", "") for row in group_rows}
+            )
+            output["paired_author_count"] = sum(
+                len(seeds) >= 2 for seeds in seeds_by_author.values()
+            )
+            group_rows = mean_rows_by_author(group_rows)
         for metric in metrics:
             values = [
                 value
@@ -310,6 +380,7 @@ def parse_args() -> argparse.Namespace:
         default=DEFAULT_AUTHOR_CSV,
         help="CSV output containing one row per author and run.",
     )
+    parser.add_argument("--seed-output-csv", type=Path, default=DEFAULT_SEED_CSV)
     parser.add_argument(
         "--summary-glob",
         default="**/hold_out_eval/summary.csv",
@@ -332,7 +403,18 @@ def main() -> None:
         raise SystemExit("No non-empty summary CSV files found.")
 
     author_rows = learning_rows(rows, args.input_root)
-    grouped_rows = aggregate_rows(author_rows)
+    seed_rows = aggregate_rows(author_rows, by_seed=True)
+    grouped_rows = aggregate_rows(author_rows, by_seed=False)
+    missing_seed_count = sum(
+        not row.get("experiment_seed")
+        and row.get("training_initialization") != "baseline"
+        for row in author_rows
+    )
+    if missing_seed_count:
+        print(
+            f"warning: {missing_seed_count} trained result(s) have no experiment "
+            "seed; they appear with an empty seed value"
+        )
     write_csv(
         args.author_output_csv,
         author_rows,
@@ -348,6 +430,18 @@ def main() -> None:
         ],
     )
     write_csv(
+        args.seed_output_csv,
+        seed_rows,
+        preferred_columns=[
+            "reward_function",
+            "model_size",
+            "training_initialization",
+            "experiment_seed",
+            "author_count",
+            "run_count",
+        ],
+    )
+    write_csv(
         args.output_csv,
         grouped_rows,
         preferred_columns=[
@@ -355,10 +449,14 @@ def main() -> None:
             "model_size",
             "training_initialization",
             "author_count",
+            "seed_count",
+            "run_count",
+            "paired_author_count",
         ],
     )
     print(f"read {len(summary_paths)} summary CSV file(s)")
     print(f"wrote author table: {args.author_output_csv}")
+    print(f"wrote per-seed table: {args.seed_output_csv}")
     print(f"wrote aggregate table: {args.output_csv}")
 
 

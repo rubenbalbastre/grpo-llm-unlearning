@@ -9,12 +9,15 @@ import statistics
 from collections import defaultdict
 from pathlib import Path
 
+from omegaconf import OmegaConf
+
 
 REPO_ROOT = Path(__file__).resolve().parents[2]
 DEFAULT_OUTPUTS_ROOT = REPO_ROOT / "outputs"
 DEFAULT_TABLES_ROOT = DEFAULT_OUTPUTS_ROOT / "tables"
 DEFAULT_OUTPUT_CSV = DEFAULT_TABLES_ROOT / "rwku.csv"
 DEFAULT_AUTHOR_CSV = DEFAULT_TABLES_ROOT / "rwku_authors.csv"
+DEFAULT_SEED_CSV = DEFAULT_TABLES_ROOT / "rwku_by_seed.csv"
 
 TRAINED_RUN_RE = re.compile(
     r"^unlearning-(?P<variant>original|r2-warmed)-qwen-qwen2-5-"
@@ -95,6 +98,17 @@ FINAL_COLUMNS = [
     "model_size",
     "training_initialization",
     "author_count",
+    "seed_count",
+    "run_count",
+    "paired_author_count",
+]
+SEED_COLUMNS = [
+    "reward_function",
+    "model_size",
+    "training_initialization",
+    "experiment_seed",
+    "author_count",
+    "run_count",
 ]
 AGGREGATE_METRICS = [
     *[f"{metric}_delta" for metric in SPLIT_AGGREGATES],
@@ -105,10 +119,24 @@ for _metric in AGGREGATE_METRICS:
     FINAL_COLUMNS.extend(
         [f"{_metric}_median", f"{_metric}_q1", f"{_metric}_q3"]
     )
+    SEED_COLUMNS.extend(
+        [f"{_metric}_median", f"{_metric}_q1", f"{_metric}_q3"]
+    )
 
 
 def author_key(value: str) -> str:
     return re.sub(r"[^a-z0-9]+", "", value.lower())
+
+
+def resolve_experiment_seed(run_dir: Path, parsed_seed: str | None) -> str:
+    if parsed_seed:
+        return parsed_seed
+    config_path = run_dir / "hydra_config.yaml"
+    if not config_path.exists():
+        return ""
+    return str(
+        OmegaConf.select(OmegaConf.load(config_path), "experiment.seed", default="")
+    )
 
 
 def parse_number(value: str | None) -> float | None:
@@ -171,13 +199,17 @@ def build_author_rows(
             training_initialization = (
                 "cold" if match.group("variant").lower() == "original" else "warm"
             )
-            experiment_seed = match.group("seed") or ""
+            experiment_seed = resolve_experiment_seed(
+                path.parents[2], match.group("seed")
+            )
         elif warmup_match:
             size = SIZE_NAMES[warmup_match.group("size").lower()]
             author = warmup_match.group("author")
             reward_function = "r2-warmup"
             training_initialization = "warm"
-            experiment_seed = warmup_match.group("seed") or ""
+            experiment_seed = resolve_experiment_seed(
+                path.parents[2], warmup_match.group("seed")
+            )
         else:
             continue
 
@@ -229,24 +261,69 @@ def quantile(values: list[float], probability: float) -> float | None:
     return ordered[lower] + (ordered[upper] - ordered[lower]) * (position - lower)
 
 
-def aggregate_author_rows(rows: list[dict[str, object]]) -> list[dict[str, object]]:
-    groups: dict[tuple[str, str, str], list[dict[str, object]]] = defaultdict(list)
+def mean_rows_by_author(rows: list[dict[str, object]]) -> list[dict[str, object]]:
+    groups: dict[tuple[str, str, str, str], list[dict[str, object]]] = defaultdict(list)
     for row in rows:
         key = (
+            str(row["author"]),
             str(row["reward_function"]),
             str(row["model_size"]),
             str(row["training_initialization"]),
         )
         groups[key].append(row)
 
+    output = []
+    for (author, reward, size, mode), group in sorted(groups.items()):
+        row: dict[str, object] = {
+            "author": author,
+            "reward_function": reward,
+            "model_size": size,
+            "training_initialization": mode,
+        }
+        for metric in AGGREGATE_METRICS:
+            values = [
+                float(item[metric])
+                for item in group
+                if item.get(metric) is not None
+            ]
+            row[metric] = statistics.mean(values) if values else None
+        output.append(row)
+    return output
+
+
+def aggregate_rows(
+    rows: list[dict[str, object]], *, by_seed: bool
+) -> list[dict[str, object]]:
+    key_columns = ["reward_function", "model_size", "training_initialization"]
+    if by_seed:
+        key_columns.append("experiment_seed")
+    groups: dict[tuple[str, ...], list[dict[str, object]]] = defaultdict(list)
+    for row in rows:
+        groups[tuple(str(row[column]) for column in key_columns)].append(row)
+
     output_rows = []
-    for (reward, size, mode), group in sorted(groups.items()):
+    for key, group in sorted(groups.items()):
+        reward, size, mode = key[:3]
         output: dict[str, object] = {
             "reward_function": reward,
             "model_size": size,
             "training_initialization": mode,
             "author_count": len({str(row["author"]) for row in group}),
+            "run_count": len(group),
         }
+        if by_seed:
+            output["experiment_seed"] = key[3]
+        else:
+            seeds_by_author: dict[str, set[str]] = defaultdict(set)
+            for row in group:
+                seeds_by_author[str(row["author"])].add(str(row["experiment_seed"]))
+            output["seed_count"] = len(
+                {str(row["experiment_seed"]) for row in group}
+            )
+            output["paired_author_count"] = sum(
+                len(seeds) >= 2 for seeds in seeds_by_author.values()
+            )
+            group = mean_rows_by_author(group)
         for metric in AGGREGATE_METRICS:
             values = [
                 float(row[metric]) for row in group if row.get(metric) is not None
@@ -277,6 +354,7 @@ def parse_args() -> argparse.Namespace:
     parser.add_argument("--outputs-root", type=Path, default=DEFAULT_OUTPUTS_ROOT)
     parser.add_argument("--output-csv", type=Path, default=DEFAULT_OUTPUT_CSV)
     parser.add_argument("--author-output-csv", type=Path, default=DEFAULT_AUTHOR_CSV)
+    parser.add_argument("--seed-output-csv", type=Path, default=DEFAULT_SEED_CSV)
     parser.add_argument(
         "--require-complete-baselines",
         action="store_true",
@@ -296,12 +374,21 @@ def main() -> None:
             f"{len(unmatched)} trained RWKU result(s) lack a matching baseline:\n{examples}"
         )
 
-    final_rows = aggregate_author_rows(author_rows)
+    seed_rows = aggregate_rows(author_rows, by_seed=True)
+    final_rows = aggregate_rows(author_rows, by_seed=False)
+    missing_seed_count = sum(not row["experiment_seed"] for row in author_rows)
+    if missing_seed_count:
+        print(
+            f"warning: {missing_seed_count} result(s) have no experiment seed; "
+            "they appear with an empty seed value"
+        )
     write_csv(args.author_output_csv, AUTHOR_COLUMNS, author_rows)
+    write_csv(args.seed_output_csv, SEED_COLUMNS, seed_rows)
     write_csv(args.output_csv, FINAL_COLUMNS, final_rows)
     print(f"matched {len(author_rows)} trained result(s) to baselines")
     print(f"unmatched trained results: {len(unmatched)}")
     print(f"wrote author-level deltas: {args.author_output_csv}")
+    print(f"wrote per-seed table: {args.seed_output_csv}")
     print(f"wrote final table: {args.output_csv}")
 
 
