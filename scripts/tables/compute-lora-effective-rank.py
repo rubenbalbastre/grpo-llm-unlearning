@@ -14,7 +14,8 @@ from tqdm import tqdm
 RUN_RE = re.compile(
     r"^unlearning-(?P<variant>original|r2-warmed)-qwen-qwen2-5-"
     r"(?P<size>0-5b|1-5b|3b|7b)-instruct-(?P<target>.+)-"
-    r"(?P<reward>r0|r1|r2|r4)(?:-reasoning-[a-z0-9-]+)?$"
+    r"(?P<reward>r0|r1|r2|r4)(?:-reasoning-[a-z0-9]+)?"
+    r"(?:-seed-(?P<seed>\d+))?$"
 )
 MODULE_RE = re.compile(
     r"\.layers\.(?P<transformer_layer>\d+)\."
@@ -85,6 +86,7 @@ def run_rows(
         "target": match.group("target"),
         "model_size": MODEL_SIZES[match.group("size")],
         "reward_function": match.group("reward"),
+        "experiment_seed": int(match.group("seed") or 1234),
         "training_initialization": (
             "cold" if match.group("variant") == "original" else "warm"
         ),
@@ -107,24 +109,46 @@ def run_rows(
 
 def aggregate_runs(runs: pd.DataFrame) -> pd.DataFrame:
     groups = ["model_size", "reward_function", "training_initialization"]
-    per_target = (
-        runs.groupby([*groups, "target"], as_index=False)[
+    per_seed = (
+        runs.groupby([*groups, "target", "experiment_seed"], as_index=False)[
             ["effective_rank_95_mean", "normalized_effective_rank_95_mean"]
         ]
         .mean()
     )
-    return (
-        per_target.groupby(groups, as_index=False)
+    per_target = (
+        per_seed.groupby([*groups, "target"], as_index=False)
         .agg(
-            target_count=("target", "nunique"),
-            effective_rank_95_mean=("effective_rank_95_mean", "mean"),
-            normalized_effective_rank_95_mean=(
+            seed_count=("experiment_seed", "nunique"),
+            effective_rank_95=("effective_rank_95_mean", "mean"),
+            normalized_effective_rank_95=(
                 "normalized_effective_rank_95_mean",
                 "mean",
             ),
         )
-        .sort_values(groups)
     )
+    summary = per_target.groupby(groups, as_index=False).agg(
+        target_count=("target", "nunique"),
+        paired_target_count=("seed_count", lambda values: (values >= 2).sum()),
+    )
+    for metric in ("effective_rank_95", "normalized_effective_rank_95"):
+        statistics = (
+            per_target.groupby(groups)[metric]
+            .agg(
+                median="median",
+                q1=lambda values: values.quantile(0.25),
+                q3=lambda values: values.quantile(0.75),
+                mean="mean",
+            )
+            .reset_index()
+            .rename(
+                columns={
+                    statistic: f"{metric}_{statistic}"
+                    for statistic in ("median", "q1", "q3", "mean")
+                }
+            )
+        )
+        summary = summary.merge(statistics, on=groups)
+    return summary.sort_values(groups)
 
 
 def parse_args() -> argparse.Namespace:
@@ -134,22 +158,28 @@ def parse_args() -> argparse.Namespace:
         "--n",
         type=int,
         default=0,
-        help="Maximum number of learning runs to analyze; 0 means all (default: 10)",
+        help="Maximum number of learning runs to analyze; 0 means all",
     )
     parser.add_argument(
         "--module-output",
         type=Path,
-        default=Path("outputs/tables/lora_effective_rank_modules.csv"),
+        default=Path(
+            "outputs/lora-effective-rank-tables/lora_effective_rank_modules.csv"
+        ),
     )
     parser.add_argument(
         "--run-output",
         type=Path,
-        default=Path("outputs/tables/lora_effective_rank_runs.csv"),
+        default=Path(
+            "outputs/lora-effective-rank-tables/lora_effective_rank_runs.csv"
+        ),
     )
     parser.add_argument(
         "--output",
         type=Path,
-        default=Path("outputs/tables/lora_effective_rank.csv"),
+        default=Path(
+            "outputs/lora-effective-rank-tables/lora_effective_rank.csv"
+        ),
     )
     return parser.parse_args()
 
@@ -181,6 +211,11 @@ def main() -> None:
     runs = pd.DataFrame(rows)
     modules = pd.DataFrame(module_rows)
     summary = aggregate_runs(runs)
+    seed_counts = runs.groupby("experiment_seed")["run_name"].nunique()
+    print(
+        "Runs by seed: "
+        + ", ".join(f"{seed}={count}" for seed, count in seed_counts.items())
+    )
     args.module_output.parent.mkdir(parents=True, exist_ok=True)
     args.run_output.parent.mkdir(parents=True, exist_ok=True)
     args.output.parent.mkdir(parents=True, exist_ok=True)

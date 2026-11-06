@@ -15,3 +15,5 @@ conda activate py312_cu118_bis
 
 cd "$REPO_DIR"
 python3 scripts/tables/compute-lora-effective-rank.py "$@"
+python3 scripts/figures/plot-lora-effective-rank.py
+python3 scripts/figures/plot-lora-effective-rank-by-module.py
